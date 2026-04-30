@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cubby-sort"
+version = "0.1.0"
+description = "Tidy your Downloads folder automatically with a name-content-type cascade."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Olivier Dehareng" }]
+keywords = ["downloads", "file-organizer", "automation", "cli", "tidy"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Utilities",
+]
+dependencies = []
+
+[project.optional-dependencies]
+# Richer content extraction when system tools (pdftotext, textutil) are absent.
+extract = ["pypdf>=4", "python-docx>=1", "openpyxl>=3"]
+dev = ["pytest>=8", "ruff>=0.5", "mypy>=1.10"]
+
+[project.scripts]
+cubby = "cubby.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/DeharengOlivier/cubby"
+Repository = "https://github.com/DeharengOlivier/cubby"
+Issues = "https://github.com/DeharengOlivier/cubby/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cubby"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
