@@ -20,6 +20,14 @@ from .file_ref import Decision, FileRef, Stage
 
 _CompiledRules = list[tuple[str, list[re.Pattern[str]]]]
 
+# A stem made only of a UUID or a long digit run carries no human signal. We
+# skip the filename stage for these so a spurious substring (say "ad" inside a
+# hex id) cannot hijack the routing; content/type still get their chance.
+_CRYPTIC = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}|^\d{8,}$|^[0-9a-f]{16,}$",
+    re.IGNORECASE,
+)
+
 
 class Engine:
     def __init__(self, config: Config):
@@ -57,10 +65,11 @@ class Engine:
         if ext in self._strong_ext:
             return Decision(self._strong_ext[ext], Stage.STRONG_EXT)
 
-        # Stage 1: filename.
-        cat = self._first_match(ref.name, self._name)
-        if cat:
-            return Decision(cat, Stage.NAME)
+        # Stage 1: filename (skipped for cryptic stems).
+        if not _CRYPTIC.match(ref.stem):
+            cat = self._first_match(ref.name, self._name)
+            if cat:
+                return Decision(cat, Stage.NAME)
 
         # Stage 2: content.
         if self._config.settings.content_scan and self._content and ref.is_file:
