@@ -1,0 +1,56 @@
+# Cubby default configuration (generic, no personal data).
+#
+# Copy this file to ~/.config/cubby/config.toml and edit it to add your own
+# categories and keywords. Categories are tried top to bottom within each
+# stage, so put the most specific ones first.
+
+[settings]
+source = "~/Downloads"
+delay = "1m"             # wait this long after a file lands before moving it
+interval = "30s"         # how often watch mode polls the folder
+content_scan = true      # peek inside files when the name is uninformative
+content_max_bytes = 4000
+unsorted_dir = "_Unsorted"
+
+# --- Finance and administration -------------------------------------------
+
+[[category]]
+name = "Invoices"
+name_patterns = [
+    "invoice", "receipt", "facture", "\\breçu\\b", "payment[-_ ]?confirmation",
+    "order[-_ ]receipt", "\\bbill\\b", "\\bdevis\\b",
+]
+content_patterns = [
+    "num[ée]ro de facture", "invoice number", "payment confirmation",
+    "montant (?:total|à payer|du)", "amount due", "total due", "\\bvat\\b.*total",
+]
+
+[[category]]
+name = "Bank-Statements"
+name_patterns = ["statement", "relev[ée]", "\\bbank\\b"]
+content_patterns = [
+    "relev[ée] (?:de compte|électronique)", "\\biban\\b", "\\bbic\\b",
+    "account statement", "virement", "\\bsolde\\b", "opening balance",
+]
+
+[[category]]
+name = "Legal"
+name_patterns = [
+    "contract", "contrat", "convention", "agreement", "\\bnda\\b", "statuts",
+    "terms[-_ ]of", "\\bpolicy\\b", "\\bcharter\\b",
+]
+content_patterns = [
+    "association sans but lucratif", "hereby agree", "terms and conditions",
+    "this agreement", "il a été convenu", "entre les soussignés", "\\bclause\\b",
+]
+
+[[category]]
+name = "Resumes"
+name_patterns = [
+    "\\bcv\\b", "résumé", "\\bresume\\b", "curriculum", "europass",
+    "cover[-_ ]letter", "lettre[-_ ]de[-_ ]motivation",
+]
+content_patterns = [
+    "curriculum vitae", "work experience", "expériences? professionnelles?",
+    "professional experience",
+]
