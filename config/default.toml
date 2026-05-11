@@ -54,3 +54,36 @@ content_patterns = [
     "curriculum vitae", "work experience", "expériences? professionnelles?",
     "professional experience",
 ]
+
+# --- Media (extension is decisive: strong_ext) ----------------------------
+
+[[category]]
+name = "Images"
+extensions = ["png", "jpg", "jpeg", "gif", "svg", "webp", "heic", "bmp", "tiff", "ico"]
+strong_ext = true
+
+[[category]]
+name = "Video"
+extensions = ["mp4", "mov", "mkv", "avi", "webm", "m4v", "flv"]
+strong_ext = true
+
+[[category]]
+name = "Music"
+name_patterns = ["\\bstems\\b", "\\.logicx"]
+extensions = ["mp3", "wav", "flac", "m4a", "aac", "aiff", "ogg", "logicx"]
+strong_ext = true
+
+[[category]]
+name = "Installers"
+extensions = ["dmg", "pkg", "exe", "msi", "deb", "rpm", "appimage", "apk"]
+strong_ext = true
+
+[[category]]
+name = "Archives"
+extensions = ["zip", "rar", "7z", "tar", "gz", "bz2", "xz", "tgz"]
+strong_ext = true
+
+[[category]]
+name = "Fonts"
+extensions = ["ttf", "otf", "woff", "woff2"]
+strong_ext = true
