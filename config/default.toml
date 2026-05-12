@@ -87,3 +87,32 @@ strong_ext = true
 name = "Fonts"
 extensions = ["ttf", "otf", "woff", "woff2"]
 strong_ext = true
+
+# --- Documents and office -------------------------------------------------
+
+[[category]]
+name = "Presentations"
+name_patterns = ["pitch[-_ ]?deck", "\\bdeck\\b", "slides", "presentation"]
+extensions = ["pptx", "ppt", "key", "odp"]
+
+[[category]]
+name = "Ebooks"
+extensions = ["epub", "mobi", "azw3"]
+
+[[category]]
+name = "Code"
+extensions = ["py", "js", "ts", "tsx", "jsx", "go", "rs", "rb", "java", "c", "cpp", "sh", "sql"]
+
+[[category]]
+name = "Design"
+extensions = ["psd", "ai", "sketch", "fig", "xd", "afdesign", "afphoto"]
+
+# Catch-all for office and text files not matched above. Listed last so its
+# broad extension set never shadows a more specific category.
+[[category]]
+name = "Documents"
+name_patterns = ["_files$"]
+extensions = [
+    "pdf", "doc", "docx", "odt", "rtf", "txt", "md", "pages",
+    "html", "htm", "csv", "tsv", "xlsx", "xls", "ods", "numbers", "json",
+]
