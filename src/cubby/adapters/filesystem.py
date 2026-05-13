@@ -24,20 +24,22 @@ def build_ref(path: Path, max_bytes: int = 4000) -> FileRef:
     )
 
 
-def iter_candidates(settings: Settings) -> Iterator[Path]:
+def iter_candidates(
+    settings: Settings, managed: frozenset[str] = frozenset()
+) -> Iterator[Path]:
     """Yield top-level entries in the source folder that cubby may sort.
 
-    Hidden entries and cubby's own managed folders are skipped so a sorted file
-    is never picked up again.
+    Hidden entries, the ``_Unsorted`` folder and every managed category folder
+    are skipped so a sorted file is never picked up again on the next run.
     """
     source = settings.source
     if not source.is_dir():
         return
-    managed = {c for c in (settings.unsorted_dir,)}
+    skip = set(managed) | {settings.unsorted_dir}
     for entry in sorted(source.iterdir()):
         if entry.name.startswith("."):
             continue
-        if entry.name in managed:
+        if entry.name in skip:
             continue
         yield entry
 
