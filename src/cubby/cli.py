@@ -9,7 +9,9 @@ from .adapters.config import find_user_config, load_config
 from .adapters.logging import DEFAULT_LOG, file_logger
 from .app.report import render_plan
 from .app.sorter import Sorter
+from .app.watcher import Watcher
 from .domain.category import Config
+from .domain.duration import format_duration
 
 
 def _build_overrides(args: argparse.Namespace) -> dict:
@@ -45,6 +47,23 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_watch(args: argparse.Namespace) -> int:
+    config = _load(args)
+    log = file_logger(echo=True)
+    sorter = Sorter(config, log=log)
+    watcher = Watcher(sorter, config.settings.interval, log=log)
+    log(
+        f"cubby watching {config.settings.source} "
+        f"(delay {format_duration(config.settings.delay)}, "
+        f"every {format_duration(config.settings.interval)})"
+    )
+    try:
+        watcher.run()
+    except KeyboardInterrupt:
+        log("cubby stopped")
+    return 0
+
+
 def _add_common_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config", help="path to a config file")
     parser.add_argument("--source", help="folder to sort (default: from config)")
@@ -66,6 +85,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_run = sub.add_parser("run", help="sort the folder once")
     _add_common_flags(p_run)
     p_run.set_defaults(func=cmd_run)
+
+    p_watch = sub.add_parser("watch", help="keep sorting the folder in the foreground")
+    _add_common_flags(p_watch)
+    p_watch.set_defaults(func=cmd_watch)
 
     return parser
 
