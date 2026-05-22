@@ -8,6 +8,13 @@ from cubby.domain.category import Category, Config, Settings
 from cubby.domain.file_ref import FileRef
 
 
+@pytest.fixture(autouse=True)
+def _isolate_user_config(monkeypatch):
+    """Keep tests hermetic: never read the developer's real ~/.config file."""
+    monkeypatch.setattr("cubby.adapters.config.find_user_config", lambda: None)
+    monkeypatch.delenv("CUBBY_CONFIG", raising=False)
+
+
 @pytest.fixture
 def sample_config() -> Config:
     categories = (
