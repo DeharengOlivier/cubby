@@ -107,6 +107,14 @@ extensions = ["py", "js", "ts", "tsx", "jsx", "go", "rs", "rb", "java", "c", "cp
 name = "Design"
 extensions = ["psd", "ai", "sketch", "fig", "xd", "afdesign", "afphoto"]
 
+[[category]]
+name = "Travel"
+name_patterns = [
+    "boarding[-_ ]?pass", "\\be-?ticket", "\\bitinerary\\b", "\\bbooking\\b",
+    "réservation", "eurostar", "\\bflight\\b", "\\bboarding\\b",
+]
+content_patterns = ["boarding pass", "booking reference", "passenger name", "\\bPNR\\b"]
+
 # Catch-all for office and text files not matched above. Listed last so its
 # broad extension set never shadows a more specific category.
 [[category]]
