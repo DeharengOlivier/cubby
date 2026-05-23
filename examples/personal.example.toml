@@ -1,0 +1,45 @@
+# Example personal config. Copy to ~/.config/cubby/config.toml and adapt.
+#
+# Two ways to customise:
+#   * tweak [settings] only -> default categories are kept
+#   * define [[category]] blocks -> they REPLACE the default categories, so you
+#     control routing end to end (copy config/default.toml as a starting point)
+#
+# Within each stage, categories are tried top to bottom: list specific ones
+# first and a broad catch-all last.
+
+[settings]
+source = "~/Downloads"
+delay = "1m"            # leave a fresh download alone for a minute
+interval = "30s"
+content_scan = true
+unsorted_dir = "_Unsorted"
+
+# A work bucket keyed on a project codename and a couple of content hints.
+[[category]]
+name = "Work-Acme"
+name_patterns = ["acme", "\\bproject-x\\b", "\\bQ[1-4]-report\\b"]
+content_patterns = ["acme corporation", "project x"]
+
+# Personal finance: route by filename, and rescue cryptically named exports by
+# peeking at their content.
+[[category]]
+name = "Finance"
+name_patterns = ["statement", "invoice", "receipt", "payslip"]
+content_patterns = ["\\biban\\b", "account balance", "amount due"]
+
+# Decisive by extension: a disk image is an installer whatever it is called.
+[[category]]
+name = "Installers"
+extensions = ["dmg", "pkg", "exe", "msi", "deb", "appimage"]
+strong_ext = true
+
+[[category]]
+name = "Images"
+extensions = ["png", "jpg", "jpeg", "gif", "svg", "webp", "heic"]
+strong_ext = true
+
+# Broad catch-all, listed last.
+[[category]]
+name = "Documents"
+extensions = ["pdf", "docx", "txt", "md", "csv", "xlsx", "pptx"]
