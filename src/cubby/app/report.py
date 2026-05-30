@@ -1,4 +1,5 @@
 """Result types and human-readable rendering for a sort run."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

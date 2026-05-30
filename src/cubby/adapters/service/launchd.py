@@ -1,4 +1,5 @@
 """macOS launchd backend: a per-user LaunchAgent that runs ``cubby watch``."""
+
 from __future__ import annotations
 
 import plistlib

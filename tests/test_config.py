@@ -23,11 +23,13 @@ def test_strong_ext_flag_loaded():
 
 def test_user_file_overrides_settings(tmp_path):
     user = tmp_path / "config.toml"
-    user.write_text(textwrap.dedent("""
+    user.write_text(
+        textwrap.dedent("""
         [settings]
         delay = "5m"
         source = "~/Inbox"
-    """))
+    """)
+    )
     config = load_config(user_path=user)
     assert config.settings.delay == 300.0
     assert config.settings.source.name == "Inbox"
@@ -37,11 +39,13 @@ def test_user_file_overrides_settings(tmp_path):
 
 def test_user_categories_replace_defaults(tmp_path):
     user = tmp_path / "config.toml"
-    user.write_text(textwrap.dedent("""
+    user.write_text(
+        textwrap.dedent("""
         [[category]]
         name = "OnlyThis"
         extensions = ["pdf"]
-    """))
+    """)
+    )
     config = load_config(user_path=user)
     assert [c.name for c in config.categories] == ["OnlyThis"]
 

@@ -3,6 +3,7 @@
 These are plain, immutable-ish dataclasses with no IO. Loading them from a
 config file is an adapter concern (see ``cubby.adapters.config``).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -31,8 +32,8 @@ class Settings:
     """Runtime knobs, all overridable from config or the CLI."""
 
     source: Path = field(default_factory=lambda: Path.home() / "Downloads")
-    delay: float = 60.0            # min age in seconds before a file is eligible
-    interval: float = 30.0         # poll interval for watch mode, in seconds
+    delay: float = 60.0  # min age in seconds before a file is eligible
+    interval: float = 30.0  # poll interval for watch mode, in seconds
     content_scan: bool = True
     content_max_bytes: int = 4000
     unsorted_dir: str = "_Unsorted"

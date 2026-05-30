@@ -11,6 +11,7 @@ Stages, in order; the first to yield a category wins:
 Within each stage, categories are tried in config order, so list specific ones
 first.
 """
+
 from __future__ import annotations
 
 import re

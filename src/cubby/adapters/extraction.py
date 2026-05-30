@@ -5,6 +5,7 @@ nor a Python library can read a format, extraction returns ``""`` and the engine
 simply falls back to filename / type rules. Nothing here raises to the caller,
 so a corrupt or password-protected file never breaks a sort run.
 """
+
 from __future__ import annotations
 
 import html
@@ -14,10 +15,22 @@ import subprocess
 from pathlib import Path
 
 # Formats we know how to read as text. Anything else skips the content stage.
-PARSABLE: frozenset[str] = frozenset({
-    "pdf", "docx", "doc", "rtf", "html", "htm",
-    "txt", "md", "csv", "tsv", "log", "xlsx",
-})
+PARSABLE: frozenset[str] = frozenset(
+    {
+        "pdf",
+        "docx",
+        "doc",
+        "rtf",
+        "html",
+        "htm",
+        "txt",
+        "md",
+        "csv",
+        "tsv",
+        "log",
+        "xlsx",
+    }
+)
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _TIMEOUT = 15

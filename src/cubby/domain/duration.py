@@ -1,4 +1,5 @@
 """Human-friendly duration parsing, e.g. ``"1m"`` -> ``60.0`` seconds."""
+
 from __future__ import annotations
 
 import re

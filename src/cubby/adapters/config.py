@@ -9,6 +9,7 @@ Resolution order, later winning:
 ``[settings]`` keys merge individually; a ``[[category]]`` list in the user file
 *replaces* the defaults, so personal routing can be defined from scratch.
 """
+
 from __future__ import annotations
 
 import os

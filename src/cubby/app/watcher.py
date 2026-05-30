@@ -5,6 +5,7 @@ any Unix. The delay setting means a file is only moved once it has stopped
 changing, so an in-flight download is never grabbed mid-write. ``sleep`` and
 ``stop`` are injected to keep the loop unit-testable without real time.
 """
+
 from __future__ import annotations
 
 import time

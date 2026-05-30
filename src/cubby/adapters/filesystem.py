@@ -1,4 +1,5 @@
 """Filesystem adapter: candidate discovery, eligibility and safe moves."""
+
 from __future__ import annotations
 
 import shutil
@@ -24,9 +25,7 @@ def build_ref(path: Path, max_bytes: int = 4000) -> FileRef:
     )
 
 
-def iter_candidates(
-    settings: Settings, managed: frozenset[str] = frozenset()
-) -> Iterator[Path]:
+def iter_candidates(settings: Settings, managed: frozenset[str] = frozenset()) -> Iterator[Path]:
     """Yield top-level entries in the source folder that cubby may sort.
 
     Hidden entries, the ``_Unsorted`` folder and every managed category folder

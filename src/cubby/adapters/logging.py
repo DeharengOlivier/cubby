@@ -1,4 +1,5 @@
 """A tiny append-only file logger. Never raises; logging must not break a sort."""
+
 from __future__ import annotations
 
 from collections.abc import Callable

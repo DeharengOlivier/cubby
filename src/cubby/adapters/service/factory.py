@@ -1,4 +1,5 @@
 """Pick the right service backend for the current platform."""
+
 from __future__ import annotations
 
 import shutil

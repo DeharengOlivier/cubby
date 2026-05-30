@@ -1,5 +1,3 @@
-import time
-
 from cubby.app.sorter import Sorter
 from cubby.domain.category import Category, Config, Settings
 

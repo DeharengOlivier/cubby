@@ -4,6 +4,7 @@
 filesystem, the engine reads ``name``/``stem``/``ext`` and, only when it needs
 to, calls ``read_text`` - a port the adapter layer wires to real extraction.
 """
+
 from __future__ import annotations
 
 import enum

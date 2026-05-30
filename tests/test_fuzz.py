@@ -1,6 +1,7 @@
 """The engine must classify any input total-function style: never raise, always
 return a known category. We drive it with deterministic pseudo-random names so
 failures are reproducible."""
+
 import random
 import string
 

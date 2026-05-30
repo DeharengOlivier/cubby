@@ -1,4 +1,5 @@
 """Stage-2 behaviour: classify by extracted text when the name is useless."""
+
 from cubby.domain.category import Config, Settings
 from cubby.domain.engine import Engine
 from cubby.domain.file_ref import Stage

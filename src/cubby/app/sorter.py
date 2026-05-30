@@ -1,4 +1,5 @@
 """The core use case: classify the source folder and (optionally) move files."""
+
 from __future__ import annotations
 
 from collections.abc import Callable

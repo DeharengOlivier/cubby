@@ -1,4 +1,5 @@
 """Shared contract for background-service backends."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -10,8 +11,8 @@ from pathlib import Path
 class ServiceSpec:
     """Everything a backend needs to register a long-running agent."""
 
-    program_args: list[str]                 # e.g. ["/usr/local/bin/cubby", "watch"]
-    label: str = "com.cubby.agent"          # reverse-dns id (launchd) / unit name stem
+    program_args: list[str]  # e.g. ["/usr/local/bin/cubby", "watch"]
+    label: str = "com.cubby.agent"  # reverse-dns id (launchd) / unit name stem
     log_path: Path = field(default_factory=lambda: Path.home() / "Library" / "Logs" / "cubby.log")
 
 

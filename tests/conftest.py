@@ -1,5 +1,6 @@
 """Shared fixtures. The engine fixtures build everything in memory, which is
 only possible because the domain layer has no IO dependencies."""
+
 from __future__ import annotations
 
 import pytest

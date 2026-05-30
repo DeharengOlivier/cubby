@@ -49,7 +49,10 @@ def test_detect_service_selects_by_platform(monkeypatch):
     assert isinstance(detect_service(), LaunchdService)
 
     monkeypatch.setattr("sys.platform", "linux")
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/systemctl" if name == "systemctl" else None)
+    monkeypatch.setattr(
+        "shutil.which",
+        lambda name: "/usr/bin/systemctl" if name == "systemctl" else None,
+    )
     assert isinstance(detect_service(), SystemdService)
 
     monkeypatch.setattr("shutil.which", lambda name: None)

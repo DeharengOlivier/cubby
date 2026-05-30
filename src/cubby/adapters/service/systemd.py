@@ -1,4 +1,5 @@
 """Linux systemd backend: a per-user service that runs ``cubby watch``."""
+
 from __future__ import annotations
 
 import subprocess

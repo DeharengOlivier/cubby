@@ -1,4 +1,5 @@
 """Command-line entry point. Thin: it parses args and wires app + adapters."""
+
 from __future__ import annotations
 
 import argparse
