@@ -6,6 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ..adapters.filesystem import build_ref, is_eligible, iter_candidates, move_into
+from ..adapters.journal import Journal, Move
 from ..domain.category import Config
 from ..domain.engine import Engine
 from .report import SortOutcome
@@ -20,10 +21,18 @@ def _noop(_: str) -> None:
 class Sorter:
     """Wires the engine to the filesystem. Holds no mutable state itself."""
 
-    def __init__(self, config: Config, engine: Engine | None = None, *, log: Logger = _noop):
+    def __init__(
+        self,
+        config: Config,
+        engine: Engine | None = None,
+        *,
+        log: Logger = _noop,
+        journal: Journal | None = None,
+    ):
         self._config = config
         self._engine = engine or Engine(config)
         self._log = log
+        self._journal = journal
 
     def sort_once(self, *, apply: bool, respect_age: bool = True) -> list[SortOutcome]:
         """Classify every candidate once.
@@ -35,6 +44,7 @@ class Sorter:
         settings = self._config.settings
         managed = self._config.managed_dirs
         outcomes: list[SortOutcome] = []
+        moves: list[Move] = []
 
         for path in iter_candidates(settings, managed):
             if respect_age and not is_eligible(path, settings):
@@ -47,6 +57,7 @@ class Sorter:
             if apply:
                 destination_dir = settings.source / decision.category
                 moved_to = move_into(path, destination_dir)
+                moves.append((path, moved_to))
                 self._log(f"[{decision.category}] ({decision.stage.value}) {path.name}")
 
             outcomes.append(
@@ -57,4 +68,7 @@ class Sorter:
                     moved_to=moved_to,
                 )
             )
+
+        if self._journal is not None:
+            self._journal.record_run(moves)
         return outcomes
