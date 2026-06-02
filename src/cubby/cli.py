@@ -10,10 +10,12 @@ from pathlib import Path
 from . import __version__
 from .adapters.config import find_user_config, load_config
 from .adapters.extraction import PARSABLE
+from .adapters.journal import Journal
 from .adapters.logging import DEFAULT_LOG, file_logger
 from .adapters.service import ServiceSpec, detect_service, get_service
 from .app.report import render_plan
 from .app.sorter import Sorter
+from .app.undo import undo_last_run
 from .app.watcher import Watcher
 from .domain.category import Config
 from .domain.duration import format_duration
@@ -47,8 +49,14 @@ def cmd_plan(args: argparse.Namespace) -> int:
 def cmd_run(args: argparse.Namespace) -> int:
     config = _load(args)
     log = file_logger(echo=args.verbose)
-    outcomes = Sorter(config, log=log).sort_once(apply=True)
+    outcomes = Sorter(config, log=log, journal=Journal()).sort_once(apply=True)
     print(render_plan(outcomes, applied=True))
+    return 0
+
+
+def cmd_undo(args: argparse.Namespace) -> int:
+    restored = undo_last_run(Journal(), log=print)
+    print(f"Restored {restored} file(s).")
     return 0
 
 
@@ -158,6 +166,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_watch = sub.add_parser("watch", help="keep sorting the folder in the foreground")
     _add_common_flags(p_watch)
     p_watch.set_defaults(func=cmd_watch)
+
+    p_undo = sub.add_parser("undo", help="revert the most recent run")
+    p_undo.set_defaults(func=cmd_undo)
 
     p_install = sub.add_parser("install", help="install the background agent (auto-start)")
     _add_common_flags(p_install)
