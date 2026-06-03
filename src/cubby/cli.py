@@ -13,7 +13,7 @@ from .adapters.extraction import PARSABLE
 from .adapters.journal import Journal
 from .adapters.logging import DEFAULT_LOG, file_logger
 from .adapters.service import ServiceSpec, detect_service, get_service
-from .app.report import render_plan
+from .app.report import render_json, render_plan
 from .app.sorter import Sorter
 from .app.undo import undo_last_run
 from .app.watcher import Watcher
@@ -42,7 +42,8 @@ def _load(args: argparse.Namespace) -> Config:
 def cmd_plan(args: argparse.Namespace) -> int:
     config = _load(args)
     outcomes = Sorter(config).sort_once(apply=False, respect_age=False)
-    print(render_plan(outcomes, applied=False))
+    render = render_json if getattr(args, "json", False) else render_plan
+    print(render(outcomes, applied=False))
     return 0
 
 
@@ -119,6 +120,22 @@ def cmd_uninstall(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_status(args: argparse.Namespace) -> int:
+    service = detect_service()
+    installed = bool(service and service.is_installed())
+    print(f"agent installed : {'yes' if installed else 'no'}")
+    if service and installed:
+        print(f"agent file      : {service.unit_path('com.cubby.agent')}")
+    if DEFAULT_LOG.exists():
+        tail = DEFAULT_LOG.read_text("utf-8", "ignore").splitlines()[-5:]
+        print(f"recent log ({DEFAULT_LOG}):")
+        for line in tail:
+            print(f"  {line}")
+    else:
+        print("recent log      : (none yet)")
+    return 0
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     config = _load(args)
     service = detect_service()
@@ -157,6 +174,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_plan = sub.add_parser("plan", help="show where files would go (moves nothing)")
     _add_common_flags(p_plan)
+    p_plan.add_argument("--json", action="store_true", help="output the plan as JSON")
     p_plan.set_defaults(func=cmd_plan)
 
     p_run = sub.add_parser("run", help="sort the folder once")
@@ -169,6 +187,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_undo = sub.add_parser("undo", help="revert the most recent run")
     p_undo.set_defaults(func=cmd_undo)
+
+    p_status = sub.add_parser("status", help="show whether the agent runs and recent activity")
+    p_status.set_defaults(func=cmd_status)
 
     p_install = sub.add_parser("install", help="install the background agent (auto-start)")
     _add_common_flags(p_install)
