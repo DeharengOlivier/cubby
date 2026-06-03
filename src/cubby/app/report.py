@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -50,3 +51,22 @@ def render_plan(outcomes: list[SortOutcome], *, applied: bool) -> str:
     verb = "Moved" if applied else "Would move"
     lines.append(f"\n{verb} {len(outcomes)} item(s).")
     return "\n".join(lines).lstrip("\n")
+
+
+def render_json(outcomes: list[SortOutcome], *, applied: bool) -> str:
+    """Render outcomes as JSON, for scripting and integration."""
+    payload = {
+        "applied": applied,
+        "count": len(outcomes),
+        "items": [
+            {
+                "name": o.name,
+                "source": str(o.source),
+                "category": o.category,
+                "stage": o.stage.value,
+                "moved_to": str(o.moved_to) if o.moved_to else None,
+            }
+            for o in outcomes
+        ],
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2)
