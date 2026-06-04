@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import shutil
 import time
 from collections.abc import Iterator
@@ -79,9 +80,39 @@ def unique_destination(dest_dir: Path, name: str) -> Path:
         counter += 1
 
 
-def move_into(path: Path, category_dir: Path) -> Path:
-    """Move ``path`` into ``category_dir``, never overwriting. Returns the dest."""
+def _digest(path: Path) -> str | None:
+    try:
+        h = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except OSError:
+        return None
+
+
+def files_identical(a: Path, b: Path) -> bool:
+    """True if both are regular files with the same size and content."""
+    try:
+        if not (a.is_file() and b.is_file()) or a.stat().st_size != b.stat().st_size:
+            return False
+    except OSError:
+        return False
+    return _digest(a) == _digest(b)
+
+
+def move_into(path: Path, category_dir: Path, *, dedupe: bool = False) -> Path:
+    """Move ``path`` into ``category_dir``, never overwriting. Returns the dest.
+
+    With ``dedupe`` and a byte-identical file already present under the same
+    name, the redundant ``path`` is removed instead of being kept as a `` (1)``
+    copy, and the existing file's path is returned.
+    """
     category_dir.mkdir(parents=True, exist_ok=True)
+    same_name = category_dir / path.name
+    if dedupe and same_name.exists() and files_identical(path, same_name):
+        path.unlink()
+        return same_name
     destination = unique_destination(category_dir, path.name)
     shutil.move(str(path), str(destination))
     return destination
