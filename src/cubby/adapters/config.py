@@ -64,6 +64,7 @@ def _build_settings(raw: dict) -> Settings:
         content_scan=bool(raw.get("content_scan", defaults.content_scan)),
         content_max_bytes=int(raw.get("content_max_bytes", defaults.content_max_bytes)),
         unsorted_dir=raw.get("unsorted_dir", defaults.unsorted_dir),
+        dedupe=bool(raw.get("dedupe", defaults.dedupe)),
         skip_ext=frozenset(e.lower().lstrip(".") for e in skip) if skip else defaults.skip_ext,
     )
 

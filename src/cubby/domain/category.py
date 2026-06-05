@@ -37,6 +37,7 @@ class Settings:
     content_scan: bool = True
     content_max_bytes: int = 4000
     unsorted_dir: str = "_Unsorted"
+    dedupe: bool = False  # drop byte-identical duplicates instead of keeping (1) copies
     skip_ext: frozenset[str] = frozenset(
         {"crdownload", "part", "download", "tmp", "partial", "opdownload"}
     )
