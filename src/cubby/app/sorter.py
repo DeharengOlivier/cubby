@@ -56,7 +56,7 @@ class Sorter:
             moved_to: Path | None = None
             if apply:
                 destination_dir = settings.source / decision.category
-                moved_to = move_into(path, destination_dir)
+                moved_to = move_into(path, destination_dir, dedupe=settings.dedupe)
                 moves.append((path, moved_to))
                 self._log(f"[{decision.category}] ({decision.stage.value}) {path.name}")
 
