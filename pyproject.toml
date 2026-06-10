@@ -25,7 +25,7 @@ dependencies = []
 [project.optional-dependencies]
 # Richer content extraction when system tools (pdftotext, textutil) are absent.
 extract = ["pypdf>=4", "python-docx>=1", "openpyxl>=3"]
-dev = ["pytest>=8", "ruff>=0.5", "mypy>=1.10"]
+dev = ["pytest>=8", "ruff>=0.5", "mypy>=1.10", "pre-commit>=3"]
 
 [project.scripts]
 cubby = "cubby.cli:main"
@@ -48,3 +48,10 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["cubby"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
