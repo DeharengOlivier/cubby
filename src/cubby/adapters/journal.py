@@ -17,8 +17,9 @@ Move = tuple[Path, Path]  # (source_before, destination_after)
 
 
 class Journal:
-    def __init__(self, path: Path = DEFAULT_JOURNAL):
-        self.path = path
+    def __init__(self, path: Path | None = None):
+        # Resolve the default at call time so it can be patched in tests.
+        self.path = path or DEFAULT_JOURNAL
 
     def record_run(self, moves: list[Move]) -> None:
         if not moves:
