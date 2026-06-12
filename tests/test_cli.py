@@ -26,6 +26,37 @@ def test_doctor_runs(capsys):
     assert "service backend" in out
 
 
+def test_run_then_undo_via_cli(tmp_path, capsys, monkeypatch):
+    from cubby.adapters import journal as journal_mod
+
+    monkeypatch.setattr(journal_mod, "DEFAULT_JOURNAL", tmp_path / "journal.jsonl")
+    (tmp_path / "Invoice-1.pdf").write_text("x")
+
+    main(["run", "--source", str(tmp_path), "--delay", "0", "--no-content"])
+    assert (tmp_path / "Invoices" / "Invoice-1.pdf").exists()
+
+    rc = main(["undo"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "Restored 1 file" in out
+    assert (tmp_path / "Invoice-1.pdf").exists()
+
+
+def test_status_runs(capsys):
+    rc = main(["status"])
+    assert rc == 0
+    assert "agent installed" in capsys.readouterr().out
+
+
+def test_plan_json_output(tmp_path, capsys):
+    import json
+
+    (tmp_path / "photo.png").write_text("x")
+    main(["plan", "--source", str(tmp_path), "--no-content", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["items"][0]["category"] == "Images"
+
+
 def test_no_command_errors(capsys):
     import pytest
 
