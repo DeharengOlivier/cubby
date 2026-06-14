@@ -7,9 +7,13 @@
 | `cubby plan`      | Preview the full mapping of the folder. Moves nothing and ignores the age delay, so you see every file. |
 | `cubby run`       | Sort the folder once. Only files older than `--delay` are moved. |
 | `cubby watch`     | Run the sort loop in the foreground. Ctrl-C to stop.     |
+| `cubby undo`      | Reverse the most recent run, restoring files to where they were. |
 | `cubby install`   | Register a background agent that runs `watch` and starts at login. |
 | `cubby uninstall` | Stop and remove the background agent.                    |
+| `cubby status`    | Show whether the agent is installed and recent log activity. |
 | `cubby doctor`    | Print platform, service backend, config in use and extraction support. |
+
+`cubby plan` also accepts `--json` for scripting.
 
 ## Common flags
 

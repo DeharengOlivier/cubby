@@ -45,9 +45,11 @@ Linux (systemd).
 ```sh
 cubby plan        # preview where everything would go (moves nothing)
 cubby run         # sort the folder once
+cubby undo        # revert the last run
 cubby watch       # keep sorting in the foreground (Ctrl-C to stop)
 cubby install     # register the background agent (sorts every minute)
 cubby uninstall   # remove the agent
+cubby status      # is the agent running? what did it do recently?
 cubby doctor      # show environment and content-extraction support
 ```
 
