@@ -14,7 +14,10 @@ All notable changes to this project are documented here. The format is based on
   pypdf, python-docx, openpyxl, plain text).
 - Generic default categories shipped in `config/default.toml`.
 - TOML configuration with default + user-file + CLI-override merging.
-- CLI: `plan`, `run`, `watch`, `install`, `uninstall`, `doctor`.
+- CLI: `plan`, `run`, `undo`, `watch`, `install`, `uninstall`, `status`, `doctor`.
+- Undo journal: every run is recorded so `cubby undo` can revert it.
+- Opt-in `dedupe` to drop byte-identical duplicate downloads.
+- `cubby plan --json` for scripting.
 - Background agent support via launchd (macOS) and systemd (Linux).
 - Collision-safe moves, age delay, and skipping of in-progress downloads.
 - Portable `install.sh` / `uninstall.sh`.
