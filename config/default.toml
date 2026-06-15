@@ -11,6 +11,7 @@ interval = "30s"         # how often watch mode polls the folder
 content_scan = true      # peek inside files when the name is uninformative
 content_max_bytes = 4000
 unsorted_dir = "_Unsorted"
+dedupe = false           # set true to drop byte-identical duplicate downloads
 
 # --- Finance and administration -------------------------------------------
 
