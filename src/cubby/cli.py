@@ -39,8 +39,21 @@ def _load(args: argparse.Namespace) -> Config:
     return load_config(user_path=user_path, overrides=_build_overrides(args))
 
 
+def _require_source(config: Config) -> str | None:
+    """Return an error message if the source folder is unusable, else None."""
+    source = config.settings.source
+    if not source.exists():
+        return f"source folder does not exist: {source}"
+    if not source.is_dir():
+        return f"source is not a folder: {source}"
+    return None
+
+
 def cmd_plan(args: argparse.Namespace) -> int:
     config = _load(args)
+    if error := _require_source(config):
+        print(f"cubby: {error}", file=sys.stderr)
+        return 1
     outcomes = Sorter(config).sort_once(apply=False, respect_age=False)
     render = render_json if getattr(args, "json", False) else render_plan
     print(render(outcomes, applied=False))
@@ -49,6 +62,9 @@ def cmd_plan(args: argparse.Namespace) -> int:
 
 def cmd_run(args: argparse.Namespace) -> int:
     config = _load(args)
+    if error := _require_source(config):
+        print(f"cubby: {error}", file=sys.stderr)
+        return 1
     log = file_logger(echo=args.verbose)
     outcomes = Sorter(config, log=log, journal=Journal()).sort_once(apply=True)
     print(render_plan(outcomes, applied=True))
