@@ -42,6 +42,13 @@ def test_run_then_undo_via_cli(tmp_path, capsys, monkeypatch):
     assert (tmp_path / "Invoice-1.pdf").exists()
 
 
+def test_missing_source_errors(tmp_path, capsys):
+    rc = main(["run", "--source", str(tmp_path / "nope")])
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "does not exist" in err
+
+
 def test_status_runs(capsys):
     rc = main(["status"])
     assert rc == 0
