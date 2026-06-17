@@ -101,6 +101,10 @@ name = "Ebooks"
 extensions = ["epub", "mobi", "azw3"]
 
 [[category]]
+name = "Subtitles"
+extensions = ["srt", "vtt", "ass", "sub"]
+
+[[category]]
 name = "Code"
 extensions = ["py", "js", "ts", "tsx", "jsx", "go", "rs", "rb", "java", "c", "cpp", "sh", "sql"]
 
