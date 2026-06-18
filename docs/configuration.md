@@ -20,8 +20,12 @@ interval = "30s"           # watch-mode poll interval
 content_scan = true        # enable the content stage
 content_max_bytes = 4000   # how much extracted text to scan
 unsorted_dir = "_Unsorted" # where unclassifiable files go
+dedupe = false             # drop byte-identical duplicates instead of (1) copies
 skip_ext = ["crdownload", "part"]  # in-progress download extensions to ignore
 ```
+
+Every run is recorded to a journal, so `cubby undo` can reverse the most recent
+sort. The journal lives at `~/.local/state/cubby/journal.jsonl`.
 
 ## Categories
 
