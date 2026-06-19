@@ -67,6 +67,22 @@ cubby install --delay 2m --interval 1m
 By default a file is only moved once it has sat still for **1 minute** (`--delay`),
 so in-progress downloads are never grabbed mid-write.
 
+## How it works
+
+For each file, cubby walks a cascade and stops at the first stage that produces
+a category:
+
+```
+.dmg / .png / .mp4   ──▶  strong extension   (an installer is an installer)
+Invoice-2026.pdf     ──▶  filename match
+3c0fe3ad-….pdf       ──▶  content match       (reads the text inside)
+random.pages         ──▶  type fallback        (by extension)
+mystery.qzx          ──▶  _Unsorted
+```
+
+Specific categories are tried before broad ones, so `Invoices` wins over the
+catch-all `Documents`. See [docs/architecture.md](docs/architecture.md).
+
 ## Content extraction
 
 The content stage uses whatever is available and degrades gracefully:
