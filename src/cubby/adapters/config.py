@@ -2,7 +2,7 @@
 
 Resolution order, later winning:
 
-  1. the packaged ``config/default.toml`` (generic categories)
+  1. the packaged ``cubby/data/default.toml`` (generic categories)
   2. a user file (``~/.config/cubby/config.toml`` or ``$CUBBY_CONFIG``)
   3. explicit overrides passed by the CLI
 
@@ -14,12 +14,17 @@ from __future__ import annotations
 
 import os
 import tomllib
+from importlib.resources import files
 from pathlib import Path
 
 from ..domain.category import Category, Config, Settings
 from ..domain.duration import parse_duration
 
-_DEFAULT_FILE = Path(__file__).resolve().parents[3] / "config" / "default.toml"
+
+def default_config_path() -> Path:
+    """Locate the packaged default config, working in both source and wheel
+    installs via importlib.resources."""
+    return Path(str(files("cubby").joinpath("data/default.toml")))
 
 
 def user_config_candidates() -> list[Path]:
@@ -82,9 +87,9 @@ def _build_category(raw: dict) -> Category:
 def load_config(
     user_path: Path | None = None,
     overrides: dict | None = None,
-    default_path: Path = _DEFAULT_FILE,
+    default_path: Path | None = None,
 ) -> Config:
-    data = _load_toml(default_path)
+    data = _load_toml(default_path or default_config_path())
 
     resolved_user = user_path or find_user_config()
     if resolved_user and resolved_user.is_file():
