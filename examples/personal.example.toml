@@ -3,7 +3,7 @@
 # Two ways to customise:
 #   * tweak [settings] only -> default categories are kept
 #   * define [[category]] blocks -> they REPLACE the default categories, so you
-#     control routing end to end (copy config/default.toml as a starting point)
+#     control routing end to end (copy src/cubby/data/default.toml as a starting point)
 #
 # Within each stage, categories are tried top to bottom: list specific ones
 # first and a broad catch-all last.

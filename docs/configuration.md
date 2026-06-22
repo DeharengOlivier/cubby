@@ -2,7 +2,7 @@
 
 Cubby reads TOML from three layers, later winning:
 
-1. the packaged `config/default.toml` (generic categories)
+1. the packaged `src/cubby/data/default.toml` (generic categories)
 2. a user file: `~/.config/cubby/config.toml`, `~/.cubby.toml`, or `$CUBBY_CONFIG`
 3. command-line flags
 

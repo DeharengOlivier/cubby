@@ -12,7 +12,7 @@ All notable changes to this project are documented here. The format is based on
 - Three-stage classification cascade: filename, content, then file type.
 - Content extraction with graceful multi-backend fallback (pdftotext, textutil,
   pypdf, python-docx, openpyxl, plain text).
-- Generic default categories shipped in `config/default.toml`.
+- Generic default categories shipped inside the package (`cubby/data/default.toml`).
 - TOML configuration with default + user-file + CLI-override merging.
 - CLI: `plan`, `run`, `undo`, `watch`, `install`, `uninstall`, `status`, `doctor`.
 - Undo journal: every run is recorded so `cubby undo` can revert it.
