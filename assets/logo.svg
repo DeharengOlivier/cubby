@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 200" width="640" height="200" role="img" aria-label="cubby">
+  <title>cubby</title>
+  <defs>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#818cf8"/>
+      <stop offset="1" stop-color="#6366f1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Cubby shelf: a 2x2 set of compartments -->
+  <g fill="none" stroke="#6366f1" stroke-width="6" stroke-linejoin="round">
+    <rect x="28" y="36" width="128" height="128" rx="14"/>
+    <line x1="92" y1="36" x2="92" y2="164"/>
+    <line x1="28" y1="100" x2="156" y2="100"/>
+  </g>
+
+  <!-- A file dropping into the top-right compartment -->
+  <g>
+    <rect x="104" y="50" width="40" height="36" rx="4" fill="url(#accent)"/>
+    <path d="M134 50 v10 h10 z" fill="#c7d2fe"/>
+    <line x1="124" y1="22" x2="124" y2="44" stroke="#818cf8" stroke-width="5" stroke-linecap="round"/>
+    <path d="M116 38 l8 8 l8 -8" fill="none" stroke="#818cf8" stroke-width="5"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="190" y="118" font-family="Helvetica, Arial, sans-serif" font-size="92"
+        font-weight="700" fill="#6366f1">cubby</text>
+  <text x="194" y="156" font-family="Helvetica, Arial, sans-serif" font-size="24"
+        font-weight="400" fill="#94a3b8">tidy your downloads, automatically</text>
+</svg>
