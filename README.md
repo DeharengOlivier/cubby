@@ -1,10 +1,16 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="cubby" width="520">
+</p>
+
+<p align="center">
+  <a href="https://github.com/DeharengOlivier/cubby/actions/workflows/ci.yml"><img src="https://github.com/DeharengOlivier/cubby/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://www.python.org"><img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="Python 3.11+"></a>
+</p>
+
+<p align="center"><em>Tidy your Downloads folder automatically. Every file finds its cubby.</em></p>
+
 # Cubby
-
-[![CI](https://github.com/DeharengOlivier/cubby/actions/workflows/ci.yml/badge.svg)](https://github.com/DeharengOlivier/cubby/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org)
-
-> Tidy your Downloads folder automatically. Every file finds its cubby.
 
 Cubby is a small, dependency-light CLI that watches a folder (your `~/Downloads`
 by default) and files each new download into the right place using a
