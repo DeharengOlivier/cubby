@@ -13,12 +13,17 @@ from .adapters.extraction import PARSABLE
 from .adapters.journal import Journal
 from .adapters.logging import DEFAULT_LOG, file_logger
 from .adapters.service import ServiceSpec, detect_service, get_service
+from .adapters.ui import Palette, banner, supports_color
 from .app.report import render_json, render_plan
 from .app.sorter import Sorter
 from .app.undo import undo_last_run
 from .app.watcher import Watcher
 from .domain.category import Config
 from .domain.duration import format_duration
+
+
+def _palette() -> Palette:
+    return Palette(supports_color(sys.stdout))
 
 
 def _build_overrides(args: argparse.Namespace) -> dict:
@@ -55,8 +60,13 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(f"cubby: {error}", file=sys.stderr)
         return 1
     outcomes = Sorter(config).sort_once(apply=False, respect_age=False)
-    render = render_json if getattr(args, "json", False) else render_plan
-    print(render(outcomes, applied=False))
+    if getattr(args, "json", False):
+        print(render_json(outcomes, applied=False))
+        return 0
+    pal = _palette()
+    if pal.enabled:
+        print(banner(pal))
+    print(render_plan(outcomes, applied=False, palette=pal))
     return 0
 
 
@@ -67,7 +77,10 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 1
     log = file_logger(echo=args.verbose)
     outcomes = Sorter(config, log=log, journal=Journal()).sort_once(apply=True)
-    print(render_plan(outcomes, applied=True))
+    pal = _palette()
+    if pal.enabled:
+        print(banner(pal))
+    print(render_plan(outcomes, applied=True, palette=pal))
     return 0
 
 
@@ -186,7 +199,8 @@ def _add_common_flags(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cubby", description="Tidy your Downloads folder.")
     parser.add_argument("--version", action="version", version=f"cubby {__version__}")
-    sub = parser.add_subparsers(dest="command", required=True)
+    parser.set_defaults(func=None)
+    sub = parser.add_subparsers(dest="command")
 
     p_plan = sub.add_parser("plan", help="show where files would go (moves nothing)")
     _add_common_flags(p_plan)
@@ -224,6 +238,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.func is None:
+        print(banner(_palette()))
+        parser.print_help()
+        return 0
     return args.func(args)
 
 
