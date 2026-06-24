@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..adapters.ui import Palette
 from ..domain.file_ref import Stage
 
 
@@ -30,26 +31,32 @@ def group_by_category(outcomes: list[SortOutcome]) -> dict[str, list[SortOutcome
     return grouped
 
 
-def render_plan(outcomes: list[SortOutcome], *, applied: bool) -> str:
+def render_plan(
+    outcomes: list[SortOutcome], *, applied: bool, palette: Palette | None = None
+) -> str:
     """Render outcomes grouped by destination folder.
 
     Non-name stages are annotated (``<- content``) so it is obvious why a file
-    with an unhelpful name landed where it did.
+    with an unhelpful name landed where it did. With ``palette`` the output is
+    coloured; without it (the default) the plain layout is unchanged.
     """
+    p = palette or Palette(False)
     if not outcomes:
-        return "Nothing to sort."
+        return p.dim("Nothing to sort.")
 
     grouped = group_by_category(outcomes)
     lines: list[str] = []
     for category in sorted(grouped):
         items = grouped[category]
-        lines.append(f"\n{category}/  ({len(items)})")
+        header = p.bold(p.accent(f"{category}/")) + p.dim(f"  ({len(items)})")
+        lines.append(f"\n{header}")
         for outcome in sorted(items, key=lambda o: o.name.lower()):
-            tag = "" if outcome.stage is Stage.NAME else f"   <- {outcome.stage.value}"
+            tag = "" if outcome.stage is Stage.NAME else p.dim(f"   <- {outcome.stage.value}")
             lines.append(f"    {outcome.name}{tag}")
 
     verb = "Moved" if applied else "Would move"
-    lines.append(f"\n{verb} {len(outcomes)} item(s).")
+    summary = f"{verb} {len(outcomes)} item(s)."
+    lines.append("\n" + (p.green(summary) if applied else p.bold(summary)))
     return "\n".join(lines).lstrip("\n")
 
 
