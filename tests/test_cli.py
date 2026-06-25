@@ -64,8 +64,9 @@ def test_plan_json_output(tmp_path, capsys):
     assert payload["items"][0]["category"] == "Images"
 
 
-def test_no_command_errors(capsys):
-    import pytest
-
-    with pytest.raises(SystemExit):
-        main([])
+def test_no_command_shows_banner_and_help(capsys):
+    rc = main([])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "cubby" in out
+    assert "usage:" in out  # help printed
