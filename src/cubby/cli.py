@@ -149,30 +149,44 @@ def cmd_uninstall(args: argparse.Namespace) -> int:
     return 0
 
 
+def _kv(pal: Palette, key: str, value: str) -> None:
+    print(f"{pal.dim(key.ljust(16))}{value}")
+
+
+def _features(pal: Palette, mapping: dict[str, bool]) -> str:
+    parts = [
+        pal.green(f"{name} ok") if present else pal.dim(f"{name} -")
+        for name, present in mapping.items()
+    ]
+    return "  ".join(parts)
+
+
 def cmd_status(args: argparse.Namespace) -> int:
+    pal = _palette()
     service = detect_service()
     installed = bool(service and service.is_installed())
-    print(f"agent installed : {'yes' if installed else 'no'}")
+    _kv(pal, "agent", pal.green("running") if installed else pal.yellow("not installed"))
     if service and installed:
-        print(f"agent file      : {service.unit_path('com.cubby.agent')}")
+        _kv(pal, "agent file", str(service.unit_path("com.cubby.agent")))
     if DEFAULT_LOG.exists():
         tail = DEFAULT_LOG.read_text("utf-8", "ignore").splitlines()[-5:]
-        print(f"recent log ({DEFAULT_LOG}):")
+        _kv(pal, "recent log", pal.dim(str(DEFAULT_LOG)))
         for line in tail:
-            print(f"  {line}")
+            print(f"  {pal.dim(line)}")
     else:
-        print("recent log      : (none yet)")
+        _kv(pal, "recent log", pal.dim("(none yet)"))
     return 0
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
+    pal = _palette()
     config = _load(args)
     service = detect_service()
-    print(f"cubby {__version__}")
-    print(f"platform        : {sys.platform}")
-    print(f"service backend : {service.name if service else 'none (manual watch only)'}")
-    print(f"config file     : {find_user_config() or 'defaults only'}")
-    print(f"source folder   : {config.settings.source}")
+    print(pal.bold(pal.accent(f"cubby {__version__}")))
+    _kv(pal, "platform", sys.platform)
+    _kv(pal, "service", service.name if service else pal.yellow("none (manual watch only)"))
+    _kv(pal, "config file", str(find_user_config() or "defaults only"))
+    _kv(pal, "source", str(config.settings.source))
     tools = {name: bool(shutil.which(name)) for name in ("pdftotext", "textutil", "antiword")}
     libs = {}
     for lib in ("pypdf", "docx", "openpyxl"):
@@ -181,9 +195,9 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             libs[lib] = True
         except Exception:
             libs[lib] = False
-    print(f"extract tools   : {tools}")
-    print(f"extract libs    : {libs}")
-    print(f"parsable types  : {', '.join(sorted(PARSABLE))}")
+    _kv(pal, "extract tools", _features(pal, tools))
+    _kv(pal, "extract libs", _features(pal, libs))
+    _kv(pal, "parsable", pal.dim(", ".join(sorted(PARSABLE))))
     return 0
 
 

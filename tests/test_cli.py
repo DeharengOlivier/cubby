@@ -23,7 +23,7 @@ def test_doctor_runs(capsys):
     rc = main(["doctor", "--source", "/tmp"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "service backend" in out
+    assert "service" in out
 
 
 def test_run_then_undo_via_cli(tmp_path, capsys, monkeypatch):
@@ -52,7 +52,7 @@ def test_missing_source_errors(tmp_path, capsys):
 def test_status_runs(capsys):
     rc = main(["status"])
     assert rc == 0
-    assert "agent installed" in capsys.readouterr().out
+    assert "agent" in capsys.readouterr().out
 
 
 def test_plan_json_output(tmp_path, capsys):
