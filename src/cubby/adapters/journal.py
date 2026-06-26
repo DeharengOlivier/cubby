@@ -5,6 +5,7 @@ made. ``cubby undo`` replays the most recent line in reverse. The journal lives
 under the user state directory and is best-effort: a failure to record never
 aborts a sort.
 """
+
 from __future__ import annotations
 
 import json

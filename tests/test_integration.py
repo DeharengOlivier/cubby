@@ -1,5 +1,6 @@
 """End-to-end: a realistic folder is sorted through the default config, with the
 content stage rescuing a cryptically named file."""
+
 from cubby.adapters.config import load_config
 from cubby.app.sorter import Sorter
 

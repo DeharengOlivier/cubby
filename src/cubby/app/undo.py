@@ -1,4 +1,5 @@
 """Undo use case: move the most recent run's files back where they came from."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
