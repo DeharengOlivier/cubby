@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 470" width="760" height="470" font-family="SFMono-Regular, Menlo, Consolas, monospace" font-size="15">
+  <rect x="0" y="0" width="760" height="470" rx="12" fill="#0d1117"/>
+  <rect x="0" y="0" width="760" height="34" rx="12" fill="#161b22"/>
+  <rect x="0" y="22" width="760" height="12" fill="#161b22"/>
+  <circle cx="20" cy="17" r="6" fill="#ff5f56"/>
+  <circle cx="40" cy="17" r="6" fill="#ffbd2e"/>
+  <circle cx="60" cy="17" r="6" fill="#27c93f"/>
+  <text x="380" y="22" text-anchor="middle" fill="#8b949e" font-size="13">cubby</text>
+
+  <!-- prompt -->
+  <text x="24" y="66"><tspan fill="#34d399">$</tspan> <tspan fill="#c9d1d9">cubby plan</tspan></text>
+
+  <!-- logo banner -->
+  <text x="24" y="98"  fill="#818cf8" xml:space="preserve">  ╭───┬───╮</text>
+  <text x="24" y="120" fill="#818cf8" xml:space="preserve">  │   │ ▪ │</text>
+  <text x="160" y="120" fill="#818cf8" font-weight="700">cubby</text>
+  <text x="24" y="142" fill="#818cf8" xml:space="preserve">  ├───┼───┤</text>
+  <text x="160" y="142" fill="#6b7280">tidy your downloads, automatically</text>
+  <text x="24" y="164" fill="#818cf8" xml:space="preserve">  │ ▪ │   │</text>
+  <text x="24" y="186" fill="#818cf8" xml:space="preserve">  ╰───┴───╯</text>
+  <text x="160" y="186" fill="#6b7280">v0.1.0</text>
+
+  <!-- plan output -->
+  <text x="24" y="222"><tspan fill="#818cf8" font-weight="700">Factures-et-Recus/</tspan><tspan fill="#6b7280">  (36)</tspan></text>
+  <text x="24" y="244" fill="#c9d1d9" xml:space="preserve">    Invoice-7A93C6AC-0014.pdf</text>
+  <text x="24" y="266" xml:space="preserve"><tspan fill="#c9d1d9">    document.pdf</tspan><tspan fill="#6b7280">   &lt;- content</tspan></text>
+
+  <text x="24" y="298"><tspan fill="#818cf8" font-weight="700">Images/</tspan><tspan fill="#6b7280">  (35)</tspan></text>
+  <text x="24" y="320" xml:space="preserve"><tspan fill="#c9d1d9">    holiday.png</tspan><tspan fill="#6b7280">   &lt;- strong-ext</tspan></text>
+
+  <text x="24" y="352"><tspan fill="#818cf8" font-weight="700">Musique/</tspan><tspan fill="#6b7280">  (13)</tspan></text>
+  <text x="24" y="374" fill="#c9d1d9" xml:space="preserve">    Respire.mp3</text>
+
+  <text x="24" y="416" fill="#34d399" font-weight="700">Moved 176 item(s).</text>
+</svg>
