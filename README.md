@@ -10,6 +10,10 @@
 
 <p align="center"><em>Tidy your Downloads folder automatically. Every file finds its cubby.</em></p>
 
+<p align="center">
+  <img src="assets/demo.svg" alt="cubby plan demo" width="640">
+</p>
+
 # Cubby
 
 Cubby is a small, dependency-light CLI that watches a folder (your `~/Downloads`
