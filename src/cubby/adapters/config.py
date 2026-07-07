@@ -71,6 +71,9 @@ def _build_settings(raw: dict) -> Settings:
         unsorted_dir=raw.get("unsorted_dir", defaults.unsorted_dir),
         dedupe=bool(raw.get("dedupe", defaults.dedupe)),
         skip_ext=frozenset(e.lower().lstrip(".") for e in skip) if skip else defaults.skip_ext,
+        month_style=str(raw.get("month_style", defaults.month_style)),
+        month_lang=str(raw.get("month_lang", defaults.month_lang)),
+        vendors=tuple(raw.get("vendors", defaults.vendors)),
     )
 
 
@@ -81,6 +84,8 @@ def _build_category(raw: dict) -> Category:
         content_patterns=tuple(raw.get("content_patterns", ())),
         extensions=frozenset(e.lower().lstrip(".") for e in raw.get("extensions", ())),
         strong_ext=bool(raw.get("strong_ext", False)),
+        date_folders=bool(raw.get("date_folders", False)),
+        vendor_rename=bool(raw.get("vendor_rename", False)),
     )
 
 

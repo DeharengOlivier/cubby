@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- Invoice and bank categories (`date_folders`) file documents into a month/year
+  subfolder, read from the document's own date (FR/EN) with a fallback to the
+  file's modification date.
+- Invoices (`vendor_rename`) are renamed to `<vendor> facture <date>`, using a
+  configurable known-vendor list plus a filename heuristic; the original name is
+  kept whenever the vendor is uncertain.
+- `--month-style {numeric,letters}` and `--month-lang {fr,en}` to choose the
+  subfolder naming (e.g. `2026-07`, `juillet 2026`, `July 2026`), baked into the
+  background agent by `cubby install`.
+- `cubby plan` (and `--json`) now previews the month subfolder and any rename.
+
 ## [0.1.0] - 2026-06-29
 
 ### Added

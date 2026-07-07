@@ -77,6 +77,34 @@ cubby install --delay 2m --interval 1m
 By default a file is only moved once it has sat still for **1 minute** (`--delay`),
 so in-progress downloads are never grabbed mid-write.
 
+## Invoices, filed by month and renamed
+
+Categories flagged with `date_folders` (the shipped `Invoices` and
+`Bank-Statements`) file each document into a **month/year subfolder** taken from
+the date printed on the document, falling back to the download date when none is
+readable. Invoices additionally get a clean name, `<vendor> facture <date>`:
+
+```
+Invoices/
+  2026-07/
+    spotify facture 2026-07-07.pdf
+  2026-06/
+    ovh facture 2026-06-30.pdf
+```
+
+It reads dates and vendors in **French and English**. Pick the folder style on
+the command line:
+
+```sh
+cubby run --month-style numeric          # 2026-07 (default)
+cubby run --month-style letters          # juillet 2026
+cubby run --month-style letters --month-lang en   # July 2026
+```
+
+When cubby cannot confidently identify the vendor it keeps the original filename
+(it never guesses), and `cubby plan` previews every subfolder and rename before
+anything moves.
+
 ## How it works
 
 For each file, cubby walks a cascade and stops at the first stage that produces

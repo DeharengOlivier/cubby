@@ -25,6 +25,8 @@ class Category:
     content_patterns: tuple[str, ...] = ()
     extensions: frozenset[str] = frozenset()
     strong_ext: bool = False
+    date_folders: bool = False  # file into a month/year subfolder (invoices, statements)
+    vendor_rename: bool = False  # also rename to "<vendor> facture <date>" (invoices)
 
 
 @dataclass(frozen=True)
@@ -41,6 +43,9 @@ class Settings:
     skip_ext: frozenset[str] = frozenset(
         {"crdownload", "part", "download", "tmp", "partial", "opdownload"}
     )
+    month_style: str = "numeric"  # month/year folder style: "numeric" (2026-07) or "letters"
+    month_lang: str = "fr"  # language for the letters style: "fr" (juillet) or "en" (July)
+    vendors: tuple[str, ...] = ()  # known vendor names, matched first when renaming invoices
 
 
 @dataclass(frozen=True)

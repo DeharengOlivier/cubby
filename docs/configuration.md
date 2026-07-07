@@ -22,7 +22,13 @@ content_max_bytes = 4000   # how much extracted text to scan
 unsorted_dir = "_Unsorted" # where unclassifiable files go
 dedupe = false             # drop byte-identical duplicates instead of (1) copies
 skip_ext = ["crdownload", "part"]  # in-progress download extensions to ignore
+month_style = "numeric"    # invoice subfolder style: "numeric" (2026-07) or "letters"
+month_lang = "fr"          # letters language: "fr" (juillet 2026) or "en" (July 2026)
+vendors = ["spotify", "ovh"]  # known vendors, matched first when renaming invoices
 ```
+
+`month_style` and `month_lang` can also be set per run with `--month-style`
+and `--month-lang`; `cubby install` bakes them into the background agent.
 
 Every run is recorded to a journal, so `cubby undo` can reverse the most recent
 sort. The journal lives at `~/.local/state/cubby/journal.jsonl`.
@@ -36,7 +42,22 @@ name_patterns = ["invoice", "facture"]  # stage 1: regex on the filename
 content_patterns = ["amount due"]       # stage 2: regex on extracted text
 extensions = ["pdf"]                    # stage 3: fallback by extension
 strong_ext = false                      # stage 0: make extensions decisive
+date_folders = false                    # file into a month/year subfolder
+vendor_rename = false                   # rename to "<vendor> facture <date>.<ext>"
 ```
+
+### Monthly foldering and renaming
+
+A category with `date_folders = true` files its documents into a month/year
+subfolder (`Invoices/2026-07/…`). The month comes from the date printed on the
+document (parsed in French and English), or the file's modification date when
+none is readable.
+
+Add `vendor_rename = true` (invoices) to also rename the file to
+`<vendor> facture <date>`, e.g. `spotify facture 2026-07-07.pdf`. The vendor is
+matched against the `vendors` list first, then guessed from the filename; when
+nothing is certain the original name is kept. Renaming never overwrites and
+`cubby undo` still restores the original path.
 
 ### The cascade
 

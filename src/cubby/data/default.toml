@@ -13,10 +13,27 @@ content_max_bytes = 4000
 unsorted_dir = "_Unsorted"
 dedupe = false           # set true to drop byte-identical duplicate downloads
 
+# Invoices (and any category with date_folders) are filed into a month/year
+# subfolder. "numeric" gives 2026-07; "letters" gives "juillet 2026" (month_lang
+# = "fr") or "July 2026" ("en"). Override per run with --month-style/--month-lang.
+month_style = "numeric"
+month_lang = "fr"
+
+# Known vendors, matched first when renaming an invoice, so a cryptic filename
+# like "3c0fe.pdf" whose text mentions Spotify still becomes "spotify facture …".
+vendors = [
+    "spotify", "netflix", "youtube", "apple", "google", "microsoft", "amazon",
+    "aws", "openai", "anthropic", "github", "gitlab", "notion", "figma", "canva",
+    "adobe", "vercel", "stripe", "linkedin", "ovh", "gandi", "scaleway", "hetzner",
+    "orange", "sfr", "free", "bouygues", "proton", "dropbox", "slack", "zoom",
+]
+
 # --- Finance and administration -------------------------------------------
 
 [[category]]
 name = "Invoices"
+date_folders = true      # file into a month/year subfolder (e.g. 2026-07/)
+vendor_rename = true      # rename to "<vendor> facture <date>.<ext>"
 name_patterns = [
     "invoice", "receipt", "facture", "\\breçu\\b", "payment[-_ ]?confirmation",
     "order[-_ ]receipt", "\\bbill\\b", "\\bdevis\\b",
@@ -28,6 +45,7 @@ content_patterns = [
 
 [[category]]
 name = "Bank-Statements"
+date_folders = true      # statements are filed by month too (no renaming)
 name_patterns = ["statement", "relev[ée]", "\\bbank\\b"]
 content_patterns = [
     "relev[ée] (?:de compte|électronique)", "\\biban\\b", "\\bbic\\b",

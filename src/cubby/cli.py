@@ -36,6 +36,10 @@ def _build_overrides(args: argparse.Namespace) -> dict:
         settings["interval"] = args.interval
     if getattr(args, "no_content", False):
         settings["content_scan"] = False
+    if getattr(args, "month_style", None):
+        settings["month_style"] = args.month_style
+    if getattr(args, "month_lang", None):
+        settings["month_lang"] = args.month_lang
     return {"settings": settings} if settings else {}
 
 
@@ -124,6 +128,10 @@ def _program_args(args: argparse.Namespace) -> list[str]:
         base += ["--delay", str(args.delay)]
     if getattr(args, "interval", None) is not None:
         base += ["--interval", str(args.interval)]
+    if getattr(args, "month_style", None):
+        base += ["--month-style", str(args.month_style)]
+    if getattr(args, "month_lang", None):
+        base += ["--month-lang", str(args.month_lang)]
     return base
 
 
@@ -207,6 +215,16 @@ def _add_common_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--delay", help="min age before moving a file, e.g. 1m, 30s")
     parser.add_argument("--interval", help="watch poll interval, e.g. 30s")
     parser.add_argument("--no-content", action="store_true", help="disable content scanning")
+    parser.add_argument(
+        "--month-style",
+        choices=("numeric", "letters"),
+        help="invoice folder style: numeric (2026-07) or letters (juillet 2026)",
+    )
+    parser.add_argument(
+        "--month-lang",
+        choices=("fr", "en"),
+        help="language for the letters style: fr (juillet) or en (July)",
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="echo actions")
 
 

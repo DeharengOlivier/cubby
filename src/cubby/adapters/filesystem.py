@@ -101,18 +101,23 @@ def files_identical(a: Path, b: Path) -> bool:
     return _digest(a) == _digest(b)
 
 
-def move_into(path: Path, category_dir: Path, *, dedupe: bool = False) -> Path:
+def move_into(
+    path: Path, category_dir: Path, *, dedupe: bool = False, rename_to: str | None = None
+) -> Path:
     """Move ``path`` into ``category_dir``, never overwriting. Returns the dest.
 
-    With ``dedupe`` and a byte-identical file already present under the same
-    name, the redundant ``path`` is removed instead of being kept as a `` (1)``
-    copy, and the existing file's path is returned.
+    ``rename_to`` sets the destination filename (e.g. a cleaned invoice name);
+    it defaults to the source's own name. With ``dedupe`` and a byte-identical
+    file already present under the same name, the redundant ``path`` is removed
+    instead of being kept as a `` (1)`` copy, and the existing file's path is
+    returned.
     """
     category_dir.mkdir(parents=True, exist_ok=True)
-    same_name = category_dir / path.name
+    target_name = rename_to or path.name
+    same_name = category_dir / target_name
     if dedupe and same_name.exists() and files_identical(path, same_name):
         path.unlink()
         return same_name
-    destination = unique_destination(category_dir, path.name)
+    destination = unique_destination(category_dir, target_name)
     shutil.move(str(path), str(destination))
     return destination

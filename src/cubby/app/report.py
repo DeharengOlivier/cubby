@@ -18,16 +18,28 @@ class SortOutcome:
     category: str
     stage: Stage
     moved_to: Path | None = None  # set when actually moved
+    subdir: str = ""  # month/year subfolder inside the category, when any
+    renamed_to: str | None = None  # new filename when the entry is renamed
 
     @property
     def name(self) -> str:
         return self.source.name
 
+    @property
+    def dest(self) -> str:
+        """The destination folder, category plus month subfolder when present."""
+        return f"{self.category}/{self.subdir}" if self.subdir else self.category
+
+    @property
+    def display_name(self) -> str:
+        """The name the entry ends up with (renamed when applicable)."""
+        return self.renamed_to or self.name
+
 
 def group_by_category(outcomes: list[SortOutcome]) -> dict[str, list[SortOutcome]]:
     grouped: dict[str, list[SortOutcome]] = {}
     for outcome in outcomes:
-        grouped.setdefault(outcome.category, []).append(outcome)
+        grouped.setdefault(outcome.dest, []).append(outcome)
     return grouped
 
 
@@ -50,9 +62,11 @@ def render_plan(
         items = grouped[category]
         header = p.bold(p.accent(f"{category}/")) + p.dim(f"  ({len(items)})")
         lines.append(f"\n{header}")
-        for outcome in sorted(items, key=lambda o: o.name.lower()):
+        for outcome in sorted(items, key=lambda o: o.display_name.lower()):
             tag = "" if outcome.stage is Stage.NAME else p.dim(f"   <- {outcome.stage.value}")
-            lines.append(f"    {outcome.name}{tag}")
+            if outcome.renamed_to:
+                tag += p.dim(f"   (was {outcome.name})")
+            lines.append(f"    {outcome.display_name}{tag}")
 
     verb = "Moved" if applied else "Would move"
     summary = f"{verb} {len(outcomes)} item(s)."
@@ -70,6 +84,8 @@ def render_json(outcomes: list[SortOutcome], *, applied: bool) -> str:
                 "name": o.name,
                 "source": str(o.source),
                 "category": o.category,
+                "subdir": o.subdir or None,
+                "renamed_to": o.renamed_to,
                 "stage": o.stage.value,
                 "moved_to": str(o.moved_to) if o.moved_to else None,
             }

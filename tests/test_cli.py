@@ -16,7 +16,8 @@ def test_run_moves_files(tmp_path, capsys):
     (tmp_path / "Invoice-1.pdf").write_text("x")
     rc = main(["run", "--source", str(tmp_path), "--delay", "0", "--no-content"])
     assert rc == 0
-    assert (tmp_path / "Invoices" / "Invoice-1.pdf").exists()
+    # Invoices are filed into a month/year subfolder under Invoices/.
+    assert list((tmp_path / "Invoices").rglob("Invoice-1.pdf"))
 
 
 def test_doctor_runs(capsys):
@@ -33,7 +34,7 @@ def test_run_then_undo_via_cli(tmp_path, capsys, monkeypatch):
     (tmp_path / "Invoice-1.pdf").write_text("x")
 
     main(["run", "--source", str(tmp_path), "--delay", "0", "--no-content"])
-    assert (tmp_path / "Invoices" / "Invoice-1.pdf").exists()
+    assert list((tmp_path / "Invoices").rglob("Invoice-1.pdf"))
 
     rc = main(["undo"])
     out = capsys.readouterr().out
