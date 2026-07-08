@@ -26,6 +26,10 @@ vendors = [
     "aws", "openai", "anthropic", "github", "gitlab", "notion", "figma", "canva",
     "adobe", "vercel", "stripe", "linkedin", "ovh", "gandi", "scaleway", "hetzner",
     "orange", "sfr", "free", "bouygues", "proton", "dropbox", "slack", "zoom",
+    # AI / dev SaaS and providers seen in real invoices.
+    "openrouter", "resend", "railway", "suno", "spline", "tripo", "lovable",
+    "replicate", "elevenlabs", "heygen", "cursor", "perplexity", "mistral",
+    "credal", "easyjet", "heytelecom",
 ]
 
 # --- Finance and administration -------------------------------------------
