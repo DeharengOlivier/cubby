@@ -13,6 +13,7 @@ Resolution order, later winning:
 from __future__ import annotations
 
 import os
+import re
 import tomllib
 from importlib.resources import files
 from pathlib import Path
@@ -77,11 +78,38 @@ def _build_settings(raw: dict) -> Settings:
     )
 
 
+def _check_patterns(name: str, field: str, patterns: tuple[str, ...]) -> tuple[str, ...]:
+    """Return ``patterns`` after checking each one compiles.
+
+    Compiling here rather than when the engine is built turns a config typo into
+    a message naming the category, instead of a raw re.error mid-run.
+
+    Raises:
+        ValueError: A pattern is not a valid regular expression.
+    """
+    for pattern in patterns:
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            raise ValueError(
+                f"category {name!r} has an invalid {field} entry {pattern!r}: {exc}"
+            ) from exc
+    return patterns
+
+
 def _build_category(raw: dict) -> Category:
+    try:
+        name = raw["name"]
+    except KeyError:
+        raise ValueError(f"a [[category]] entry has no name: {raw!r}") from None
     return Category(
-        name=raw["name"],
-        name_patterns=tuple(raw.get("name_patterns", ())),
-        content_patterns=tuple(raw.get("content_patterns", ())),
+        name=name,
+        name_patterns=_check_patterns(
+            name, "name_patterns", tuple(raw.get("name_patterns", ()))
+        ),
+        content_patterns=_check_patterns(
+            name, "content_patterns", tuple(raw.get("content_patterns", ()))
+        ),
         extensions=frozenset(e.lower().lstrip(".") for e in raw.get("extensions", ())),
         strong_ext=bool(raw.get("strong_ext", False)),
         date_folders=bool(raw.get("date_folders", False)),

@@ -11,6 +11,10 @@ from pathlib import Path
 
 from .naming import safe_component
 
+#: Month folder styles and the languages the "letters" style can be written in.
+MONTH_STYLES = ("numeric", "letters")
+MONTH_LANGS = ("fr", "en")
+
 
 @dataclass(frozen=True)
 class Category:
@@ -58,14 +62,51 @@ class Settings:
     vendors: tuple[str, ...] = ()  # known vendor names, matched first when renaming invoices
 
     def __post_init__(self) -> None:
-        """Validate the settings that become folder names.
+        """Validate every setting, wherever it came from.
 
         Raises:
-            ValueError: ``unsorted_dir`` is not a single safe folder component.
+            ValueError: A setting is outside the range or set of values cubby
+                can act on. The message names the setting.
         """
         object.__setattr__(
             self, "unsorted_dir", safe_component(self.unsorted_dir, field="unsorted_dir")
         )
+
+        if self.delay < 0:
+            raise ValueError(
+                f"delay must not be negative, got {self.delay}. A negative delay "
+                "makes a download that is still being written eligible to move."
+            )
+        if self.interval <= 0:
+            raise ValueError(
+                f"interval must be strictly positive, got {self.interval}. "
+                "Watch mode sleeps for interval between passes; zero spins."
+            )
+        if self.content_max_bytes <= 0:
+            raise ValueError(
+                f"content_max_bytes must be strictly positive, got "
+                f"{self.content_max_bytes}. Zero or less would read whole files "
+                "into memory rather than the window cubby needs."
+            )
+        if self.month_style not in MONTH_STYLES:
+            raise ValueError(
+                f"month_style must be one of: {', '.join(MONTH_STYLES)}. "
+                f"Got {self.month_style!r}."
+            )
+        if self.month_lang not in MONTH_LANGS:
+            raise ValueError(
+                f"month_lang must be one of: {', '.join(MONTH_LANGS)}. "
+                f"Got {self.month_lang!r}."
+            )
+
+        source = Path(self.source)
+        if source == Path(source.anchor) or source == Path.home():
+            raise ValueError(
+                f"source must be a folder to tidy, not {source}. cubby creates "
+                "category folders inside it and moves what it finds there, which "
+                "is not something to do to a whole home directory or a filesystem "
+                "root."
+            )
 
 
 @dataclass(frozen=True)
