@@ -1,4 +1,9 @@
-"""A tiny append-only file logger. Never raises; logging must not break a sort."""
+"""A tiny append-only file logger. Never raises; logging must not break a sort.
+
+Lines carry a level because the file is read after something has gone wrong,
+and the one line that matters ("your files moved and the undo journal could not
+be written") must be findable among the hundreds saying a file was filed.
+"""
 
 from __future__ import annotations
 
@@ -17,9 +22,9 @@ def file_logger(path: Path | None = None, *, echo: bool = False) -> Callable[[st
     """
     destination = path or DEFAULT_LOG
 
-    def log(message: str) -> None:
+    def log(message: str, *, level: str = "INFO") -> None:
         stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        line = f"{stamp}  {message}"
+        line = f"{stamp}  {level:<7} {message}"
         if echo:
             print(line)
         try:

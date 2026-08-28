@@ -97,7 +97,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     def warn(message: str) -> None:
         """Reach the user whatever the verbosity: this is not routine output."""
-        log(message)
+        log(message, level="WARNING")
         print(f"cubby: warning: {message}", file=sys.stderr)
 
     outcomes = Sorter(config, log=log, warn=warn, journal=Journal()).sort_once(apply=True)

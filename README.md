@@ -140,8 +140,26 @@ Run `cubby doctor` to see what is active.
 Reading is bounded, because cubby runs unattended. A file over 20 MB is not
 opened at all (its name and type still route it), each backend reads a window
 rather than the whole file, and every external converter runs with a timeout.
-Measured: planning a folder of 20 000 files takes 0.31 s and 28 MB, and asking
-for 4 KB of text out of a 315 MB page costs neither time nor memory.
+Asking for 4 KB of text out of a 315 MB page costs neither time nor memory.
+
+Sorting itself is linear in the number of files, and cheap:
+
+| Files | Plan | Apply | Memory |
+| --- | --- | --- | --- |
+| 1 000 | 0.02 s | 0.16 s | ~5 MB |
+| 5 000 | 0.07 s | 0.80 s | ~23 MB |
+| 20 000 | 0.33 s | 3.62 s | ~78 MB |
+
+Measured, not estimated, and re-runnable on your own hardware:
+
+```bash
+python benchmarks/bench_sort.py
+python benchmarks/bench_sort.py 500 5000
+```
+
+Apply is dominated by the moves themselves. The ceiling of this design is that
+one pass holds the whole folder listing and its outcomes in memory, which is a
+few tens of megabytes at twenty thousand files.
 
 ## Configure
 
