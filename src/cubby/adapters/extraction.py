@@ -4,6 +4,13 @@ Each backend is optional and degrades gracefully: when neither a system tool
 nor a Python library can read a format, extraction returns ``""`` and the engine
 simply falls back to filename / type rules. Nothing here raises to the caller,
 so a corrupt or password-protected file never breaks a sort run.
+
+Reading is bounded, twice. A file larger than :data:`MAX_SOURCE_BYTES` is not
+opened at all: cubby only needs a few thousand characters to decide where a file
+belongs, and a document worth classifying is never that large. Below that
+ceiling, each backend reads a window rather than the whole file. Both matter
+because cubby runs unattended: extracting 4000 bytes from a 315 MB page used to
+cost 896 MB of memory and fifteen seconds.
 """
 
 from __future__ import annotations
@@ -35,6 +42,28 @@ PARSABLE: frozenset[str] = frozenset(
 _TAG_RE = re.compile(r"<[^>]+>")
 _TIMEOUT = 15
 
+#: Files larger than this are not read at all. Well past any invoice, contract
+#: or statement; small enough that reading one cannot exhaust memory.
+MAX_SOURCE_BYTES = 20_000_000
+
+#: How much raw input may be read to yield ``max_bytes`` of text. Markup and
+#: encoding overhead mean the raw window has to be larger than the answer.
+_RAW_WINDOW_FACTOR = 64
+_MAX_RAW_WINDOW = 4_000_000
+
+
+def _raw_window(max_bytes: int) -> int:
+    """Bytes of raw input worth reading to produce ``max_bytes`` of text."""
+    return min(max(max_bytes, 1) * _RAW_WINDOW_FACTOR, _MAX_RAW_WINDOW)
+
+
+def _is_too_large(path: Path) -> bool:
+    """True if the file is past the ceiling, or cannot be measured."""
+    try:
+        return path.stat().st_size > MAX_SOURCE_BYTES
+    except OSError:
+        return True
+
 
 def _run(cmd: list[str]) -> str:
     try:
@@ -59,11 +88,18 @@ def _from_pdf(path: Path) -> str:
         return ""
 
 
-def _from_docx(path: Path) -> str:
+def _from_docx(path: Path, max_bytes: int) -> str:
     try:
         import docx
 
-        return "\n".join(p.text for p in docx.Document(str(path)).paragraphs)
+        collected: list[str] = []
+        length = 0
+        for paragraph in docx.Document(str(path)).paragraphs:
+            collected.append(paragraph.text)
+            length += len(paragraph.text) + 1
+            if length >= max_bytes:  # enough to classify; stop walking the document
+                break
+        return "\n".join(collected)
     except Exception:
         pass
     if shutil.which("textutil"):  # macOS native
@@ -80,13 +116,14 @@ def _from_legacy_office(path: Path) -> str:
     return ""
 
 
-def _from_html(path: Path) -> str:
+def _from_html(path: Path, max_bytes: int) -> str:
     if shutil.which("textutil"):
         text = _run(["textutil", "-convert", "txt", "-stdout", str(path)])
         if text.strip():
             return text
     try:
-        raw = path.read_text("utf-8", "ignore")
+        with path.open("r", encoding="utf-8", errors="ignore") as handle:
+            raw = handle.read(_raw_window(max_bytes))
         return html.unescape(_TAG_RE.sub(" ", raw))
     except Exception:
         return ""
@@ -115,18 +152,24 @@ def _from_xlsx(path: Path) -> str:
 
 
 def extract_text(path: Path, ext: str, max_bytes: int = 4000) -> str:
-    """Return up to ``max_bytes`` of extracted text, or ``""`` if unsupported."""
-    if not path.is_file():
+    """Return up to ``max_bytes`` of extracted text, or ``""``.
+
+    Returns the empty string when the format is unsupported, the file cannot be
+    read, or it is larger than :data:`MAX_SOURCE_BYTES`. The engine then falls
+    back to its filename and file-type stages, which is the designed behaviour
+    for anything the content stage cannot speak for.
+    """
+    if not path.is_file() or _is_too_large(path):
         return ""
     ext = ext.lower()
     if ext == "pdf":
         text = _from_pdf(path)
     elif ext == "docx":
-        text = _from_docx(path)
+        text = _from_docx(path, max_bytes)
     elif ext in {"doc", "rtf"}:
         text = _from_legacy_office(path)
     elif ext in {"html", "htm"}:
-        text = _from_html(path)
+        text = _from_html(path, max_bytes)
     elif ext in {"txt", "md", "csv", "tsv", "log"}:
         text = _from_text(path, max_bytes)
     elif ext == "xlsx":
