@@ -81,6 +81,8 @@ skips = ["B404", "B603", "B607"]
 [tool.mypy]
 python_version = "3.11"
 packages = ["cubby"]
+strict = true
+# The optional extraction backends (pypdf, docx, openpyxl) ship no stubs and are
+# not installed in the default environment; they are imported lazily inside a
+# try block and their absence is a supported state, not a typing question.
 ignore_missing_imports = true
-warn_unused_ignores = true
-warn_redundant_casts = true

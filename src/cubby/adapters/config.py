@@ -17,6 +17,7 @@ import re
 import tomllib
 from importlib.resources import files
 from pathlib import Path
+from typing import Any
 
 from ..domain.category import Category, Config, Settings
 from ..domain.duration import parse_duration
@@ -45,12 +46,12 @@ def find_user_config() -> Path | None:
     return None
 
 
-def _load_toml(path: Path) -> dict:
+def _load_toml(path: Path) -> dict[str, Any]:
     with path.open("rb") as handle:
         return tomllib.load(handle)
 
 
-def _deep_merge(base: dict, override: dict) -> dict:
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     merged = dict(base)
     for key, value in override.items():
         if isinstance(value, dict) and isinstance(merged.get(key), dict):
@@ -60,7 +61,7 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return merged
 
 
-def _build_settings(raw: dict) -> Settings:
+def _build_settings(raw: dict[str, Any]) -> Settings:
     defaults = Settings()
     skip = raw.get("skip_ext")
     return Settings(
@@ -97,7 +98,7 @@ def _check_patterns(name: str, field: str, patterns: tuple[str, ...]) -> tuple[s
     return patterns
 
 
-def _build_category(raw: dict) -> Category:
+def _build_category(raw: dict[str, Any]) -> Category:
     try:
         name = raw["name"]
     except KeyError:
@@ -119,7 +120,7 @@ def _build_category(raw: dict) -> Category:
 
 def load_config(
     user_path: Path | None = None,
-    overrides: dict | None = None,
+    overrides: dict[str, Any] | None = None,
     default_path: Path | None = None,
 ) -> Config:
     data = _load_toml(default_path or default_config_path())

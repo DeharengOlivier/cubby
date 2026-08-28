@@ -7,6 +7,7 @@ import shutil
 import sys
 import tomllib
 from pathlib import Path
+from typing import Any
 
 from . import __version__
 from .adapters.config import find_user_config, load_config
@@ -32,8 +33,8 @@ def _palette() -> Palette:
     return Palette(supports_color(sys.stdout))
 
 
-def _build_overrides(args: argparse.Namespace) -> dict:
-    settings: dict = {}
+def _build_overrides(args: argparse.Namespace) -> dict[str, Any]:
+    settings: dict[str, Any] = {}
     if getattr(args, "source", None):
         settings["source"] = args.source
     if getattr(args, "delay", None) is not None:
