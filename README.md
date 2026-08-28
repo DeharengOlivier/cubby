@@ -137,6 +137,12 @@ The content stage uses whatever is available and degrades gracefully:
 Install the optional extractors with `pip install 'cubby-sort[extract]'`.
 Run `cubby doctor` to see what is active.
 
+Reading is bounded, because cubby runs unattended. A file over 20 MB is not
+opened at all (its name and type still route it), each backend reads a window
+rather than the whole file, and every external converter runs with a timeout.
+Measured: planning a folder of 20 000 files takes 0.31 s and 28 MB, and asking
+for 4 KB of text out of a 315 MB page costs neither time nor memory.
+
 ## Configure
 
 Cubby ships generic categories. To customise, copy
