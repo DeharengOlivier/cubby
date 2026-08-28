@@ -38,11 +38,15 @@ class Sorter:
         engine: Engine | None = None,
         *,
         log: Logger = _noop,
+        warn: Logger | None = None,
         journal: Journal | None = None,
     ):
         self._config = config
         self._engine = engine or Engine(config)
         self._log = log
+        # Warnings default to the log, but a caller that can reach the user
+        # (the CLI) passes something louder: a lost undo journal must be seen.
+        self._warn = warn or log
         self._journal = journal
         self._by_name: dict[str, Category] = {c.name: c for c in config.categories}
 
@@ -109,5 +113,5 @@ class Sorter:
             )
 
         if self._journal is not None:
-            self._journal.record_run(moves)
+            self._journal.record_run(moves, warn=self._warn)
         return outcomes

@@ -80,7 +80,13 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"cubby: {error}", file=sys.stderr)
         return 1
     log = file_logger(echo=args.verbose)
-    outcomes = Sorter(config, log=log, journal=Journal()).sort_once(apply=True)
+
+    def warn(message: str) -> None:
+        """Reach the user whatever the verbosity: this is not routine output."""
+        log(message)
+        print(f"cubby: warning: {message}", file=sys.stderr)
+
+    outcomes = Sorter(config, log=log, warn=warn, journal=Journal()).sort_once(apply=True)
     pal = _palette()
     if pal.enabled:
         print(banner(pal))
