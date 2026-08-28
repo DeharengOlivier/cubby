@@ -25,7 +25,15 @@ dependencies = []
 [project.optional-dependencies]
 # Richer content extraction when system tools (pdftotext, textutil) are absent.
 extract = ["pypdf>=4", "python-docx>=1", "openpyxl>=3"]
-dev = ["pytest>=8", "ruff>=0.5", "mypy>=1.10", "pre-commit>=3"]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=5",
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "pre-commit>=3",
+    "bandit>=1.7",
+    "pip-audit>=2",
+]
 
 [project.scripts]
 cubby = "cubby.cli:main"
@@ -48,6 +56,27 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# A warning nobody reads is a warning hiding a real one.
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+source = ["src/cubby"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
+
+[tool.bandit]
+# Skipped with reasons, not because they are inconvenient:
+#   B404 importing subprocess is not itself a finding;
+#   B603 every call passes a list and never shell=True, which is the safe form
+#        this check exists to steer you towards;
+#   B607 the commands run the absolute path returned by shutil.which, which
+#        bandit cannot see through a variable. That property is pinned by
+#        test_the_resolved_absolute_path_is_executed_not_a_bare_name, which is
+#        a stronger guarantee than the static check it replaces.
+skips = ["B404", "B603", "B607"]
 
 [tool.mypy]
 python_version = "3.11"

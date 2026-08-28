@@ -66,6 +66,12 @@ def _is_too_large(path: Path) -> bool:
 
 
 def _run(cmd: list[str]) -> str:
+    """Run ``cmd`` and return its stdout, or "" if anything goes wrong.
+
+    The command is a list, never a shell string, and its first element is an
+    absolute path resolved by :func:`_tool`, so neither the file name nor PATH
+    can decide what gets executed.
+    """
     try:
         result = subprocess.run(cmd, capture_output=True, timeout=_TIMEOUT)
         return result.stdout.decode("utf-8", "ignore")
@@ -73,9 +79,19 @@ def _run(cmd: list[str]) -> str:
         return ""
 
 
+def _tool(name: str) -> str | None:
+    """The absolute path of ``name`` on PATH, or None.
+
+    Callers run the resolved path rather than the bare name: cubby runs
+    unattended, and a name leaves the choice of binary to whatever PATH holds at
+    the moment the agent happens to fire.
+    """
+    return shutil.which(name)
+
+
 def _from_pdf(path: Path) -> str:
-    if shutil.which("pdftotext"):  # poppler, common on macOS and Linux
-        text = _run(["pdftotext", "-l", "2", "-q", str(path), "-"])
+    if pdftotext := _tool("pdftotext"):  # poppler, common on macOS and Linux
+        text = _run([pdftotext, "-l", "2", "-q", str(path), "-"])
         if text.strip():
             return text
     try:
@@ -101,24 +117,26 @@ def _from_docx(path: Path, max_bytes: int) -> str:
                 break
         return "\n".join(collected)
     except Exception:
-        pass
-    if shutil.which("textutil"):  # macOS native
-        return _run(["textutil", "-convert", "txt", "-stdout", str(path)])
-    return ""
+        # python-docx missing or the document unreadable by it: fall through to
+        # the system converter, which is the whole point of a cascade.
+        text = ""
+    if textutil := _tool("textutil"):  # macOS native
+        return _run([textutil, "-convert", "txt", "-stdout", str(path)])
+    return text
 
 
 def _from_legacy_office(path: Path) -> str:
-    if shutil.which("textutil"):  # macOS reads .doc/.rtf natively
-        return _run(["textutil", "-convert", "txt", "-stdout", str(path)])
-    for tool in ("antiword", "catdoc"):  # common on Linux
-        if shutil.which(tool):
+    if textutil := _tool("textutil"):  # macOS reads .doc/.rtf natively
+        return _run([textutil, "-convert", "txt", "-stdout", str(path)])
+    for name in ("antiword", "catdoc"):  # common on Linux
+        if tool := _tool(name):
             return _run([tool, str(path)])
     return ""
 
 
 def _from_html(path: Path, max_bytes: int) -> str:
-    if shutil.which("textutil"):
-        text = _run(["textutil", "-convert", "txt", "-stdout", str(path)])
+    if textutil := _tool("textutil"):
+        text = _run([textutil, "-convert", "txt", "-stdout", str(path)])
         if text.strip():
             return text
     try:

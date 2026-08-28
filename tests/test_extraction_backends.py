@@ -64,7 +64,8 @@ def test_a_system_tool_is_used_when_present(name, ext, tool, tmp_path, tools_ava
     text = extract_text(_file(tmp_path, name), ext)
 
     assert tool in text
-    assert tools_available[0][0] == tool
+    # The resolved absolute path is what runs, not the bare name.
+    assert tools_available[0][0] == f"/usr/bin/{tool}"
 
 
 def test_every_external_command_is_given_a_timeout(monkeypatch, tmp_path):
@@ -194,7 +195,7 @@ def test_legacy_office_tries_each_tool_in_turn(monkeypatch, tmp_path):
     monkeypatch.setattr(extraction.subprocess, "run", fake_run)
 
     assert "catdoc" in extract_text(_file(tmp_path, "old.doc"), "doc")
-    assert commands[0][0] == "catdoc"
+    assert commands[0][0] == "/usr/bin/catdoc"
 
 
 def test_html_falls_back_to_stripping_tags_itself(tmp_path, no_system_tools):
@@ -205,3 +206,30 @@ def test_html_falls_back_to_stripping_tags_itself(tmp_path, no_system_tools):
 
     assert "Bonjour & facture" in text
     assert "<p>" not in text
+
+
+# --- the tool that runs is the one that was found ---------------------------
+
+
+def test_the_resolved_absolute_path_is_executed_not_a_bare_name(monkeypatch, tmp_path):
+    # cubby runs unattended as a launchd agent. Invoking "pdftotext" by name
+    # leaves the choice of binary to whatever PATH happens to hold at the time;
+    # the path shutil.which already resolved is the one to run.
+    monkeypatch.setattr(extraction.shutil, "which", lambda name: f"/opt/tools/{name}")
+    commands: list[list[str]] = []
+
+    def fake_run(cmd, capture_output=False, timeout=None):
+        commands.append(cmd)
+        return types.SimpleNamespace(stdout=b"text")
+
+    monkeypatch.setattr(extraction.subprocess, "run", fake_run)
+    extract_text(_file(tmp_path, "invoice.pdf"), "pdf")
+
+    assert commands[0][0] == "/opt/tools/pdftotext"
+
+
+def test_a_tool_that_vanishes_between_lookup_and_use_is_survivable(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(extraction.shutil, "which", lambda name: None)
+    assert extract_text(_file(tmp_path, "old.doc"), "doc") == ""
