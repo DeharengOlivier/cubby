@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
+import tomllib
 from pathlib import Path
 
 from . import __version__
@@ -20,6 +21,11 @@ from .app.undo import undo_last_run
 from .app.watcher import Watcher
 from .domain.category import Config
 from .domain.duration import format_duration
+
+#: Exit codes, named so callers and tests do not repeat the integers.
+EXIT_OK = 0
+EXIT_FAILED = 1
+EXIT_BAD_CONFIG = 2
 
 
 def _palette() -> Palette:
@@ -41,6 +47,13 @@ def _build_overrides(args: argparse.Namespace) -> dict:
     if getattr(args, "month_lang", None):
         settings["month_lang"] = args.month_lang
     return {"settings": settings} if settings else {}
+
+
+def _config_path(args: argparse.Namespace) -> Path | str:
+    """The config file in play, for an error message."""
+    if getattr(args, "config", None):
+        return Path(args.config).expanduser()
+    return find_user_config() or "the packaged defaults"
 
 
 def _load(args: argparse.Namespace) -> Config:
@@ -274,13 +287,39 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run one cubby command.
+
+    Args:
+        argv: Arguments to parse. Defaults to ``sys.argv[1:]``.
+
+    Returns:
+        :data:`EXIT_OK`, :data:`EXIT_FAILED` or :data:`EXIT_BAD_CONFIG`.
+    """
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.func is None:
         print(banner(_palette()))
         parser.print_help()
-        return 0
-    return args.func(args)
+        return EXIT_OK
+    try:
+        exit_code: int = args.func(args)
+    except tomllib.TOMLDecodeError as exc:
+        # Before ValueError: TOMLDecodeError is one, and the file it came from
+        # is the useful half of the message when three locations are possible.
+        print(
+            f"cubby: config error: {_config_path(args)} is not valid TOML: {exc}",
+            file=sys.stderr,
+        )
+        return EXIT_BAD_CONFIG
+    except ValueError as exc:
+        # A setting cubby cannot act on. The message names it; a traceback
+        # would not tell the user which line of their file to correct.
+        print(f"cubby: config error: {exc}", file=sys.stderr)
+        return EXIT_BAD_CONFIG
+    except OSError as exc:
+        print(f"cubby: {exc}", file=sys.stderr)
+        return EXIT_FAILED
+    return exit_code
 
 
 if __name__ == "__main__":
