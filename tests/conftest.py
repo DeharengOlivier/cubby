@@ -16,6 +16,22 @@ def _isolate_user_config(monkeypatch):
     monkeypatch.delenv("CUBBY_CONFIG", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_user_state(monkeypatch, tmp_path_factory):
+    """Redirect the undo journal and the log file away from the real machine.
+
+    Without this, running the suite appended test moves to the user's own
+    ~/.local/state/cubby/journal.jsonl, so a real `cubby undo` would replay a
+    test's temp directories instead of their last real sort.
+    """
+    state = tmp_path_factory.mktemp("cubby-state")
+    monkeypatch.setattr(
+        "cubby.adapters.journal.DEFAULT_JOURNAL", state / "journal.jsonl"
+    )
+    monkeypatch.setattr("cubby.adapters.logging.DEFAULT_LOG", state / "cubby.log")
+    monkeypatch.setattr("cubby.cli.DEFAULT_LOG", state / "cubby.log")
+
+
 @pytest.fixture
 def sample_config() -> Config:
     categories = (
