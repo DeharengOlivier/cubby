@@ -90,6 +90,7 @@ class Sorter:
                 moved_to = move_into(
                     path,
                     destination_dir,
+                    root=settings.source,
                     dedupe=settings.dedupe,
                     rename_to=placement.new_name,
                 )

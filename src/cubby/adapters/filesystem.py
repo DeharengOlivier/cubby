@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ..domain.category import Settings
 from ..domain.file_ref import FileRef
+from ..domain.naming import safe_component
 from .extraction import extract_text
 
 
@@ -62,6 +63,26 @@ def is_eligible(path: Path, settings: Settings, now: float | None = None) -> boo
     return (now - mtime) >= settings.delay
 
 
+def resolve_inside(root: Path, destination: Path) -> Path:
+    """Return ``destination`` resolved, or raise if it escapes ``root``.
+
+    The last barrier before a write: every caller has already been checked, and
+    this is here for the one that has not been thought of yet. Both sides are
+    resolved so a symlinked root (``/tmp`` on macOS) compares correctly.
+
+    Raises:
+        ValueError: ``destination`` is not inside ``root``.
+    """
+    resolved_root = Path(root).resolve()
+    resolved = Path(destination).resolve()
+    if resolved != resolved_root and not resolved.is_relative_to(resolved_root):
+        raise ValueError(
+            f"refusing to write outside the watched folder: {destination} "
+            f"is not inside {root}."
+        )
+    return resolved
+
+
 def unique_destination(dest_dir: Path, name: str) -> Path:
     """Pick a non-clobbering path inside ``dest_dir`` for ``name``.
 
@@ -102,18 +123,30 @@ def files_identical(a: Path, b: Path) -> bool:
 
 
 def move_into(
-    path: Path, category_dir: Path, *, dedupe: bool = False, rename_to: str | None = None
+    path: Path,
+    category_dir: Path,
+    *,
+    root: Path,
+    dedupe: bool = False,
+    rename_to: str | None = None,
 ) -> Path:
     """Move ``path`` into ``category_dir``, never overwriting. Returns the dest.
 
-    ``rename_to`` sets the destination filename (e.g. a cleaned invoice name);
-    it defaults to the source's own name. With ``dedupe`` and a byte-identical
-    file already present under the same name, the redundant ``path`` is removed
-    instead of being kept as a `` (1)`` copy, and the existing file's path is
-    returned.
+    ``root`` is the folder cubby manages; the destination is refused if it falls
+    outside it, and nothing is moved or created in that case. ``rename_to`` sets
+    the destination filename (e.g. a cleaned invoice name) and must be a single
+    name, not a path; it defaults to the source's own name. With ``dedupe`` and a
+    byte-identical file already present under the same name, the redundant
+    ``path`` is removed instead of being kept as a `` (1)`` copy, and the
+    existing file's path is returned.
+
+    Raises:
+        ValueError: The destination or the new name would escape ``root``.
     """
+    target_name = safe_component(rename_to, field="rename_to") if rename_to else path.name
+    # Check before creating anything: a refused move must leave no trace.
+    resolve_inside(root, category_dir)
     category_dir.mkdir(parents=True, exist_ok=True)
-    target_name = rename_to or path.name
     same_name = category_dir / target_name
     if dedupe and same_name.exists() and files_identical(path, same_name):
         path.unlink()

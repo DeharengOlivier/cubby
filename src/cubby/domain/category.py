@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .naming import safe_component
+
 
 @dataclass(frozen=True)
 class Category:
@@ -28,6 +30,14 @@ class Category:
     date_folders: bool = False  # file into a month/year subfolder (invoices, statements)
     vendor_rename: bool = False  # also rename to "<vendor> facture <date>" (invoices)
 
+    def __post_init__(self) -> None:
+        """Validate the name, which becomes a folder inside the watched tree.
+
+        Raises:
+            ValueError: The name is not a single safe folder component.
+        """
+        object.__setattr__(self, "name", safe_component(self.name, field="category name"))
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -46,6 +56,16 @@ class Settings:
     month_style: str = "numeric"  # month/year folder style: "numeric" (2026-07) or "letters"
     month_lang: str = "fr"  # language for the letters style: "fr" (juillet) or "en" (July)
     vendors: tuple[str, ...] = ()  # known vendor names, matched first when renaming invoices
+
+    def __post_init__(self) -> None:
+        """Validate the settings that become folder names.
+
+        Raises:
+            ValueError: ``unsorted_dir`` is not a single safe folder component.
+        """
+        object.__setattr__(
+            self, "unsorted_dir", safe_component(self.unsorted_dir, field="unsorted_dir")
+        )
 
 
 @dataclass(frozen=True)

@@ -18,7 +18,7 @@ def test_move_into_dedupe_drops_identical_duplicate(tmp_path):
     src = tmp_path / "note.txt"
     src.write_text("hello")
 
-    result = move_into(src, dest_dir, dedupe=True)
+    result = move_into(src, dest_dir, root=tmp_path, dedupe=True)
 
     assert result == dest_dir / "note.txt"
     assert not src.exists()  # the redundant copy was removed
@@ -32,7 +32,7 @@ def test_move_into_keeps_different_file_with_suffix(tmp_path):
     src = tmp_path / "note.txt"
     src.write_text("changed")
 
-    result = move_into(src, dest_dir, dedupe=True)
+    result = move_into(src, dest_dir, root=tmp_path, dedupe=True)
 
     assert result == dest_dir / "note (1).txt"
     assert (dest_dir / "note.txt").read_text() == "original"
