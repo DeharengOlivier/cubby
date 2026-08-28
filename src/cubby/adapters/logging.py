@@ -7,14 +7,25 @@ be written") must be findable among the hundreds saying a file was filed.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from typing import Protocol
 
 DEFAULT_LOG = Path.home() / "Library" / "Logs" / "cubby.log"
 
 
-def file_logger(path: Path | None = None, *, echo: bool = False) -> Callable[[str], None]:
+class LevelLogger(Protocol):
+    """A logger that can mark a line as more than routine.
+
+    The level has a default, so a LevelLogger also satisfies the plain
+    ``Callable[[str], None]`` that the use cases ask for: they log events, and
+    deciding what is worth shouting about is the caller's business.
+    """
+
+    def __call__(self, message: str, *, level: str = "INFO") -> None: ...
+
+
+def file_logger(path: Path | None = None, *, echo: bool = False) -> LevelLogger:
     """Return a logger appending to ``path`` (the default log when omitted).
 
     The default is read when the logger is built, not when this module is
