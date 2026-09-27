@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
+from .adapters import config as config_module
 from .adapters import state
 from .adapters.config import (
     default_user_config_path,
@@ -246,12 +247,19 @@ def cmd_explain(args: argparse.Namespace) -> int:
     return EXIT_FAILED if missing else EXIT_OK
 
 
+def _at_least_one(value: str) -> int:
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1, got {number}")
+    return number
+
+
 def cmd_history(args: argparse.Namespace) -> int:
     runs = recent_runs(Ledger(), Journal(), limit=args.limit)
     if getattr(args, "json", False):
         payload = {
             "version": 1,
-            "runs": [{**r.record.to_json(), "undone": r.undone} for r in runs],
+            "runs": [{**r.record.to_json(), "undone": r.undone, "undo": r.undo} for r in runs],
         }
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return EXIT_OK
@@ -264,7 +272,7 @@ def cmd_history(args: argparse.Namespace) -> int:
         counts = f"moved {record.moved}"
         if record.failed:
             counts += pal.yellow(f", {record.failed} failed")
-        flag = pal.dim("  undone") if summary.undone else ""
+        flag = "" if summary.undo == "undoable" else pal.dim(f"  {summary.undo}")
         print(f"{record.finished}  {pal.accent(record.run)}  {record.mode:<5}  {counts}{flag}")
     print(pal.dim("\nUndo one with: cubby undo --run <id>"))
     return EXIT_OK
@@ -272,10 +280,21 @@ def cmd_history(args: argparse.Namespace) -> int:
 
 def cmd_init(args: argparse.Namespace) -> int:
     target = Path(args.path).expanduser() if args.path else default_user_config_path()
+    in_use = config_module.find_user_config()
+    if in_use is not None and in_use != target and not args.force:
+        print(
+            f"cubby: cubby already reads {in_use}; a new file at {target} would change "
+            "which config is used. Edit that one, or use --force to write anyway.",
+            file=sys.stderr,
+        )
+        return EXIT_FAILED
     try:
         write_starter_config(target, force=args.force)
     except FileExistsError:
         print(f"cubby: {target} already exists; use --force to replace it", file=sys.stderr)
+        return EXIT_FAILED
+    except OSError as error:
+        print(f"cubby: could not write {target}: {error}", file=sys.stderr)
         return EXIT_FAILED
     print(f"Wrote a starter config to {target}")
     print("Preview what it does with: cubby plan")
@@ -532,7 +551,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_explain.set_defaults(func=cmd_explain)
 
     p_history = sub.add_parser("history", help="list recent runs, and which were undone")
-    p_history.add_argument("-n", "--limit", type=int, default=20, help="how many runs (20)")
+    p_history.add_argument(
+        "-n", "--limit", type=_at_least_one, default=20, help="how many runs (20)"
+    )
     p_history.add_argument("--json", action="store_true", help="output as JSON")
     p_history.set_defaults(func=cmd_history)
 

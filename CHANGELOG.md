@@ -9,10 +9,12 @@ All notable changes to this project are documented here. The format is based on
 ### Added (features)
 - `cubby explain FILE...`: where each file would go, the rule that decides it,
   the rename, and why a run would leave it alone. Moves nothing. `--json`.
-- `cubby history`: recent runs with their counts and whether each was undone,
-  so `cubby undo --run ID` has something to point at. `--json`.
-- `cubby init`: writes a starter config that loads cleanly; never overwrites
-  without `--force`.
+- `cubby history`: recent runs with their counts and how much of each was
+  undone (undoable, partly undone, undone, unknown), so `cubby undo --run ID`
+  has something to point at. `--json`.
+- `cubby init`: writes a starter config that loads cleanly; never overwrites,
+  nor shadows a config cubby already reads, without `--force`, which replaces
+  the file atomically.
 - `ignore` setting: glob patterns (case-insensitive) of file names cubby never
   touches.
 - `cubby plan --json` items carry the deciding rule.
