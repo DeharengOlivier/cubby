@@ -122,7 +122,7 @@ def test_move_into_refuses_a_rename_that_escapes(rename_to, tmp_path):
     path = _aged_file(source)
     category = source / "Documents"
 
-    with pytest.raises(ValueError, match="outside|name"):
+    with pytest.raises(ValueError, match=r"outside|name"):
         move_into(path, category, root=source, rename_to=rename_to)
 
     assert path.exists()

@@ -35,14 +35,14 @@ class LaunchdService(Service):
             plistlib.dump(plist, handle)
 
         # Reload so a reinstall picks up changes; ignore "not loaded" on unload.
-        subprocess.run(["launchctl", "unload", str(path)], capture_output=True)
-        subprocess.run(["launchctl", "load", "-w", str(path)], capture_output=True)
+        subprocess.run(["launchctl", "unload", str(path)], capture_output=True, check=False)
+        subprocess.run(["launchctl", "load", "-w", str(path)], capture_output=True, check=False)
         return path
 
     def uninstall(self, label: str = "com.cubby.agent") -> bool:
         path = self.unit_path(label)
         if not path.exists():
             return False
-        subprocess.run(["launchctl", "unload", str(path)], capture_output=True)
+        subprocess.run(["launchctl", "unload", str(path)], capture_output=True, check=False)
         path.unlink()
         return True

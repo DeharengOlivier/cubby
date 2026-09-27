@@ -34,7 +34,7 @@ def tools_available(monkeypatch):
     monkeypatch.setattr(extraction.shutil, "which", lambda name: f"/usr/bin/{name}")
     commands: list[list[str]] = []
 
-    def fake_run(cmd, capture_output=False, timeout=None):
+    def fake_run(cmd, capture_output=False, timeout=None, check=False):
         commands.append(cmd)
         return types.SimpleNamespace(stdout=b"extracted by " + cmd[0].encode())
 
@@ -73,7 +73,7 @@ def test_every_external_command_is_given_a_timeout(monkeypatch, tmp_path):
     monkeypatch.setattr(extraction.shutil, "which", lambda name: f"/usr/bin/{name}")
     seen: dict = {}
 
-    def fake_run(cmd, capture_output=False, timeout=None):
+    def fake_run(cmd, capture_output=False, timeout=None, check=False):
         seen["timeout"] = timeout
         return types.SimpleNamespace(stdout=b"text")
 
@@ -97,9 +97,7 @@ def test_a_tool_that_times_out_yields_nothing(monkeypatch, tmp_path, no_system_t
 # --- the library fallbacks --------------------------------------------------
 
 
-def test_pdf_falls_back_to_pypdf_when_poppler_is_absent(
-    monkeypatch, tmp_path, no_system_tools
-):
+def test_pdf_falls_back_to_pypdf_when_poppler_is_absent(monkeypatch, tmp_path, no_system_tools):
     class _Page:
         def extract_text(self):
             return "facture pypdf"
@@ -115,9 +113,7 @@ def test_pdf_falls_back_to_pypdf_when_poppler_is_absent(
     assert text.count("facture pypdf") == 2
 
 
-def test_pdf_returns_nothing_when_the_parser_raises(
-    monkeypatch, tmp_path, no_system_tools
-):
+def test_pdf_returns_nothing_when_the_parser_raises(monkeypatch, tmp_path, no_system_tools):
     # A corrupt or password-protected PDF must never break a sort run.
     module = types.ModuleType("pypdf")
 
@@ -130,9 +126,7 @@ def test_pdf_returns_nothing_when_the_parser_raises(
     assert extract_text(_file(tmp_path, "invoice.pdf"), "pdf") == ""
 
 
-def test_docx_reads_paragraphs_and_stops_once_it_has_enough(
-    monkeypatch, tmp_path, no_system_tools
-):
+def test_docx_reads_paragraphs_and_stops_once_it_has_enough(monkeypatch, tmp_path, no_system_tools):
     paragraphs = [types.SimpleNamespace(text="facture " * 20) for _ in range(500)]
     module = types.ModuleType("docx")
     module.Document = lambda _: types.SimpleNamespace(paragraphs=paragraphs)
@@ -188,7 +182,7 @@ def test_legacy_office_tries_each_tool_in_turn(monkeypatch, tmp_path):
     )
     commands: list[list[str]] = []
 
-    def fake_run(cmd, capture_output=False, timeout=None):
+    def fake_run(cmd, capture_output=False, timeout=None, check=False):
         commands.append(cmd)
         return types.SimpleNamespace(stdout=b"read by catdoc")
 
@@ -218,7 +212,7 @@ def test_the_resolved_absolute_path_is_executed_not_a_bare_name(monkeypatch, tmp
     monkeypatch.setattr(extraction.shutil, "which", lambda name: f"/opt/tools/{name}")
     commands: list[list[str]] = []
 
-    def fake_run(cmd, capture_output=False, timeout=None):
+    def fake_run(cmd, capture_output=False, timeout=None, check=False):
         commands.append(cmd)
         return types.SimpleNamespace(stdout=b"text")
 
@@ -228,8 +222,6 @@ def test_the_resolved_absolute_path_is_executed_not_a_bare_name(monkeypatch, tmp
     assert commands[0][0] == "/opt/tools/pdftotext"
 
 
-def test_a_tool_that_vanishes_between_lookup_and_use_is_survivable(
-    monkeypatch, tmp_path
-):
+def test_a_tool_that_vanishes_between_lookup_and_use_is_survivable(monkeypatch, tmp_path):
     monkeypatch.setattr(extraction.shutil, "which", lambda name: None)
     assert extract_text(_file(tmp_path, "old.doc"), "doc") == ""

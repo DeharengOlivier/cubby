@@ -25,9 +25,7 @@ def _isolate_user_state(monkeypatch, tmp_path_factory):
     test's temp directories instead of their last real sort.
     """
     state = tmp_path_factory.mktemp("cubby-state")
-    monkeypatch.setattr(
-        "cubby.adapters.journal.DEFAULT_JOURNAL", state / "journal.jsonl"
-    )
+    monkeypatch.setattr("cubby.adapters.journal.DEFAULT_JOURNAL", state / "journal.jsonl")
     monkeypatch.setattr("cubby.adapters.logging.DEFAULT_LOG", state / "cubby.log")
     monkeypatch.setattr("cubby.cli.DEFAULT_LOG", state / "cubby.log")
 

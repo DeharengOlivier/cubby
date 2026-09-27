@@ -70,21 +70,29 @@ def test_install_bakes_the_requested_settings_into_the_agent(
     source = tmp_path / "downloads"
     source.mkdir()
 
-    assert main(
-        [
-            "install",
-            "--config", str(config_file),
-            "--source", str(source),
-            "--delay", "120",
-            "--interval", "45",
-        ]
-    ) == EXIT_OK
+    assert (
+        main(
+            [
+                "install",
+                "--config",
+                str(config_file),
+                "--source",
+                str(source),
+                "--delay",
+                "120",
+                "--interval",
+                "45",
+            ]
+        )
+        == EXIT_OK
+    )
 
     baked = fake_service.spec.program_args
     assert baked[-len(baked) + 1 :][0] == "watch" or "watch" in baked
     assert str(source.resolve()) in baked
     assert str(config_file.resolve()) in baked
-    assert "120" in baked and "45" in baked
+    assert "120" in baked
+    assert "45" in baked
 
 
 def test_install_without_flags_bakes_no_flags(tmp_path, fake_service):

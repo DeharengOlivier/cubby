@@ -22,7 +22,7 @@ def test_engine_is_total_over_random_names():
     config = load_config(user_path=None)
     engine = Engine(config)
     known = set(config.managed_dirs)
-    rng = random.Random(1234)
+    rng = random.Random(1234)  # noqa: S311 - a seeded generator makes failures reproducible
 
     for _ in range(5000):
         name = _random_name(rng)

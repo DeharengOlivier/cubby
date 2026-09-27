@@ -30,7 +30,7 @@ class SystemdService(Service):
 
     def _unit_name(self, label: str) -> str:
         # "com.cubby.agent" -> "cubby.service"; keep it tidy for systemctl.
-        stem = label.split(".")[-1] if "." in label else label
+        stem = label.rsplit(".", 1)[-1]
         return f"{'cubby' if stem == 'agent' else stem}.service"
 
     def unit_path(self, label: str) -> Path:
@@ -43,8 +43,10 @@ class SystemdService(Service):
         path.write_text(_UNIT_TEMPLATE.format(exec_start=exec_start))
 
         unit = self._unit_name(spec.label)
-        subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True)
-        subprocess.run(["systemctl", "--user", "enable", "--now", unit], capture_output=True)
+        subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, check=False)
+        subprocess.run(
+            ["systemctl", "--user", "enable", "--now", unit], capture_output=True, check=False
+        )
         return path
 
     def uninstall(self, label: str = "com.cubby.agent") -> bool:
@@ -52,7 +54,9 @@ class SystemdService(Service):
         if not path.exists():
             return False
         unit = self._unit_name(label)
-        subprocess.run(["systemctl", "--user", "disable", "--now", unit], capture_output=True)
+        subprocess.run(
+            ["systemctl", "--user", "disable", "--now", unit], capture_output=True, check=False
+        )
         path.unlink()
-        subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True)
+        subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, check=False)
         return True

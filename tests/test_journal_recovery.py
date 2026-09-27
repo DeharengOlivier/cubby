@@ -170,11 +170,11 @@ def test_the_journal_survives_a_crash_while_dropping_a_run(tmp_path, monkeypatch
     journal.record_run([_recorded_move(tmp_path, "one.txt")])
     journal.record_run([_recorded_move(tmp_path, "two.txt")])
 
-    def failing_replace(src, dst):
+    def failing_replace(self, target):
         raise OSError("disk full")
 
-    monkeypatch.setattr("cubby.adapters.journal.os.replace", failing_replace)
-    with pytest.raises(OSError):
+    monkeypatch.setattr("pathlib.Path.replace", failing_replace)
+    with pytest.raises(OSError, match="disk full"):
         journal.drop_last_run()
     monkeypatch.undo()
 

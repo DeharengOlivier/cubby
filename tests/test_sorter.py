@@ -3,7 +3,7 @@ from cubby.domain.category import Category, Config, Settings
 
 
 def _config(tmp_path, **settings):
-    base = dict(source=tmp_path, delay=0, content_scan=False)
+    base = {"source": tmp_path, "delay": 0, "content_scan": False}
     base.update(settings)
     categories = (
         Category(name="Invoices", name_patterns=("invoice",)),

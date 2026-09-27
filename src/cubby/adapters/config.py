@@ -65,7 +65,7 @@ def _build_settings(raw: dict[str, Any]) -> Settings:
     defaults = Settings()
     skip = raw.get("skip_ext")
     return Settings(
-        source=Path(os.path.expanduser(raw.get("source", str(defaults.source)))),
+        source=Path(raw.get("source", str(defaults.source))).expanduser(),
         delay=parse_duration(raw.get("delay", defaults.delay)),
         interval=parse_duration(raw.get("interval", defaults.interval)),
         content_scan=bool(raw.get("content_scan", defaults.content_scan)),
@@ -105,9 +105,7 @@ def _build_category(raw: dict[str, Any]) -> Category:
         raise ValueError(f"a [[category]] entry has no name: {raw!r}") from None
     return Category(
         name=name,
-        name_patterns=_check_patterns(
-            name, "name_patterns", tuple(raw.get("name_patterns", ()))
-        ),
+        name_patterns=_check_patterns(name, "name_patterns", tuple(raw.get("name_patterns", ()))),
         content_patterns=_check_patterns(
             name, "content_patterns", tuple(raw.get("content_patterns", ()))
         ),

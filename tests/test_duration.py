@@ -4,7 +4,7 @@ from cubby.domain.duration import format_duration, parse_duration
 
 
 @pytest.mark.parametrize(
-    "value,expected",
+    ("value", "expected"),
     [
         ("1m", 60.0),
         ("30s", 30.0),
@@ -32,7 +32,7 @@ def test_parse_duration_rejects_bool():
 
 
 @pytest.mark.parametrize(
-    "seconds,expected",
+    ("seconds", "expected"),
     [(60, "1m"), (30, "30s"), (7200, "2h"), (86400, "1d"), (90, "90s")],
 )
 def test_format_duration(seconds, expected):
