@@ -21,6 +21,7 @@ from typing import Any
 
 from ..domain.category import Category, Config, Settings
 from ..domain.duration import parse_duration
+from . import state
 
 
 def default_config_path() -> Path:
@@ -61,14 +62,22 @@ def write_starter_config(path: Path, *, force: bool = False) -> Path:
         FileExistsError: ``path`` exists and ``force`` is false.
         OSError: The file could not be written.
     """
+    text = _starter_text()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if force:
+        # Staged then swapped: a failed write keeps the old file, and a symlink
+        # at ``path`` is replaced rather than written through.
+        state.replace_text(path, text)
+        return path
+    with path.open("x", encoding="utf-8") as handle:
+        handle.write(text)
+    return path
+
+
+def _starter_text() -> str:
     body = default_config_path().read_text(encoding="utf-8")
     # Drop the packaged file's own header comment; the starter has its own.
-    body = body[body.index("[settings]") :]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    mode = "w" if force else "x"
-    with path.open(mode, encoding="utf-8") as handle:
-        handle.write(_STARTER_HEADER + "\n" + body)
-    return path
+    return _STARTER_HEADER + "\n" + body[body.index("[settings]") :]
 
 
 def find_user_config() -> Path | None:

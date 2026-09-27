@@ -41,7 +41,9 @@ def explain(path: Path, config: Config) -> Explanation:
     placement = Sorter(config, engine).placement_for(path, ref, decision.category)
 
     source = settings.source.resolve()
-    outside = path.resolve().parent != source
+    # The entry itself is not resolved: a run sorts a symlink sitting in the
+    # folder, wherever it points, so only the folder it sits in matters.
+    outside = path.absolute().parent.resolve() != source
     skipped = candidate_skip_reason(path, settings, config.managed_dirs) or not_yet_reason(
         path, settings
     )
