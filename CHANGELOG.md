@@ -6,6 +6,52 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed (audit 1, docs/audits/2026-09-28-audit-1.md)
+- Files sorted by the background agent can be undone. `cubby watch` never
+  wrote to the undo journal, so everything the agent moved was out of reach of
+  `cubby undo`.
+- A file that cannot be moved no longer stops the run: it is reported, left in
+  place, and the others are sorted. Each move is journaled as it happens, so a
+  run that fails or is killed part way can still be undone. `cubby run` exits 1
+  when a file could not be sorted.
+- Undoing a deduplicated file recreates the duplicate instead of moving the
+  copy that was already filed out of its folder.
+- A folder with a space, `%`, `$`, a quote or a newline in its name reaches
+  systemd as one argument.
+- `cubby install` checks what launchd or systemd answer, and that the agent is
+  running afterwards, instead of reporting success regardless. Every call to
+  the service manager has a timeout.
+- `cubby watch` and `cubby install` refuse a source folder that does not exist
+  instead of watching nothing forever.
+- `cubby status` asks the service manager whether the agent runs, instead of
+  reading "running" off the unit file's existence.
+- A move can no longer replace a file that appears at the destination at the
+  last moment.
+- The log goes to `~/.local/state/cubby/cubby.log` on Linux, not
+  `~/Library/Logs`.
+
+### Added
+- `cubby status` shows when the agent last completed a pass (and flags a stalled
+  one), what its last run moved or failed, and exits 1 when an installed agent is
+  unhealthy. `--json` for scripts.
+- A run ledger (`runs.jsonl`) and an agent heartbeat in the state folder.
+- `cubby undo --run ID` undoes a specific run. An entry that fails to restore
+  stays pending and is retried by the next `cubby undo`.
+- `CUBBY_STATE_DIR` redirects every file cubby keeps for itself.
+
+### Changed
+- The undo journal is append-only and one line per move (format version 2).
+  Journals written by 0.1 are still read and undone.
+- The log is JSON lines, rotated at 1 MB.
+- Only one cubby sorts or undoes at a time (an advisory lock per pass).
+- The watch loop survives a failing pass: it logs the error and runs the next
+  pass on schedule, and reports an unplugged source folder once.
+
+### Security
+- PDF, docx and xlsx parsing runs in a child process with a timeout and a memory
+  ceiling, so a hostile document cannot stall or exhaust the agent.
+- The journal, ledger, heartbeat and log are created with mode 0600.
+
 ### Security
 - Category names and `unsorted_dir` are validated as single folder components,
   and every move is checked against the watched root. A category named
