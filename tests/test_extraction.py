@@ -21,7 +21,8 @@ def test_extract_html_strips_tags(tmp_path):
     f = tmp_path / "page.html"
     f.write_text("<html><body><p>Hello &amp; bonjour</p></body></html>")
     text = extract_text(f, "html")
-    assert "Hello" in text and "bonjour" in text
+    assert "Hello" in text
+    assert "bonjour" in text
     assert "<p>" not in text
 
 
@@ -42,4 +43,5 @@ def test_extract_respects_max_bytes(tmp_path):
 
 
 def test_parsable_set_is_frozen():
-    assert "pdf" in PARSABLE and isinstance(PARSABLE, frozenset)
+    assert "pdf" in PARSABLE
+    assert isinstance(PARSABLE, frozenset)

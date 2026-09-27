@@ -90,13 +90,11 @@ class Settings:
             )
         if self.month_style not in MONTH_STYLES:
             raise ValueError(
-                f"month_style must be one of: {', '.join(MONTH_STYLES)}. "
-                f"Got {self.month_style!r}."
+                f"month_style must be one of: {', '.join(MONTH_STYLES)}. Got {self.month_style!r}."
             )
         if self.month_lang not in MONTH_LANGS:
             raise ValueError(
-                f"month_lang must be one of: {', '.join(MONTH_LANGS)}. "
-                f"Got {self.month_lang!r}."
+                f"month_lang must be one of: {', '.join(MONTH_LANGS)}. Got {self.month_lang!r}."
             )
 
         source = Path(self.source)

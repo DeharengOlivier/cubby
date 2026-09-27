@@ -73,9 +73,9 @@ def _run(cmd: list[str]) -> str:
     can decide what gets executed.
     """
     try:
-        result = subprocess.run(cmd, capture_output=True, timeout=_TIMEOUT)
+        result = subprocess.run(cmd, capture_output=True, timeout=_TIMEOUT, check=False)
         return result.stdout.decode("utf-8", "ignore")
-    except Exception:
+    except Exception:  # noqa: BLE001 - a converter failing in any way means "no text"
         return ""
 
 
@@ -95,18 +95,18 @@ def _from_pdf(path: Path) -> str:
         if text.strip():
             return text
     try:
-        from pypdf import PdfReader
+        from pypdf import PdfReader  # noqa: PLC0415 - optional backend
 
         reader = PdfReader(str(path))
         pages = reader.pages[:2]
         return "\n".join((page.extract_text() or "") for page in pages)
-    except Exception:
+    except Exception:  # noqa: BLE001 - a corrupt document yields no text, never a crash
         return ""
 
 
 def _from_docx(path: Path, max_bytes: int) -> str:
     try:
-        import docx
+        import docx  # noqa: PLC0415 - optional backend
 
         collected: list[str] = []
         length = 0
@@ -116,7 +116,7 @@ def _from_docx(path: Path, max_bytes: int) -> str:
             if length >= max_bytes:  # enough to classify; stop walking the document
                 break
         return "\n".join(collected)
-    except Exception:
+    except Exception:  # noqa: BLE001 - see below
         # python-docx missing or the document unreadable by it: fall through to
         # the system converter, which is the whole point of a cascade.
         text = ""
@@ -143,7 +143,7 @@ def _from_html(path: Path, max_bytes: int) -> str:
         with path.open("r", encoding="utf-8", errors="ignore") as handle:
             raw = handle.read(_raw_window(max_bytes))
         return html.unescape(_TAG_RE.sub(" ", raw))
-    except Exception:
+    except Exception:  # noqa: BLE001 - a corrupt document yields no text, never a crash
         return ""
 
 
@@ -151,13 +151,13 @@ def _from_text(path: Path, max_bytes: int) -> str:
     try:
         with path.open("r", encoding="utf-8", errors="ignore") as handle:
             return handle.read(max_bytes)
-    except Exception:
+    except Exception:  # noqa: BLE001 - a corrupt document yields no text, never a crash
         return ""
 
 
 def _from_xlsx(path: Path) -> str:
     try:
-        import openpyxl
+        import openpyxl  # noqa: PLC0415 - optional backend
 
         workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
         sheet = workbook.active
@@ -165,7 +165,7 @@ def _from_xlsx(path: Path) -> str:
         for row in sheet.iter_rows(max_row=20, values_only=True):
             cells += [str(c) for c in row if c is not None]
         return " ".join(cells)
-    except Exception:
+    except Exception:  # noqa: BLE001 - a corrupt document yields no text, never a crash
         return ""
 
 

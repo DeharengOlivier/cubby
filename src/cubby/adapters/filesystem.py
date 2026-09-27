@@ -77,8 +77,7 @@ def resolve_inside(root: Path, destination: Path) -> Path:
     resolved = Path(destination).resolve()
     if resolved != resolved_root and not resolved.is_relative_to(resolved_root):
         raise ValueError(
-            f"refusing to write outside the watched folder: {destination} "
-            f"is not inside {root}."
+            f"refusing to write outside the watched folder: {destination} is not inside {root}."
         )
     return resolved
 

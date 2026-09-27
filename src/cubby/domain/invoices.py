@@ -124,7 +124,7 @@ _MONTH_DAY = re.compile(
 )
 # Words that tend to precede the invoice date; a date near one is preferred.
 _LABEL = re.compile(
-    r"(date d['’]?[ée]mission|facture du|invoice date|date de facture|"
+    r"(date d['’]?[ée]mission|facture du|invoice date|date de facture|"  # noqa: RUF001 - typographic apostrophe used in French documents
     r"\bdated\b|\bissued\b|\b[ée]mis\b|\bdate\b)",
     re.IGNORECASE,
 )
@@ -143,6 +143,17 @@ def _month_num(word: str) -> int | None:
     return _MONTH_INDEX.get(word.lower()) or _MONTH_INDEX.get(_strip_accents(word.lower()))
 
 
+def _day_month(a: int, b: int) -> tuple[int, int]:
+    """Order the two numeric fields of a date as ``(day, month)``.
+
+    A field above 12 can only be a day. When both fit either role, France writes
+    the day first, so that is the reading kept.
+    """
+    if b > 12 and a <= 12:  # second field can only be a day (US M/D/Y)
+        return b, a
+    return a, b
+
+
 def _find_dates(text: str) -> list[tuple[int, date]]:
     """Every plausible date in ``text`` as ``(start_offset, date)`` pairs."""
     found: list[tuple[int, date]] = []
@@ -153,15 +164,9 @@ def _find_dates(text: str) -> list[tuple[int, date]]:
             found.append((m.start(), d))
 
     for m in _NUMERIC.finditer(text):
-        a, b = int(m[1]), int(m[2])
         year = int(m[3])
         year += 2000 if year < 100 else 0
-        if a > 12 and b <= 12:  # first field can only be a day
-            day, month = a, b
-        elif b > 12 and a <= 12:  # second field can only be a day (US M/D/Y)
-            day, month = b, a
-        else:  # ambiguous: France writes day first
-            day, month = a, b
+        day, month = _day_month(int(m[1]), int(m[2]))
         d = _valid(year, month, day)
         if d:
             found.append((m.start(), d))
@@ -308,7 +313,6 @@ class Placement:
 def plan_placement(
     *,
     name: str,
-    ext: str,
     text: str,
     fallback_date: date,
     vendor_rename: bool,
@@ -329,5 +333,6 @@ def plan_placement(
     if vendor_rename:
         vendor = detect_vendor(name, text, vendors)
         if vendor:
+            ext = name.rpartition(".")[2] if "." in name else ""
             new_name = invoice_filename(vendor, d, ext)
     return Placement(subdir=subdir, new_name=new_name)

@@ -59,7 +59,6 @@ class Sorter:
         text = ref.text() if settings.content_scan else ""
         return plan_placement(
             name=ref.name,
-            ext=ref.ext,
             text=text,
             fallback_date=_mtime_date(path),
             vendor_rename=rules.vendor_rename,

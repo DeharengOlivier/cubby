@@ -10,7 +10,9 @@ def test_palette_disabled_is_noop():
 def test_palette_enabled_wraps_with_ansi():
     p = Palette(True)
     out = p.bold("x")
-    assert out.startswith("\033[") and out.endswith("\033[0m") and "x" in out
+    assert out.startswith("\033[")
+    assert out.endswith("\033[0m")
+    assert "x" in out
 
 
 def test_banner_contains_name_and_version():

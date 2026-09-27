@@ -20,7 +20,7 @@ FALLBACK = date(2000, 1, 1)
 
 
 @pytest.mark.parametrize(
-    "text, expected",
+    ("text", "expected"),
     [
         ("Invoice date: 2026-07-07", date(2026, 7, 7)),
         ("Facture du 07/07/2026", date(2026, 7, 7)),
@@ -102,7 +102,6 @@ def test_invoice_filename():
 def test_plan_placement_renames_known_invoice():
     placement = plan_placement(
         name="3c0fe.pdf",
-        ext="pdf",
         text="Facture du 07/07/2026. Abonnement Spotify Premium.",
         fallback_date=FALLBACK,
         vendor_rename=True,
@@ -115,7 +114,6 @@ def test_plan_placement_renames_known_invoice():
 def test_plan_placement_keeps_name_when_vendor_unknown():
     placement = plan_placement(
         name="3c0fe1a2b3c4.pdf",  # cryptic stem, no vendor anywhere
-        ext="pdf",
         text="Facture du 07/07/2026",
         fallback_date=FALLBACK,
         vendor_rename=True,
@@ -128,7 +126,6 @@ def test_plan_placement_keeps_name_when_vendor_unknown():
 def test_plan_placement_no_rename_for_statements():
     placement = plan_placement(
         name="releve-2026.pdf",
-        ext="pdf",
         text="Relevé de compte 07/07/2026",
         fallback_date=FALLBACK,
         vendor_rename=False,
@@ -141,7 +138,6 @@ def test_plan_placement_no_rename_for_statements():
 def test_plan_placement_letters_style():
     placement = plan_placement(
         name="Facture_OVH.pdf",
-        ext="pdf",
         text="Facture du 7 juillet 2026",
         fallback_date=FALLBACK,
         vendor_rename=True,

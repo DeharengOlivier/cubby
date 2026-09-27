@@ -18,7 +18,6 @@ built to survive the crash it exists for:
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -117,7 +116,7 @@ class Journal:
         staging = self.path.with_name(self.path.name + ".staging")
         staging.write_text("".join(line + "\n" for line in kept), encoding="utf-8")
         try:
-            os.replace(staging, self.path)
+            staging.replace(self.path)
         except OSError:
             staging.unlink(missing_ok=True)
             raise
