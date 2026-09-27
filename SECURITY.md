@@ -21,8 +21,18 @@ backend reads a window rather than the whole file.
   could be bypassed by a path nobody anticipated.
 - **Sort your home directory or a filesystem root.** `source` refuses both:
   cubby creates category folders inside it and moves what it finds there.
-- **Move files with no way back, quietly.** If the undo journal cannot be
-  written, the run says so on stderr rather than proceeding in silence.
+- **Move files with no way back, quietly.** Every move is journaled as it
+  happens, by the agent as well as by `cubby run`. If the journal cannot be
+  written, the run says so on stderr and in the log rather than proceeding in
+  silence.
+- **Replace a file.** Moves are no-clobber, even against a file that appears
+  between choosing a name and moving.
+- **Let a document stall it.** PDF, docx and xlsx parsers run in a child
+  process with a timeout and, on Linux, a memory ceiling.
+- **Pass your folder to the service manager as anything but one argument.** The
+  systemd command line is quoted and escaped (`%`, `$`, quotes, newlines).
+- **Leave its records readable by others.** The journal, ledger and log are
+  created with mode 0600: they name what you downloaded.
 
 ## The config file is trusted input
 

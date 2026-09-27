@@ -30,8 +30,24 @@ vendors = ["spotify", "ovh"]  # known vendors, matched first when renaming invoi
 `month_style` and `month_lang` can also be set per run with `--month-style`
 and `--month-lang`; `cubby install` bakes them into the background agent.
 
-Every run is recorded to a journal, so `cubby undo` can reverse the most recent
-sort. The journal lives at `~/.local/state/cubby/journal.jsonl`.
+## Where cubby keeps its own files
+
+Every move, whether made by `cubby run` or by the background agent, is written
+to the undo journal the moment it happens, so `cubby undo` can reverse any run,
+including one that failed part way. The files cubby keeps for itself live in
+its state folder:
+
+| File | Purpose |
+|---|---|
+| `journal.jsonl` | every move, for `cubby undo` (bounded to the last 200 runs past 5 MB) |
+| `runs.jsonl` | one line per run that moved or failed something, for `cubby status` |
+| `heartbeat.json` | when the agent last completed a pass |
+| `cubby.log` | the activity log, JSON lines, rotated at 1 MB (on macOS: `~/Library/Logs/cubby.log`) |
+| `cubby.lock` | makes each pass and each undo exclusive |
+
+The state folder is `$CUBBY_STATE_DIR` when set, else `$XDG_STATE_HOME/cubby`,
+else `~/.local/state/cubby`. Every file is created readable by you only: they
+name what you downloaded.
 
 ## Categories
 

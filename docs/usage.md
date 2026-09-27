@@ -7,10 +7,10 @@
 | `cubby plan`      | Preview the full mapping of the folder. Moves nothing and ignores the age delay, so you see every file. |
 | `cubby run`       | Sort the folder once. Only files older than `--delay` are moved. |
 | `cubby watch`     | Run the sort loop in the foreground. Ctrl-C to stop.     |
-| `cubby undo`      | Reverse the most recent run, restoring files to where they were. |
+| `cubby undo`      | Reverse the most recent run, manual or agent, restoring files to where they were. `--run ID` picks an older run. |
 | `cubby install`   | Register a background agent that runs `watch` and starts at login. |
 | `cubby uninstall` | Stop and remove the background agent.                    |
-| `cubby status`    | Show whether the agent is installed and recent log activity. |
+| `cubby status`    | Whether the agent is really running (asked of launchd/systemd), when it last completed a pass, what its last run moved or failed, and the recent log. Exits 1 when an installed agent is not running or has stalled. `--json` for scripts. |
 | `cubby doctor`    | Print platform, service backend, config in use and extraction support. |
 
 `cubby plan` also accepts `--json` for scripting.
@@ -34,7 +34,7 @@ These apply to `plan`, `run`, `watch`, `install` and `doctor`:
 cubby plan            # eyeball the mapping, adjust your config if needed
 cubby run             # do a one-off tidy of what is already there
 cubby install         # let the agent keep it tidy from now on
-tail -f ~/Library/Logs/cubby.log   # watch it work (macOS path)
+cubby status          # is it running, and what did it do last?
 ```
 
 ## Safety
@@ -43,3 +43,17 @@ tail -f ~/Library/Logs/cubby.log   # watch it work (macOS path)
 - In-progress downloads (`.crdownload`, `.part`, ...) and files younger than
   `--delay` are skipped.
 - Cubby never re-scans its own category folders, so sorting is idempotent.
+- A move never replaces an existing file, even one that appears at the last
+  moment.
+- A file that cannot be moved (permissions, a file that vanished) is reported
+  and left in place; the rest of the run continues. `cubby run` then exits 1.
+- Only one cubby sorts or undoes at a time: a manual `run` waits for the
+  agent's pass to finish.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | done |
+| 1 | something could not be done: a file not sorted, a file not restored, the service manager refused, another cubby held the lock too long, an unhealthy agent (`status`) |
+| 2 | the configuration is invalid; the message names the setting |
