@@ -4,12 +4,15 @@ Thanks for your interest in cubby.
 
 ## Development setup
 
+Cubby uses [uv](https://docs.astral.sh/uv/). Every tool version is pinned in
+`uv.lock`, and CI installs exactly that lock.
+
 ```sh
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -e ".[dev,extract]"
-pytest
+uv sync --locked --all-extras   # or: make install
+make check                      # format, lint, strict types, layering, tests
 ```
+
+Clone to green tests takes about two minutes.
 
 ## Project layout
 
@@ -34,7 +37,18 @@ populate it, rather than reaching into the filesystem from the domain.
 ## Before opening a PR
 
 ```sh
-ruff check src tests
-ruff format --check src tests
-pytest
+make check
 ```
+
+`main` is protected: every change goes through a pull request, the CI checks
+must pass (lint, strict types, layering contracts, tests on macOS and Linux with
+90 % coverage of the changed lines, dependency and secret scanning) and the
+review conversation must be resolved. Administrators are not exempt.
+
+## Releasing
+
+1. Move the `Unreleased` entries of `CHANGELOG.md` under the new version and bump
+   `version` in `pyproject.toml` and `src/cubby/__init__.py`.
+2. Update `docs/READINESS.md` (release log and any status the release changes).
+3. Merge, then tag `vX.Y.Z` on `main`. The release workflow builds the wheel and
+   sdist from the tag and attaches them to a GitHub release.
