@@ -1,4 +1,5 @@
 import plistlib
+import subprocess
 
 import pytest
 
@@ -10,10 +11,32 @@ from cubby.adapters.service.launchd import LaunchdService
 from cubby.adapters.service.systemd import SystemdService
 
 
+class HealthyManager:
+    """launchctl / systemctl stand-in: every command succeeds, and the agent
+    runs exactly while it is loaded (launchd) or started (systemd)."""
+
+    def __init__(self) -> None:
+        self.running = False
+
+    def __call__(self, cmd, **kwargs):
+        if cmd[:2] == ["launchctl", "load"] or "restart" in cmd:
+            self.running = True
+        elif cmd[:2] == ["launchctl", "unload"] or "disable" in cmd:
+            self.running = False
+        elif "is-active" in cmd:
+            state = "active" if self.running else "inactive"
+            return subprocess.CompletedProcess(cmd, 0 if self.running else 3, state + "\n", "")
+        elif cmd[:2] == ["launchctl", "list"]:
+            if not self.running:
+                return subprocess.CompletedProcess(cmd, 113, "", "Could not find service")
+            return subprocess.CompletedProcess(cmd, 0, '"PID" = 1;', "")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+
 @pytest.fixture(autouse=True)
 def _no_subprocess(monkeypatch):
     # Never actually call launchctl / systemctl in tests.
-    monkeypatch.setattr("subprocess.run", lambda *a, **k: None)
+    monkeypatch.setattr("subprocess.run", HealthyManager())
 
 
 def test_launchd_writes_valid_plist(tmp_path, monkeypatch):
@@ -37,9 +60,11 @@ def test_systemd_unit_name_and_render(tmp_path, monkeypatch):
     monkeypatch.setattr(systemd_mod, "_UNIT_DIR", tmp_path / "user")
     service = SystemdService()
     assert service._unit_name("com.cubby.agent") == "cubby.service"
-    path = service.install(ServiceSpec(program_args=["/bin/cubby", "watch"]))
+    path = service.install(
+        ServiceSpec(program_args=["/bin/cubby", "watch"], log_path=tmp_path / "l")
+    )
     body = path.read_text()
-    assert "ExecStart=/bin/cubby watch" in body
+    assert 'ExecStart="/bin/cubby" "watch"' in body
     assert "Restart=on-failure" in body
 
 
@@ -73,7 +98,9 @@ def test_launchd_uninstall_removes_the_agent_file(tmp_path, monkeypatch):
 def test_systemd_uninstall_removes_the_unit(tmp_path, monkeypatch):
     monkeypatch.setattr(systemd_mod, "_UNIT_DIR", tmp_path / "user")
     service = SystemdService()
-    path = service.install(ServiceSpec(program_args=["/bin/cubby", "watch"]))
+    path = service.install(
+        ServiceSpec(program_args=["/bin/cubby", "watch"], log_path=tmp_path / "l")
+    )
 
     assert service.uninstall() is True
     assert not path.exists()

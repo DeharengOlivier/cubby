@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from cubby import cli
+from cubby.adapters import state
 from cubby.cli import EXIT_OK, main
 
 
@@ -44,6 +45,17 @@ class FakeService:
 
     def is_installed(self, label: str = "com.cubby.agent") -> bool:
         return self.installed
+
+    def is_running(self, label: str = "com.cubby.agent") -> bool:
+        return self.installed
+
+
+@pytest.fixture(autouse=True)
+def _home_with_downloads(tmp_path, monkeypatch):
+    """A home whose default ~/Downloads exists, so flag-less commands have a source."""
+    home = tmp_path / "home"
+    (home / "Downloads").mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
 
 
 @pytest.fixture
@@ -189,7 +201,9 @@ def test_watch_stops_cleanly_on_an_interrupt(monkeypatch, tmp_path, config_file,
     monkeypatch.setattr("cubby.app.watcher.Watcher.run", interrupted)
 
     assert main(["watch", "--config", str(config_file), "--source", str(source)]) == EXIT_OK
-    assert "stopped" in capsys.readouterr().out
+    log = state.log_path().read_text("utf-8")
+    assert "cubby watching" in log
+    assert "cubby stopped" in log
 
 
 def test_doctor_reports_a_library_that_fails_to_import(monkeypatch, config_file, capsys):

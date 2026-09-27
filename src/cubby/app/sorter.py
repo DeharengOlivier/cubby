@@ -7,7 +7,8 @@ from datetime import date
 from pathlib import Path
 
 from ..adapters.filesystem import build_ref, is_eligible, iter_candidates, move_into
-from ..adapters.journal import Journal, Move
+from ..adapters.journal import Entry, Journal, new_run_id
+from ..adapters.ledger import Failure, Ledger, RunRecord, now_iso
 from ..domain.category import Category, Config
 from ..domain.engine import Engine
 from ..domain.file_ref import FileRef
@@ -22,11 +23,21 @@ def _noop(_: str) -> None:
 
 
 def _mtime_date(path: Path) -> date:
-    """The file's modification date, used as the invoice-date fallback."""
+    """The file's modification date, used as the invoice-date fallback.
+
+    A file that cannot be stat'ed here is about to fail its move anyway, and
+    that failure is reported; today's date is only a placeholder for it.
+    """
     try:
         return date.fromtimestamp(path.stat().st_mtime)
     except OSError:
         return date.today()
+
+
+def describe_error(exc: BaseException) -> str:
+    """One line naming what went wrong, for the ledger and the terminal."""
+    detail = str(exc) or "no detail"
+    return f"{type(exc).__name__}: {detail}"
 
 
 class Sorter:
@@ -40,6 +51,8 @@ class Sorter:
         log: Logger = _noop,
         warn: Logger | None = None,
         journal: Journal | None = None,
+        ledger: Ledger | None = None,
+        mode: str = "run",
     ):
         self._config = config
         self._engine = engine or Engine(config)
@@ -48,7 +61,13 @@ class Sorter:
         # (the CLI) passes something louder: a lost undo journal must be seen.
         self._warn = warn or log
         self._journal = journal
+        self._ledger = ledger
+        self._mode = mode
         self._by_name: dict[str, Category] = {c.name: c for c in config.categories}
+
+    @property
+    def source(self) -> Path:
+        return self._config.settings.source
 
     def _placement(self, path: Path, ref: FileRef, category: str) -> Placement:
         """Month subfolder and optional rename for a finance file (else empty)."""
@@ -67,50 +86,107 @@ class Sorter:
             vendors=settings.vendors,
         )
 
+    def _outcome(self, path: Path, *, apply: bool, run_id: str, seq: int) -> SortOutcome:
+        """Classify one entry and, when applying, move it and journal the move.
+
+        Raises:
+            OSError: The entry could not be read or moved.
+            ValueError: The destination was refused (outside the watched folder).
+        """
+        settings = self._config.settings
+        ref = build_ref(path, settings.content_max_bytes)
+        decision = self._engine.classify(ref)
+        placement = self._placement(path, ref, decision.category)
+        outcome = SortOutcome(
+            source=path,
+            category=decision.category,
+            stage=decision.stage,
+            subdir=placement.subdir,
+            renamed_to=placement.new_name,
+        )
+        if not apply:
+            return outcome
+
+        moved = move_into(
+            path,
+            settings.source / decision.category / placement.subdir,
+            root=settings.source,
+            dedupe=settings.dedupe,
+            rename_to=placement.new_name,
+        )
+        self._log(f"[{decision.category}] ({decision.stage.value}) {path.name}")
+        self._journal_move(Entry(run_id, seq, moved.op, path, moved.destination))
+        return outcome.moved(moved.destination)
+
+    def _journal_move(self, entry: Entry) -> None:
+        if self._journal is None:
+            return
+        try:
+            self._journal.record(entry)
+        except OSError as exc:
+            # The file has already moved: aborting now would lose the journal
+            # and the rest of the sort. Say so loudly instead, once per file.
+            self._warn(
+                f"could not write the undo journal at {self._journal.path} ({exc}); "
+                f"'cubby undo' will not be able to put back {entry.source.name}"
+            )
+
     def sort_once(self, *, apply: bool, respect_age: bool = True) -> list[SortOutcome]:
         """Classify every candidate once.
 
-        When ``apply`` is true, eligible files are moved. When ``respect_age``
-        is false (used by ``plan``), age and in-progress checks are ignored so
-        the caller sees the full picture of the folder as it stands.
+        When ``apply`` is true, eligible files are moved, each move is journaled
+        as it happens, and a file that cannot be moved is reported in its
+        outcome's ``error`` without stopping the others. When ``respect_age`` is
+        false (used by ``plan``), age and in-progress checks are ignored so the
+        caller sees the full picture of the folder as it stands.
         """
         settings = self._config.settings
-        managed = self._config.managed_dirs
+        run_id = new_run_id()
+        started = now_iso()
         outcomes: list[SortOutcome] = []
-        moves: list[Move] = []
 
-        for path in iter_candidates(settings, managed):
+        for path in iter_candidates(settings, self._config.managed_dirs):
             if respect_age and not is_eligible(path, settings):
                 continue
+            try:
+                outcomes.append(self._outcome(path, apply=apply, run_id=run_id, seq=len(outcomes)))
+            except Exception as exc:  # noqa: BLE001 - reported below, and the others still sort
+                # Whatever stops one file (permissions, a file that vanished, a
+                # refused destination, a parser bug) must not stop the rest: the
+                # agent would otherwise fail on the same file every minute and
+                # never reach the files after it. The failure is not hidden: it
+                # goes to stderr or the log, the ledger, and the exit code.
+                error = describe_error(exc)
+                self._warn(f"could not sort {path.name}: {error}")
+                outcomes.append(SortOutcome.failed(path, error))
 
-            ref = build_ref(path, settings.content_max_bytes)
-            decision = self._engine.classify(ref)
-            placement = self._placement(path, ref, decision.category)
-
-            moved_to: Path | None = None
-            if apply:
-                destination_dir = settings.source / decision.category / placement.subdir
-                moved_to = move_into(
-                    path,
-                    destination_dir,
-                    root=settings.source,
-                    dedupe=settings.dedupe,
-                    rename_to=placement.new_name,
-                )
-                moves.append((path, moved_to))
-                self._log(f"[{decision.category}] ({decision.stage.value}) {path.name}")
-
-            outcomes.append(
-                SortOutcome(
-                    source=path,
-                    category=decision.category,
-                    stage=decision.stage,
-                    moved_to=moved_to,
-                    subdir=placement.subdir,
-                    renamed_to=placement.new_name,
-                )
-            )
-
-        if self._journal is not None:
-            self._journal.record_run(moves, warn=self._warn)
+        if apply:
+            self._record_run(run_id, started, outcomes)
+            if self._journal is not None:
+                self._compact_journal(self._journal)
         return outcomes
+
+    def _record_run(self, run_id: str, started: str, outcomes: list[SortOutcome]) -> None:
+        if self._ledger is None or not outcomes:
+            return
+        failures = tuple(Failure(o.name, o.error) for o in outcomes if o.error)
+        record = RunRecord(
+            run=run_id,
+            mode=self._mode,
+            source=str(self._config.settings.source),
+            started=started,
+            finished=now_iso(),
+            moved=sum(1 for o in outcomes if o.moved_to is not None),
+            failed=len(failures),
+            failures=failures,
+        )
+        try:
+            self._ledger.record(record)
+        except OSError as exc:
+            self._warn(f"could not write the run ledger at {self._ledger.runs_path} ({exc})")
+
+    def _compact_journal(self, journal: Journal) -> None:
+        try:
+            journal.compact()
+        except OSError as exc:
+            self._warn(f"could not compact the undo journal at {journal.path} ({exc})")

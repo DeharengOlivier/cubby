@@ -3,6 +3,8 @@ only possible because the domain layer has no IO dependencies."""
 
 from __future__ import annotations
 
+import socket
+
 import pytest
 
 from cubby.domain.category import Category, Config, Settings
@@ -18,16 +20,25 @@ def _isolate_user_config(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _isolate_user_state(monkeypatch, tmp_path_factory):
-    """Redirect the undo journal and the log file away from the real machine.
+    """Point every piece of cubby state (journal, ledger, heartbeat, log, lock)
+    at a fresh folder for each test.
 
     Without this, running the suite appended test moves to the user's own
     ~/.local/state/cubby/journal.jsonl, so a real `cubby undo` would replay a
     test's temp directories instead of their last real sort.
     """
-    state = tmp_path_factory.mktemp("cubby-state")
-    monkeypatch.setattr("cubby.adapters.journal.DEFAULT_JOURNAL", state / "journal.jsonl")
-    monkeypatch.setattr("cubby.adapters.logging.DEFAULT_LOG", state / "cubby.log")
-    monkeypatch.setattr("cubby.cli.DEFAULT_LOG", state / "cubby.log")
+    monkeypatch.setenv("CUBBY_STATE_DIR", str(tmp_path_factory.mktemp("cubby-state")))
+
+
+@pytest.fixture(autouse=True)
+def _no_network(monkeypatch):
+    """Cubby makes no network calls; a test that tries one is a bug either way."""
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("the test suite must not open network connections")
+
+    monkeypatch.setattr(socket.socket, "connect", refuse)
+    monkeypatch.setattr(socket, "create_connection", refuse)
 
 
 @pytest.fixture
