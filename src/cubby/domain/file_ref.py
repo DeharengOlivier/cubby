@@ -50,3 +50,4 @@ class Decision:
 
     category: str
     stage: Stage
+    rule: str | None = None  # the rule that decided, in words; None when unsorted

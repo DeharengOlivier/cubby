@@ -70,7 +70,7 @@ class Sorter:
     def source(self) -> Path:
         return self._config.settings.source
 
-    def _placement(self, path: Path, ref: FileRef, category: str) -> Placement:
+    def placement_for(self, path: Path, ref: FileRef, category: str) -> Placement:
         """Month subfolder and optional rename for a finance file (else empty)."""
         rules = self._by_name.get(category)
         if rules is None or not rules.date_folders:
@@ -97,11 +97,12 @@ class Sorter:
         settings = self._config.settings
         ref = build_ref(path, settings.content_max_bytes)
         decision = self._engine.classify(ref)
-        placement = self._placement(path, ref, decision.category)
+        placement = self.placement_for(path, ref, decision.category)
         outcome = SortOutcome(
             source=path,
             category=decision.category,
             stage=decision.stage,
+            rule=decision.rule,
             subdir=placement.subdir,
             renamed_to=placement.new_name,
         )

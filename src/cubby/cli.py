@@ -14,7 +14,12 @@ from typing import Any
 
 from . import __version__
 from .adapters import state
-from .adapters.config import find_user_config, load_config
+from .adapters.config import (
+    default_user_config_path,
+    find_user_config,
+    load_config,
+    write_starter_config,
+)
 from .adapters.extraction import PARSABLE
 from .adapters.journal import Journal
 from .adapters.ledger import Ledger
@@ -29,6 +34,8 @@ from .adapters.service import (
     get_service,
 )
 from .adapters.ui import Palette, banner, supports_color
+from .app.explain import Explanation, explain
+from .app.history import recent_runs
 from .app.report import SortOutcome, render_json, render_plan
 from .app.sorter import Sorter
 from .app.undo import undo_run
@@ -145,7 +152,9 @@ def cmd_undo(args: argparse.Namespace) -> int:
         try:
             result = undo_run(Journal(), getattr(args, "run", None), log=print)
         except KeyError:
-            print(f"cubby: no run {args.run!r} in the journal", file=sys.stderr)
+            print(
+                f"cubby: no run {args.run!r} in the journal; see 'cubby history'", file=sys.stderr
+            )
             return EXIT_FAILED
     print(f"Restored {result.restored} file(s).")
     if result.failed:
@@ -184,6 +193,92 @@ def cmd_watch(args: argparse.Namespace) -> int:
         watcher.run()
     except KeyboardInterrupt:
         log("cubby stopped")
+    return EXIT_OK
+
+
+def _explanation_json(item: Explanation) -> dict[str, Any]:
+    return {
+        "path": str(item.path),
+        "category": item.category,
+        "stage": item.stage.value,
+        "rule": item.rule,
+        "destination": str(item.destination),
+        "renamed_to": item.renamed_to,
+        "skipped": item.skipped,
+        "outside_source": item.outside,
+    }
+
+
+def _print_explanation(pal: Palette, item: Explanation, source: Path) -> None:
+    print(pal.bold(str(item.path)))
+    try:
+        shown = item.destination.relative_to(source)
+    except ValueError:
+        shown = item.destination
+    _kv(pal, "  goes to", pal.accent(str(shown)))
+    rule = f"{item.rule}  ({item.stage.value} stage)" if item.rule else "no rule matched"
+    _kv(pal, "  decided by", rule)
+    if item.renamed_to:
+        _kv(pal, "  renamed", item.renamed_to)
+    if item.outside:
+        _kv(pal, "  note", pal.yellow("not in the watched folder: a run would not see it"))
+    elif item.skipped:
+        _kv(pal, "  left alone", pal.yellow(item.skipped))
+
+
+def cmd_explain(args: argparse.Namespace) -> int:
+    config = _load(args)
+    items: list[Explanation] = []
+    missing = False
+    for raw in args.files:
+        try:
+            items.append(explain(Path(raw).expanduser(), config))
+        except FileNotFoundError:
+            print(f"cubby: no such file: {raw}", file=sys.stderr)
+            missing = True
+    if getattr(args, "json", False):
+        payload = {"version": 1, "items": [_explanation_json(i) for i in items]}
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        pal = _palette()
+        for item in items:
+            _print_explanation(pal, item, config.settings.source)
+    return EXIT_FAILED if missing else EXIT_OK
+
+
+def cmd_history(args: argparse.Namespace) -> int:
+    runs = recent_runs(Ledger(), Journal(), limit=args.limit)
+    if getattr(args, "json", False):
+        payload = {
+            "version": 1,
+            "runs": [{**r.record.to_json(), "undone": r.undone} for r in runs],
+        }
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return EXIT_OK
+    pal = _palette()
+    if not runs:
+        print(pal.dim("No runs recorded yet."))
+        return EXIT_OK
+    for summary in runs:
+        record = summary.record
+        counts = f"moved {record.moved}"
+        if record.failed:
+            counts += pal.yellow(f", {record.failed} failed")
+        flag = pal.dim("  undone") if summary.undone else ""
+        print(f"{record.finished}  {pal.accent(record.run)}  {record.mode:<5}  {counts}{flag}")
+    print(pal.dim("\nUndo one with: cubby undo --run <id>"))
+    return EXIT_OK
+
+
+def cmd_init(args: argparse.Namespace) -> int:
+    target = Path(args.path).expanduser() if args.path else default_user_config_path()
+    try:
+        write_starter_config(target, force=args.force)
+    except FileExistsError:
+        print(f"cubby: {target} already exists; use --force to replace it", file=sys.stderr)
+        return EXIT_FAILED
+    print(f"Wrote a starter config to {target}")
+    print("Preview what it does with: cubby plan")
     return EXIT_OK
 
 
@@ -412,7 +507,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_watch.set_defaults(func=cmd_watch)
 
     p_undo = sub.add_parser("undo", help="revert the most recent run (or --run ID)")
-    p_undo.add_argument("--run", help="the run to revert (its id, as 'cubby status' shows it)")
+    p_undo.add_argument("--run", help="the run to revert, as listed by 'cubby history'")
     p_undo.set_defaults(func=cmd_undo)
 
     p_status = sub.add_parser(
@@ -427,6 +522,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_uninstall = sub.add_parser("uninstall", help="remove the background agent")
     p_uninstall.set_defaults(func=cmd_uninstall)
+
+    p_explain = sub.add_parser(
+        "explain", help="say where files would go and which rule decides (moves nothing)"
+    )
+    _add_common_flags(p_explain)
+    p_explain.add_argument("files", nargs="+", metavar="FILE", help="files to explain")
+    p_explain.add_argument("--json", action="store_true", help="output as JSON")
+    p_explain.set_defaults(func=cmd_explain)
+
+    p_history = sub.add_parser("history", help="list recent runs, and which were undone")
+    p_history.add_argument("-n", "--limit", type=int, default=20, help="how many runs (20)")
+    p_history.add_argument("--json", action="store_true", help="output as JSON")
+    p_history.set_defaults(func=cmd_history)
+
+    p_init = sub.add_parser("init", help="write a starter config file")
+    p_init.add_argument("--path", help="where to write it (default: ~/.config/cubby/config.toml)")
+    p_init.add_argument("--force", action="store_true", help="replace an existing file")
+    p_init.set_defaults(func=cmd_init)
 
     p_doctor = sub.add_parser("doctor", help="report environment and extraction support")
     _add_common_flags(p_doctor)

@@ -21,6 +21,7 @@ class SortOutcome:
     source: Path
     category: str  # empty when the entry could not be sorted
     stage: Stage | None
+    rule: str | None = None  # the rule that decided, in words
     moved_to: Path | None = None  # set when actually moved
     subdir: str = ""  # month/year subfolder inside the category, when any
     renamed_to: str | None = None  # new filename when the entry is renamed
@@ -120,6 +121,7 @@ def render_json(outcomes: list[SortOutcome], *, applied: bool) -> str:
                 "subdir": o.subdir or None,
                 "renamed_to": o.renamed_to,
                 "stage": o.stage.value if o.stage else None,
+                "rule": o.rule,
                 "moved_to": str(o.moved_to) if o.moved_to else None,
                 "error": o.error,
                 "journaled": o.journaled,
