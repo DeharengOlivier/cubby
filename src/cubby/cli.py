@@ -221,7 +221,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         try:
             __import__(lib)
             libs[lib] = True
-        except ImportError:
+        except (ImportError, OSError):  # absent, or a broken native wheel
             libs[lib] = False
     _kv(pal, "extract tools", _features(pal, tools))
     _kv(pal, "extract libs", _features(pal, libs))

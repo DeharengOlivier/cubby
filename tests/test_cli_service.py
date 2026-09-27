@@ -190,3 +190,16 @@ def test_watch_stops_cleanly_on_an_interrupt(monkeypatch, tmp_path, config_file,
 
     assert main(["watch", "--config", str(config_file), "--source", str(source)]) == EXIT_OK
     assert "stopped" in capsys.readouterr().out
+
+
+def test_doctor_reports_a_library_that_fails_to_import(monkeypatch, config_file, capsys):
+    real_import = __import__
+
+    def broken(name, *args, **kwargs):
+        if name == "openpyxl":
+            raise ImportError("broken wheel")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", broken)
+    assert main(["doctor", "--config", str(config_file)]) == EXIT_OK
+    assert "openpyxl -" in capsys.readouterr().out

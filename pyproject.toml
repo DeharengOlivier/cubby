@@ -127,7 +127,7 @@ type = "layers"
 layers = ["cubby.cli", "cubby.app", "cubby.adapters", "cubby.domain"]
 
 [[tool.importlinter.contracts]]
-name = "The domain does no IO"
+name = "The domain never spawns processes or touches files through os or shutil"
 type = "forbidden"
 source_modules = ["cubby.domain"]
 forbidden_modules = ["os", "shutil", "subprocess", "cubby.adapters", "cubby.app", "cubby.cli"]
