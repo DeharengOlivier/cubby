@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
+import os
 import shutil
 import time
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from ..domain.category import Settings
 from ..domain.file_ref import FileRef
@@ -88,16 +92,21 @@ def unique_destination(dest_dir: Path, name: str) -> Path:
     If ``name`` already exists, insert `` (1)``, `` (2)`` ... before the suffix.
     """
     candidate = dest_dir / name
-    if not candidate.exists():
+    if not _taken(candidate):
         return candidate
     stem = candidate.stem
     suffix = candidate.suffix
     counter = 1
     while True:
         candidate = dest_dir / f"{stem} ({counter}){suffix}"
-        if not candidate.exists():
+        if not _taken(candidate):
             return candidate
         counter += 1
+
+
+def _taken(path: Path) -> bool:
+    """True if ``path`` names anything, a dangling symlink included."""
+    return path.exists() or path.is_symlink()
 
 
 def _digest(path: Path) -> str | None:
@@ -121,6 +130,50 @@ def files_identical(a: Path, b: Path) -> bool:
     return _digest(a) == _digest(b)
 
 
+@dataclass(frozen=True)
+class Moved:
+    """What :func:`move_into` did: moved ``path`` to ``destination``, or, for
+    ``dedupe``, deleted it because ``destination`` already held the same bytes."""
+
+    destination: Path
+    op: Literal["move", "dedupe"]
+
+
+#: How many times a name may be taken under us before the move gives up.
+_MAX_NAME_RACES = 100
+
+#: Errors after which a hard link cannot be the way to move a file.
+_NO_LINK = frozenset({errno.EXDEV, errno.EPERM, errno.EMLINK, errno.ENOTSUP, errno.EOPNOTSUPP})
+
+
+def move_no_clobber(source: Path, destination: Path) -> None:
+    """Move ``source`` to ``destination``, failing rather than replacing a file.
+
+    ``os.rename`` silently replaces an existing destination on POSIX, so a file
+    that appeared there between choosing the name and moving would be lost. For
+    a regular file on the same filesystem, a hard link is created first: that
+    fails atomically if the name is taken, and only then is the source removed.
+    Elsewhere (a folder, another filesystem) the destination is checked just
+    before a copying move; the window is small and cubby holds its lock.
+
+    Raises:
+        FileExistsError: ``destination`` already exists.
+        OSError: The move failed; ``source`` is still in place.
+    """
+    if source.is_file() and not source.is_symlink():
+        try:
+            os.link(source, destination)
+        except OSError as exc:
+            if exc.errno not in _NO_LINK:
+                raise
+        else:
+            source.unlink()
+            return
+    if _taken(destination):
+        raise FileExistsError(errno.EEXIST, "destination exists", str(destination))
+    shutil.move(str(source), str(destination))
+
+
 def move_into(
     path: Path,
     category_dir: Path,
@@ -128,19 +181,19 @@ def move_into(
     root: Path,
     dedupe: bool = False,
     rename_to: str | None = None,
-) -> Path:
-    """Move ``path`` into ``category_dir``, never overwriting. Returns the dest.
+) -> Moved:
+    """Move ``path`` into ``category_dir``, never overwriting.
 
     ``root`` is the folder cubby manages; the destination is refused if it falls
     outside it, and nothing is moved or created in that case. ``rename_to`` sets
     the destination filename (e.g. a cleaned invoice name) and must be a single
     name, not a path; it defaults to the source's own name. With ``dedupe`` and a
     byte-identical file already present under the same name, the redundant
-    ``path`` is removed instead of being kept as a `` (1)`` copy, and the
-    existing file's path is returned.
+    ``path`` is removed instead of being kept as a `` (1)`` copy.
 
     Raises:
         ValueError: The destination or the new name would escape ``root``.
+        OSError: The file could not be moved; it is still in place.
     """
     target_name = safe_component(rename_to, field="rename_to") if rename_to else path.name
     # Check before creating anything: a refused move must leave no trace.
@@ -149,7 +202,14 @@ def move_into(
     same_name = category_dir / target_name
     if dedupe and same_name.exists() and files_identical(path, same_name):
         path.unlink()
-        return same_name
-    destination = unique_destination(category_dir, target_name)
-    shutil.move(str(path), str(destination))
-    return destination
+        return Moved(same_name, "dedupe")
+    for _ in range(_MAX_NAME_RACES):
+        destination = unique_destination(category_dir, target_name)
+        try:
+            move_no_clobber(path, destination)
+        except FileExistsError:
+            continue  # taken since we looked: pick the next free name
+        return Moved(destination, "move")
+    raise FileExistsError(
+        errno.EEXIST, "every candidate name was taken while moving", str(category_dir)
+    )

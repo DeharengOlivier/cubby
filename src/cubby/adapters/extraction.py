@@ -5,20 +5,25 @@ nor a Python library can read a format, extraction returns ``""`` and the engine
 simply falls back to filename / type rules. Nothing here raises to the caller,
 so a corrupt or password-protected file never breaks a sort run.
 
-Reading is bounded, twice. A file larger than :data:`MAX_SOURCE_BYTES` is not
-opened at all: cubby only needs a few thousand characters to decide where a file
-belongs, and a document worth classifying is never that large. Below that
-ceiling, each backend reads a window rather than the whole file. Both matter
-because cubby runs unattended: extracting 4000 bytes from a 315 MB page used to
-cost 896 MB of memory and fifteen seconds.
+Reading is bounded three ways. A file larger than :data:`MAX_SOURCE_BYTES` is
+not opened at all: cubby only needs a few thousand characters to decide where a
+file belongs, and a document worth classifying is never that large. Below that
+ceiling, each backend reads a window rather than the whole file. And every
+parser of a structured format (PDF, docx, xlsx) runs in a child process with a
+timeout, a system tool or the Python libraries alike (see ``parsers.py``), so a
+hostile file costs one timeout rather than the agent. All of it matters because
+cubby runs unattended: extracting 4000 bytes from a 315 MB page used to cost
+896 MB of memory and fifteen seconds.
 """
 
 from __future__ import annotations
 
 import html
+import importlib.util
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 # Formats we know how to read as text. Anything else skips the content stage.
@@ -38,6 +43,9 @@ PARSABLE: frozenset[str] = frozenset(
         "xlsx",
     }
 )
+
+#: The optional library behind each child-process parser.
+_LIBRARIES = {"pdf": "pypdf", "docx": "docx", "xlsx": "openpyxl"}
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _TIMEOUT = 15
@@ -75,8 +83,20 @@ def _run(cmd: list[str]) -> str:
     try:
         result = subprocess.run(cmd, capture_output=True, timeout=_TIMEOUT, check=False)
         return result.stdout.decode("utf-8", "ignore")
-    except Exception:  # noqa: BLE001 - a converter failing in any way means "no text"
+    except (OSError, subprocess.SubprocessError):
+        # Missing, not executable, or past its timeout: no text from this backend.
         return ""
+
+
+def _in_child(kind: str, path: Path, max_bytes: int) -> str:
+    """Run the ``kind`` Python parser in a child process (see ``parsers.py``).
+
+    The interpreter is the one running cubby, by absolute path. When the
+    library is not installed, no process is started at all.
+    """
+    if importlib.util.find_spec(_LIBRARIES[kind]) is None:
+        return ""
+    return _run([sys.executable, "-m", "cubby.adapters.parsers", kind, str(path), str(max_bytes)])
 
 
 def _tool(name: str) -> str | None:
@@ -89,37 +109,20 @@ def _tool(name: str) -> str | None:
     return shutil.which(name)
 
 
-def _from_pdf(path: Path) -> str:
+def _from_pdf(path: Path, max_bytes: int) -> str:
     if pdftotext := _tool("pdftotext"):  # poppler, common on macOS and Linux
         text = _run([pdftotext, "-l", "2", "-q", str(path), "-"])
         if text.strip():
             return text
-    try:
-        from pypdf import PdfReader  # noqa: PLC0415 - optional backend
-
-        reader = PdfReader(str(path))
-        pages = reader.pages[:2]
-        return "\n".join((page.extract_text() or "") for page in pages)
-    except Exception:  # noqa: BLE001 - a corrupt document yields no text, never a crash
-        return ""
+    return _in_child("pdf", path, max_bytes)
 
 
 def _from_docx(path: Path, max_bytes: int) -> str:
-    try:
-        import docx  # noqa: PLC0415 - optional backend
-
-        collected: list[str] = []
-        length = 0
-        for paragraph in docx.Document(str(path)).paragraphs:
-            collected.append(paragraph.text)
-            length += len(paragraph.text) + 1
-            if length >= max_bytes:  # enough to classify; stop walking the document
-                break
-        return "\n".join(collected)
-    except Exception:  # noqa: BLE001 - see below
-        # python-docx missing or the document unreadable by it: fall through to
-        # the system converter, which is the whole point of a cascade.
-        text = ""
+    text = _in_child("docx", path, max_bytes)
+    if text.strip():
+        return text
+    # python-docx missing or the document unreadable by it: fall through to
+    # the system converter, which is the whole point of a cascade.
     if textutil := _tool("textutil"):  # macOS native
         return _run([textutil, "-convert", "txt", "-stdout", str(path)])
     return text
@@ -155,20 +158,6 @@ def _from_text(path: Path, max_bytes: int) -> str:
         return ""
 
 
-def _from_xlsx(path: Path) -> str:
-    try:
-        import openpyxl  # noqa: PLC0415 - optional backend
-
-        workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
-        sheet = workbook.active
-        cells: list[str] = []
-        for row in sheet.iter_rows(max_row=20, values_only=True):
-            cells += [str(c) for c in row if c is not None]
-        return " ".join(cells)
-    except Exception:  # noqa: BLE001 - a corrupt document yields no text, never a crash
-        return ""
-
-
 def extract_text(path: Path, ext: str, max_bytes: int = 4000) -> str:
     """Return up to ``max_bytes`` of extracted text, or ``""``.
 
@@ -181,7 +170,7 @@ def extract_text(path: Path, ext: str, max_bytes: int = 4000) -> str:
         return ""
     ext = ext.lower()
     if ext == "pdf":
-        text = _from_pdf(path)
+        text = _from_pdf(path, max_bytes)
     elif ext == "docx":
         text = _from_docx(path, max_bytes)
     elif ext in {"doc", "rtf"}:
@@ -191,7 +180,7 @@ def extract_text(path: Path, ext: str, max_bytes: int = 4000) -> str:
     elif ext in {"txt", "md", "csv", "tsv", "log"}:
         text = _from_text(path, max_bytes)
     elif ext == "xlsx":
-        text = _from_xlsx(path)
+        text = _in_child("xlsx", path, max_bytes)
     else:
         text = ""
     return text[:max_bytes]

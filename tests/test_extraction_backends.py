@@ -13,12 +13,13 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import time
 import types
 from pathlib import Path
 
 import pytest
 
-from cubby.adapters import extraction
+from cubby.adapters import extraction, parsers
 from cubby.adapters.extraction import extract_text
 
 
@@ -40,6 +41,20 @@ def tools_available(monkeypatch):
 
     monkeypatch.setattr(extraction.subprocess, "run", fake_run)
     return commands
+
+
+@pytest.fixture
+def in_process_parsers(monkeypatch):
+    """Run the Python parsers in this process, so fake libraries can stand in.
+
+    Production runs them in a child process (tested separately below); what is
+    under test here is the parsing logic and its bounds, not the process.
+    """
+    monkeypatch.setattr(
+        extraction,
+        "_in_child",
+        lambda kind, path, max_bytes: parsers.parse(kind, str(path), max_bytes),
+    )
 
 
 def _file(tmp_path: Path, name: str) -> Path:
@@ -97,7 +112,9 @@ def test_a_tool_that_times_out_yields_nothing(monkeypatch, tmp_path, no_system_t
 # --- the library fallbacks --------------------------------------------------
 
 
-def test_pdf_falls_back_to_pypdf_when_poppler_is_absent(monkeypatch, tmp_path, no_system_tools):
+def test_pdf_falls_back_to_pypdf_when_poppler_is_absent(
+    monkeypatch, tmp_path, no_system_tools, in_process_parsers
+):
     class _Page:
         def extract_text(self):
             return "facture pypdf"
@@ -113,7 +130,9 @@ def test_pdf_falls_back_to_pypdf_when_poppler_is_absent(monkeypatch, tmp_path, n
     assert text.count("facture pypdf") == 2
 
 
-def test_pdf_returns_nothing_when_the_parser_raises(monkeypatch, tmp_path, no_system_tools):
+def test_pdf_returns_nothing_when_the_parser_raises(
+    monkeypatch, tmp_path, no_system_tools, in_process_parsers
+):
     # A corrupt or password-protected PDF must never break a sort run.
     module = types.ModuleType("pypdf")
 
@@ -126,7 +145,9 @@ def test_pdf_returns_nothing_when_the_parser_raises(monkeypatch, tmp_path, no_sy
     assert extract_text(_file(tmp_path, "invoice.pdf"), "pdf") == ""
 
 
-def test_docx_reads_paragraphs_and_stops_once_it_has_enough(monkeypatch, tmp_path, no_system_tools):
+def test_docx_reads_paragraphs_and_stops_once_it_has_enough(
+    monkeypatch, tmp_path, no_system_tools, in_process_parsers
+):
     paragraphs = [types.SimpleNamespace(text="facture " * 20) for _ in range(500)]
     module = types.ModuleType("docx")
     module.Document = lambda _: types.SimpleNamespace(paragraphs=paragraphs)
@@ -139,13 +160,15 @@ def test_docx_reads_paragraphs_and_stops_once_it_has_enough(monkeypatch, tmp_pat
 
 
 def test_docx_without_the_library_and_without_textutil_yields_nothing(
-    monkeypatch, tmp_path, no_system_tools
+    monkeypatch, tmp_path, no_system_tools, in_process_parsers
 ):
     monkeypatch.setitem(sys.modules, "docx", None)
     assert extract_text(_file(tmp_path, "contract.docx"), "docx") == ""
 
 
-def test_xlsx_reads_a_bounded_number_of_rows(monkeypatch, tmp_path, no_system_tools):
+def test_xlsx_reads_a_bounded_number_of_rows(
+    monkeypatch, tmp_path, no_system_tools, in_process_parsers
+):
     class _Sheet:
         def iter_rows(self, max_row=None, values_only=False):
             assert max_row is not None, "reading every row of a workbook is unbounded"
@@ -162,7 +185,7 @@ def test_xlsx_reads_a_bounded_number_of_rows(monkeypatch, tmp_path, no_system_to
 
 
 def test_xlsx_returns_nothing_when_the_workbook_cannot_be_opened(
-    monkeypatch, tmp_path, no_system_tools
+    monkeypatch, tmp_path, no_system_tools, in_process_parsers
 ):
     module = types.ModuleType("openpyxl")
 
@@ -236,3 +259,67 @@ def test_an_unreadable_file_yields_nothing(monkeypatch, tmp_path, no_system_tool
 
     monkeypatch.setattr(extraction.Path, "open", refuse)
     assert extract_text(path, ext) == ""
+
+
+# --- the Python parsers run in a child process ------------------------------
+
+
+def test_a_real_workbook_is_parsed_in_a_child_process(tmp_path, no_system_tools):
+    openpyxl = pytest.importorskip("openpyxl")
+    workbook = openpyxl.Workbook()
+    workbook.active["A1"] = "Relevé de compte IBAN BE00"
+    path = tmp_path / "statement.xlsx"
+    workbook.save(path)
+
+    assert extract_text(path, "xlsx") == "Relevé de compte IBAN BE00"
+
+
+def test_the_child_parser_is_given_a_timeout_and_this_interpreter(monkeypatch, tmp_path):
+    monkeypatch.setattr(extraction.importlib.util, "find_spec", lambda name: object())
+    commands: list[list[str]] = []
+
+    def fake_run(cmd, capture_output=False, timeout=None, check=False):
+        commands.append(cmd)
+        assert timeout, "a parser without a timeout can stall the agent"
+        return types.SimpleNamespace(stdout=b"text")
+
+    monkeypatch.setattr(extraction.subprocess, "run", fake_run)
+    extraction._in_child("pdf", tmp_path / "a.pdf", 100)
+
+    assert commands == [
+        [sys.executable, "-m", "cubby.adapters.parsers", "pdf", str(tmp_path / "a.pdf"), "100"]
+    ]
+
+
+def test_a_parser_that_hangs_costs_one_timeout(monkeypatch, tmp_path):
+    monkeypatch.setattr(extraction, "_TIMEOUT", 0.5)
+    started = time.monotonic()
+
+    text = extraction._run([sys.executable, "-c", "import time; time.sleep(30)"])
+
+    assert text == ""
+    assert time.monotonic() - started < 10
+
+
+def test_no_child_is_started_when_the_library_is_absent(monkeypatch, tmp_path):
+    monkeypatch.setattr(extraction.importlib.util, "find_spec", lambda name: None)
+    monkeypatch.setattr(extraction.subprocess, "run", lambda *a, **k: pytest.fail("spawned"))
+
+    assert extraction._in_child("docx", tmp_path / "a.docx", 100) == ""
+
+
+def test_the_parser_entry_point_rejects_bad_usage(capsys):
+    assert parsers.main([]) == 2
+    assert "usage" in capsys.readouterr().err
+
+
+def test_the_parser_entry_point_writes_utf8(monkeypatch, tmp_path, capsysbinary):
+    monkeypatch.setattr(parsers, "_limit_memory", lambda: None)
+    monkeypatch.setitem(parsers.PARSERS, "pdf", lambda path, max_chars: "Facture réglée")
+
+    assert parsers.main(["pdf", str(tmp_path / "a.pdf"), "100"]) == 0
+    assert capsysbinary.readouterr().out.decode("utf-8") == "Facture réglée"
+
+
+def test_an_unknown_parser_kind_yields_nothing():
+    assert parsers.parse("pptx", "/nowhere", 100) == ""

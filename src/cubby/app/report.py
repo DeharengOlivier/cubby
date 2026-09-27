@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..adapters.ui import Palette
 from ..domain.file_ref import Stage
+
+#: Version of the ``--json`` document. Bumped when a field changes meaning or
+#: disappears; adding a field does not bump it.
+JSON_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -15,11 +19,19 @@ class SortOutcome:
     """What happened (or would happen) to a single entry."""
 
     source: Path
-    category: str
-    stage: Stage
+    category: str  # empty when the entry could not be sorted
+    stage: Stage | None
     moved_to: Path | None = None  # set when actually moved
     subdir: str = ""  # month/year subfolder inside the category, when any
     renamed_to: str | None = None  # new filename when the entry is renamed
+    error: str | None = None  # why the entry could not be sorted
+
+    @classmethod
+    def failed(cls, source: Path, error: str) -> SortOutcome:
+        return cls(source=source, category="", stage=None, error=error)
+
+    def moved(self, destination: Path) -> SortOutcome:
+        return replace(self, moved_to=destination)
 
     @property
     def name(self) -> str:
@@ -39,7 +51,8 @@ class SortOutcome:
 def group_by_category(outcomes: list[SortOutcome]) -> dict[str, list[SortOutcome]]:
     grouped: dict[str, list[SortOutcome]] = {}
     for outcome in outcomes:
-        grouped.setdefault(outcome.dest, []).append(outcome)
+        if outcome.error is None:
+            grouped.setdefault(outcome.dest, []).append(outcome)
     return grouped
 
 
@@ -57,37 +70,48 @@ def render_plan(
         return p.dim("Nothing to sort.")
 
     grouped = group_by_category(outcomes)
+    failures = [o for o in outcomes if o.error is not None]
     lines: list[str] = []
     for category in sorted(grouped):
         items = grouped[category]
         header = p.bold(p.accent(f"{category}/")) + p.dim(f"  ({len(items)})")
         lines.append(f"\n{header}")
         for outcome in sorted(items, key=lambda o: o.display_name.lower()):
-            tag = "" if outcome.stage is Stage.NAME else p.dim(f"   <- {outcome.stage.value}")
+            stage = outcome.stage
+            tag = "" if stage is None or stage is Stage.NAME else p.dim(f"   <- {stage.value}")
             if outcome.renamed_to:
                 tag += p.dim(f"   (was {outcome.name})")
             lines.append(f"    {outcome.display_name}{tag}")
 
+    if failures:
+        lines.append("\n" + p.bold(p.yellow(f"Could not sort  ({len(failures)})")))
+        lines.extend(f"    {o.name}   {p.dim(o.error or '')}" for o in failures)
+
     verb = "Moved" if applied else "Would move"
-    summary = f"{verb} {len(outcomes)} item(s)."
-    lines.append("\n" + (p.green(summary) if applied else p.bold(summary)))
+    summary = f"{verb} {len(outcomes) - len(failures)} item(s)."
+    if failures:
+        summary += f" {len(failures)} could not be sorted."
+    lines.append("\n" + (p.green(summary) if applied and not failures else p.bold(summary)))
     return "\n".join(lines).lstrip("\n")
 
 
 def render_json(outcomes: list[SortOutcome], *, applied: bool) -> str:
     """Render outcomes as JSON, for scripting and integration."""
     payload = {
+        "version": JSON_VERSION,
         "applied": applied,
         "count": len(outcomes),
+        "failed": sum(1 for o in outcomes if o.error is not None),
         "items": [
             {
                 "name": o.name,
                 "source": str(o.source),
-                "category": o.category,
+                "category": o.category or None,
                 "subdir": o.subdir or None,
                 "renamed_to": o.renamed_to,
-                "stage": o.stage.value,
+                "stage": o.stage.value if o.stage else None,
                 "moved_to": str(o.moved_to) if o.moved_to else None,
+                "error": o.error,
             }
             for o in outcomes
         ],

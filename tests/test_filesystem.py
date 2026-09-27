@@ -14,7 +14,7 @@ from cubby.domain.category import Settings
 def test_move_into_creates_category_dir(tmp_path):
     src = tmp_path / "note.txt"
     src.write_text("hello")
-    dest = move_into(src, tmp_path / "Documents", root=tmp_path)
+    dest = move_into(src, tmp_path / "Documents", root=tmp_path).destination
     assert dest == tmp_path / "Documents" / "note.txt"
     assert dest.read_text() == "hello"
     assert not src.exists()
@@ -25,7 +25,7 @@ def test_move_into_never_overwrites(tmp_path):
     (tmp_path / "Documents" / "note.txt").write_text("original")
     src = tmp_path / "note.txt"
     src.write_text("new")
-    dest = move_into(src, tmp_path / "Documents", root=tmp_path)
+    dest = move_into(src, tmp_path / "Documents", root=tmp_path).destination
     assert dest.name == "note (1).txt"
     assert (tmp_path / "Documents" / "note.txt").read_text() == "original"
     assert dest.read_text() == "new"

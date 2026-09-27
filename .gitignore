@@ -21,3 +21,6 @@ config.local.toml
 .DS_Store
 .idea/
 .vscode/
+coverage.xml
+.locked.txt
+mutants/

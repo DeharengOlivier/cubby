@@ -2,12 +2,23 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
-from .base import Service, ServiceSpec
+from .. import state
+from .base import (
+    DEFAULT_LABEL,
+    Service,
+    ServiceError,
+    ServiceSpec,
+    require_success,
+    run_manager,
+    wait_until,
+)
 
 _UNIT_DIR = Path.home() / ".config" / "systemd" / "user"
+
+#: How long an installed agent has to reach "active".
+_START_TIMEOUT = 10.0
 
 _UNIT_TEMPLATE = """\
 [Unit]
@@ -19,10 +30,36 @@ Type=simple
 ExecStart={exec_start}
 Restart=on-failure
 RestartSec=5
+StandardOutput=append:{log}
+StandardError=append:{log}
 
 [Install]
 WantedBy=default.target
 """
+
+
+def quote_argument(arg: str) -> str:
+    """One argument as systemd's ``ExecStart=`` reads it back, unchanged.
+
+    systemd splits ``ExecStart=`` on whitespace, honors double quotes and C-style
+    backslash escapes, expands ``%`` specifiers and ``$VARIABLES``. So every
+    argument is double-quoted with ``\\`` and ``"`` escaped, a newline written
+    as ``\\n``, and ``%`` and ``$`` doubled, which is how systemd spells them
+    literally.
+    """
+    escaped = (
+        arg.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")  # a raw newline would end the ExecStart= line
+        .replace("%", "%%")
+        .replace("$", "$$")
+    )
+    return f'"{escaped}"'
+
+
+def _unit_path_value(path: Path) -> str:
+    """A path for ``StandardOutput=append:``, where specifiers still apply."""
+    return str(path).replace("%", "%%")
 
 
 class SystemdService(Service):
@@ -36,27 +73,41 @@ class SystemdService(Service):
     def unit_path(self, label: str) -> Path:
         return _UNIT_DIR / self._unit_name(label)
 
+    def is_running(self, label: str = DEFAULT_LABEL) -> bool:
+        try:
+            result = run_manager(["systemctl", "--user", "is-active", self._unit_name(label)])
+        except ServiceError:
+            return False
+        return result.returncode == 0 and result.stdout.strip() == "active"
+
     def install(self, spec: ServiceSpec) -> Path:
         _UNIT_DIR.mkdir(parents=True, exist_ok=True)
+        state.ensure_parent(spec.log_path)
         path = self.unit_path(spec.label)
-        exec_start = " ".join(spec.program_args)
-        path.write_text(_UNIT_TEMPLATE.format(exec_start=exec_start))
+        exec_start = " ".join(quote_argument(arg) for arg in spec.program_args)
+        path.write_text(
+            _UNIT_TEMPLATE.format(exec_start=exec_start, log=_unit_path_value(spec.log_path)),
+            encoding="utf-8",
+        )
 
         unit = self._unit_name(spec.label)
-        subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, check=False)
-        subprocess.run(
-            ["systemctl", "--user", "enable", "--now", unit], capture_output=True, check=False
-        )
+        require_success(["systemctl", "--user", "daemon-reload"])
+        require_success(["systemctl", "--user", "enable", unit])
+        # restart, not start: a reinstall must pick up the new command line.
+        require_success(["systemctl", "--user", "restart", unit])
+        if not wait_until(lambda: self.is_running(spec.label), _START_TIMEOUT):
+            raise ServiceError(
+                f"{unit} was installed but is not running; "
+                f"see `systemctl --user status {unit}` and {spec.log_path}"
+            )
         return path
 
-    def uninstall(self, label: str = "com.cubby.agent") -> bool:
+    def uninstall(self, label: str = DEFAULT_LABEL) -> bool:
         path = self.unit_path(label)
         if not path.exists():
             return False
         unit = self._unit_name(label)
-        subprocess.run(
-            ["systemctl", "--user", "disable", "--now", unit], capture_output=True, check=False
-        )
+        require_success(["systemctl", "--user", "disable", "--now", unit])
         path.unlink()
-        subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, check=False)
+        require_success(["systemctl", "--user", "daemon-reload"])
         return True

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import sys
 import tomllib
@@ -10,15 +11,18 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
+from .adapters import state
 from .adapters.config import find_user_config, load_config
 from .adapters.extraction import PARSABLE
 from .adapters.journal import Journal
-from .adapters.logging import DEFAULT_LOG, file_logger
-from .adapters.service import ServiceSpec, detect_service, get_service
+from .adapters.ledger import Ledger
+from .adapters.lock import exclusive
+from .adapters.logging import LevelLogger, file_logger, human_line, read_tail
+from .adapters.service import ServiceError, ServiceSpec, detect_service, get_service
 from .adapters.ui import Palette, banner, supports_color
-from .app.report import render_json, render_plan
+from .app.report import SortOutcome, render_json, render_plan
 from .app.sorter import Sorter
-from .app.undo import undo_last_run
+from .app.undo import undo_run
 from .app.watcher import Watcher
 from .domain.category import Config
 from .domain.duration import format_duration
@@ -72,53 +76,94 @@ def _require_source(config: Config) -> str | None:
     return None
 
 
-def cmd_plan(args: argparse.Namespace) -> int:
-    config = _load(args)
+def _source_error(config: Config) -> bool:
+    """Print why the source folder is unusable, if it is. True means stop."""
     if error := _require_source(config):
         print(f"cubby: {error}", file=sys.stderr)
-        return 1
-    outcomes = Sorter(config).sort_once(apply=False, respect_age=False)
-    if getattr(args, "json", False):
-        print(render_json(outcomes, applied=False))
-        return 0
+        return True
+    return False
+
+
+def _loud(log: LevelLogger) -> LevelLogger:
+    """A logger whose warnings and errors also reach stderr, whatever the verbosity."""
+
+    def log_and_tell(message: str, *, level: str = "INFO") -> None:
+        log(message, level=level)
+        if level != "INFO":
+            print(f"cubby: {level.lower()}: {message}", file=sys.stderr)
+
+    return log_and_tell
+
+
+def _print_outcomes(outcomes: list[SortOutcome], *, applied: bool) -> None:
     pal = _palette()
     if pal.enabled:
         print(banner(pal))
-    print(render_plan(outcomes, applied=False, palette=pal))
-    return 0
+    print(render_plan(outcomes, applied=applied, palette=pal))
+
+
+def cmd_plan(args: argparse.Namespace) -> int:
+    config = _load(args)
+    if _source_error(config):
+        return EXIT_FAILED
+    outcomes = Sorter(config).sort_once(apply=False, respect_age=False)
+    if getattr(args, "json", False):
+        print(render_json(outcomes, applied=False))
+        return EXIT_OK
+    _print_outcomes(outcomes, applied=False)
+    return EXIT_OK
 
 
 def cmd_run(args: argparse.Namespace) -> int:
     config = _load(args)
-    if error := _require_source(config):
-        print(f"cubby: {error}", file=sys.stderr)
-        return 1
+    if _source_error(config):
+        return EXIT_FAILED
     log = file_logger(echo=args.verbose)
+    loud = _loud(log)
 
     def warn(message: str) -> None:
-        """Reach the user whatever the verbosity: this is not routine output."""
-        log(message, level="WARNING")
-        print(f"cubby: warning: {message}", file=sys.stderr)
+        loud(message, level="WARNING")
 
-    outcomes = Sorter(config, log=log, warn=warn, journal=Journal()).sort_once(apply=True)
-    pal = _palette()
-    if pal.enabled:
-        print(banner(pal))
-    print(render_plan(outcomes, applied=True, palette=pal))
-    return 0
+    sorter = Sorter(config, log=log, warn=warn, journal=Journal(), ledger=Ledger())
+    with exclusive():
+        outcomes = sorter.sort_once(apply=True)
+    _print_outcomes(outcomes, applied=True)
+    return EXIT_FAILED if any(o.error for o in outcomes) else EXIT_OK
 
 
 def cmd_undo(args: argparse.Namespace) -> int:
-    restored = undo_last_run(Journal(), log=print)
-    print(f"Restored {restored} file(s).")
-    return 0
+    with exclusive():
+        try:
+            result = undo_run(Journal(), getattr(args, "run", None), log=print)
+        except KeyError:
+            print(f"cubby: no run {args.run!r} in the journal", file=sys.stderr)
+            return EXIT_FAILED
+    print(f"Restored {result.restored} file(s).")
+    if result.failed:
+        print(
+            f"cubby: {len(result.failed)} file(s) could not be restored and stay pending; "
+            "run 'cubby undo' again once the cause is fixed.",
+            file=sys.stderr,
+        )
+        return EXIT_FAILED
+    return EXIT_OK
 
 
 def cmd_watch(args: argparse.Namespace) -> int:
     config = _load(args)
-    log = file_logger(echo=True)
-    sorter = Sorter(config, log=log)
-    watcher = Watcher(sorter, config.settings.interval, log=log)
+    if _source_error(config):
+        return EXIT_FAILED
+    # Under launchd or systemd, stdout is appended to the log file already
+    # written by the logger: echo only to a person at a terminal.
+    log = file_logger(echo=sys.stdout.isatty())
+    loud = _loud(log) if sys.stderr.isatty() else log
+
+    def warn(message: str) -> None:
+        loud(message, level="WARNING")
+
+    ledger = Ledger()
+    sorter = Sorter(config, log=log, warn=warn, journal=Journal(), ledger=ledger, mode="watch")
+    watcher = Watcher(sorter, config.settings.interval, log=loud, ledger=ledger)
     log(
         f"cubby watching {config.settings.source} "
         f"(delay {format_duration(config.settings.delay)}, "
@@ -128,7 +173,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
         watcher.run()
     except KeyboardInterrupt:
         log("cubby stopped")
-    return 0
+    return EXIT_OK
 
 
 def _program_args(args: argparse.Namespace) -> list[str]:
@@ -157,24 +202,27 @@ def _program_args(args: argparse.Namespace) -> list[str]:
 
 def cmd_install(args: argparse.Namespace) -> int:
     config = _load(args)
+    if _source_error(config):
+        return EXIT_FAILED
     service = get_service()
-    spec = ServiceSpec(program_args=_program_args(args), log_path=DEFAULT_LOG)
+    log_path = state.log_path()
+    spec = ServiceSpec(program_args=_program_args(args), log_path=log_path)
     path = service.install(spec)
-    print(f"Installed {service.name} agent: {path}")
+    print(f"Installed {service.name} agent: {path} (running)")
     print(
         f"Cubby will watch {config.settings.source} "
-        f"(delay {format_duration(config.settings.delay)}). Logs: {DEFAULT_LOG}"
+        f"(delay {format_duration(config.settings.delay)}). Logs: {log_path}"
     )
-    return 0
+    return EXIT_OK
 
 
 def cmd_uninstall(args: argparse.Namespace) -> int:
     service = detect_service()
     if service is None or not service.uninstall():
         print("No cubby agent was installed.")
-        return 0
+        return EXIT_OK
     print(f"Removed the {service.name} agent.")
-    return 0
+    return EXIT_OK
 
 
 def _kv(pal: Palette, key: str, value: str) -> None:
@@ -189,21 +237,80 @@ def _features(pal: Palette, mapping: dict[str, bool]) -> str:
     return "  ".join(parts)
 
 
-def cmd_status(args: argparse.Namespace) -> int:
-    pal = _palette()
+def _age(seconds: float) -> str:
+    return format_duration(max(0, round(seconds))) + " ago"
+
+
+def _agent_state() -> dict[str, Any]:
+    """What the service manager and the heartbeat say about the agent."""
     service = detect_service()
     installed = bool(service and service.is_installed())
-    _kv(pal, "agent", pal.green("running") if installed else pal.yellow("not installed"))
-    if service and installed:
-        _kv(pal, "agent file", str(service.unit_path("com.cubby.agent")))
-    if DEFAULT_LOG.exists():
-        tail = DEFAULT_LOG.read_text("utf-8", "ignore").splitlines()[-5:]
-        _kv(pal, "recent log", pal.dim(str(DEFAULT_LOG)))
-        for line in tail:
-            print(f"  {pal.dim(line)}")
+    running = bool(service and installed and service.is_running())
+    beat = Ledger().heartbeat()
+    stale_after = max(3 * beat.interval, 120.0) if beat else None
+    age = beat.age_seconds() if beat else None
+    return {
+        "manager": service.name if service else None,
+        "installed": installed,
+        "running": running,
+        "unit": str(service.unit_path("com.cubby.agent")) if service and installed else None,
+        "last_pass_age": age,
+        "stale": bool(beat and age is not None and stale_after and age > stale_after),
+        "watching": beat.source if beat else None,
+    }
+
+
+def _agent_text(pal: Palette, agent: dict[str, Any]) -> str:
+    if not agent["installed"]:
+        return pal.yellow("not installed")
+    if agent["running"]:
+        return pal.green(f"running ({agent['manager']})")
+    return pal.yellow(f"installed but not running ({agent['manager']})")
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    agent = _agent_state()
+    runs = Ledger().runs(limit=1)
+    last = runs[0] if runs else None
+    healthy = not agent["installed"] or (agent["running"] and not agent["stale"])
+
+    if getattr(args, "json", False):
+        payload = {
+            "version": 1,
+            "healthy": healthy,
+            "agent": agent,
+            "last_run": last.to_json() if last else None,
+            "log": str(state.log_path()),
+        }
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return EXIT_OK if healthy else EXIT_FAILED
+
+    pal = _palette()
+    _kv(pal, "agent", _agent_text(pal, agent))
+    if agent["unit"]:
+        _kv(pal, "agent file", agent["unit"])
+    if agent["watching"]:
+        _kv(pal, "watching", agent["watching"])
+    if agent["last_pass_age"] is None:
+        _kv(pal, "last pass", pal.dim("never"))
     else:
-        _kv(pal, "recent log", pal.dim("(none yet)"))
-    return 0
+        text = _age(agent["last_pass_age"])
+        _kv(pal, "last pass", pal.yellow(text + " (stale)") if agent["stale"] else text)
+    if last is None:
+        _kv(pal, "last run", pal.dim("none recorded"))
+    else:
+        summary = f"{last.finished}  moved {last.moved}"
+        if last.failed:
+            summary += pal.yellow(f", {last.failed} failed")
+        _kv(pal, "last run", f"{summary}  ({last.mode}, run {last.run})")
+        for failure in last.failures[:5]:
+            print(f"  {failure.file}  {pal.dim(failure.error)}")
+    log_path = state.log_path()
+    tail = read_tail(log_path, limit=5)
+    _kv(pal, "recent log", pal.dim(str(log_path)) if tail else pal.dim("(none yet)"))
+    for record in tail:
+        print(f"  {pal.dim(human_line(record) if 'ts' in record else record['msg'])}")
+    return EXIT_OK if healthy else EXIT_FAILED
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -215,6 +322,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     _kv(pal, "service", service.name if service else pal.yellow("none (manual watch only)"))
     _kv(pal, "config file", str(find_user_config() or "defaults only"))
     _kv(pal, "source", str(config.settings.source))
+    _kv(pal, "state", str(state.state_dir()))
+    _kv(pal, "log", str(state.log_path()))
     tools = {name: bool(shutil.which(name)) for name in ("pdftotext", "textutil", "antiword")}
     libs = {}
     for lib in ("pypdf", "docx", "openpyxl"):
@@ -267,10 +376,14 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common_flags(p_watch)
     p_watch.set_defaults(func=cmd_watch)
 
-    p_undo = sub.add_parser("undo", help="revert the most recent run")
+    p_undo = sub.add_parser("undo", help="revert the most recent run (or --run ID)")
+    p_undo.add_argument("--run", help="the run to revert, as listed by 'cubby history'")
     p_undo.set_defaults(func=cmd_undo)
 
-    p_status = sub.add_parser("status", help="show whether the agent runs and recent activity")
+    p_status = sub.add_parser(
+        "status", help="is the agent running, and what did it do last (exit 1 if unhealthy)"
+    )
+    p_status.add_argument("--json", action="store_true", help="output the status as JSON")
     p_status.set_defaults(func=cmd_status)
 
     p_install = sub.add_parser("install", help="install the background agent (auto-start)")
@@ -317,6 +430,9 @@ def main(argv: list[str] | None = None) -> int:
         # would not tell the user which line of their file to correct.
         print(f"cubby: config error: {exc}", file=sys.stderr)
         return EXIT_BAD_CONFIG
+    except ServiceError as exc:
+        print(f"cubby: {exc}", file=sys.stderr)
+        return EXIT_FAILED
     except OSError as exc:
         print(f"cubby: {exc}", file=sys.stderr)
         return EXIT_FAILED

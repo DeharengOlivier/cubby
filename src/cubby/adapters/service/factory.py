@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 import sys
 
-from .base import Service
+from .base import Service, ServiceError
 from .launchd import LaunchdService
 from .systemd import SystemdService
 
@@ -20,10 +20,14 @@ def detect_service() -> Service | None:
 
 
 def get_service() -> Service:
-    """Like :func:`detect_service` but raises a helpful error when unsupported."""
+    """Like :func:`detect_service` but raises a helpful error when unsupported.
+
+    Raises:
+        ServiceError: No supported service manager is available.
+    """
     service = detect_service()
     if service is None:
-        raise RuntimeError(
+        raise ServiceError(
             "no supported service manager found (need launchd on macOS or "
             "systemd on Linux). Run `cubby watch` manually, e.g. under nohup or tmux."
         )

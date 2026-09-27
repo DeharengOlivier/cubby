@@ -132,7 +132,7 @@ def test_move_into_still_accepts_a_destination_inside_the_root(tmp_path):
     source = tmp_path / "downloads"
     path = _aged_file(source)
 
-    destination = move_into(path, source / "Documents" / "2026-08", root=source)
+    destination = move_into(path, source / "Documents" / "2026-08", root=source).destination
 
     assert destination == source / "Documents" / "2026-08" / "report.pdf"
     assert destination.is_file()

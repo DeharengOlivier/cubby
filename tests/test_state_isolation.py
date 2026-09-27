@@ -13,33 +13,32 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cubby.adapters import journal as journal_module
-from cubby.adapters import logging as logging_module
-from cubby.adapters.journal import Journal
+from cubby.adapters import state
+from cubby.adapters.journal import Entry, Journal
 from cubby.adapters.logging import file_logger
 
 
 def _real_home_paths() -> list[Path]:
     return [
         Path.home() / ".local" / "state" / "cubby" / "journal.jsonl",
+        Path.home() / ".local" / "state" / "cubby" / "runs.jsonl",
+        Path.home() / ".local" / "state" / "cubby" / "cubby.log",
         Path.home() / "Library" / "Logs" / "cubby.log",
     ]
 
 
-def test_the_default_journal_is_redirected_away_from_home():
-    default = journal_module.DEFAULT_JOURNAL
-    assert Path.home() not in default.parents, default
-    assert Journal().path == default
+def test_the_state_folder_is_redirected_away_from_home():
+    assert Path.home() not in state.state_dir().parents
+    assert Journal().path.parent == state.state_dir()
 
 
-def test_the_default_log_is_redirected_away_from_home():
-    default = logging_module.DEFAULT_LOG
-    assert Path.home() not in default.parents, default
+def test_the_log_is_redirected_away_from_home():
+    assert Path.home() not in state.log_path().parents
 
 
-def test_writing_a_run_lands_in_the_redirected_journal():
+def test_writing_a_move_lands_in_the_redirected_journal():
     journal = Journal()
-    journal.record_run([(Path("/from/a.txt"), Path("/to/a.txt"))])
+    journal.record(Entry("r1", 0, "move", Path("/from/a.txt"), Path("/to/a.txt")))
     assert journal.path.exists()
     assert Path.home() not in journal.path.parents
 
@@ -47,7 +46,7 @@ def test_writing_a_run_lands_in_the_redirected_journal():
 def test_logging_lands_in_the_redirected_file():
     log = file_logger()
     log("a line from the test suite")
-    assert logging_module.DEFAULT_LOG.read_text("utf-8").strip().endswith("test suite")
+    assert "test suite" in state.log_path().read_text("utf-8")
 
 
 def test_this_session_wrote_nothing_to_the_real_state_files(tmp_path_factory):

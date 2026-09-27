@@ -1,31 +1,91 @@
-"""Append-only move journal so a sort run can be undone.
+"""Append-only move journal, so that every move cubby makes can be undone.
 
-Each run is one JSON line: a timestamp and the list of ``{from, to}`` moves it
-made. ``cubby undo`` replays the most recent line in reverse.
+This is the only way back from an automated operation on the user's files, so
+it is built to survive the crash it exists for.
 
-This is the only way back from an automated, destructive operation, so it is
-built to survive the crash it exists for:
+Format (version 2), one JSON object per line, appended as each move happens::
 
-- a run interrupted mid-append leaves a partial last line, which is skipped
-  rather than crashing the read;
-- rewriting the file (dropping a consumed run) is staged and swapped, so an
-  interrupted drop leaves the whole journal intact;
-- a recording that fails still never aborts the sort (the files have already
-  moved by then), but it warns instead of vanishing, because moving files with
-  no way back is not something to do quietly.
+    {"v": 2, "run": "<id>", "seq": 0, "op": "move",   "from": "...", "to": "..."}
+    {"v": 2, "run": "<id>", "seq": 1, "op": "dedupe", "from": "...", "to": "..."}
+    {"v": 2, "run": "<id>", "seq": 0, "op": "restored"}
+    {"v": 2, "run": "<id>", "seq": 1, "op": "gone"}
+
+- A move is recorded right after it happens, not at the end of the run, so a
+  run that fails or is killed part way still leaves every completed move
+  undoable.
+- ``dedupe`` records a duplicate that was deleted because a byte-identical copy
+  already sat at ``to``; undoing it copies ``to`` back to ``from``.
+- Undo never rewrites history: it appends ``restored`` (put back) or ``gone``
+  (nothing left to put back) for each entry it settles. An entry that failed to
+  restore stays pending, so the next ``cubby undo`` retries it.
+- Version 1 lines (``{"ts": ..., "moves": [...]}``, one line per run, written
+  by cubby 0.1) are still read, as runs of plain moves.
+- A damaged line (a crash mid-append) is skipped, never fatal.
+- The file is bounded: past :data:`MAX_BYTES` the oldest runs are dropped.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+import secrets
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Literal
 
-DEFAULT_JOURNAL = Path.home() / ".local" / "state" / "cubby" / "journal.jsonl"
+from . import state
 
-Move = tuple[Path, Path]  # (source_before, destination_after)
+VERSION = 2
+MAX_BYTES = 5_000_000
+KEEP_RUNS = 200
+
+MoveOp = Literal["move", "dedupe"]
+Resolution = Literal["restored", "gone"]
 Warn = Callable[[str], None]
+
+
+def default_journal_path() -> Path:
+    return state.state_dir() / "journal.jsonl"
+
+
+def new_run_id() -> str:
+    """A sortable, unique identifier for one sort run."""
+    return f"{datetime.now():%Y%m%dT%H%M%S}-{secrets.token_hex(2)}"
+
+
+@dataclass(frozen=True)
+class Entry:
+    """One recorded move of a run."""
+
+    run: str
+    seq: int
+    op: MoveOp
+    source: Path  # where the file was before the run
+    destination: Path  # where the run put it (or the kept copy, for dedupe)
+
+
+@dataclass(frozen=True)
+class Settlement:
+    """An undo's verdict on one entry."""
+
+    run: str
+    seq: int
+    resolution: Resolution
+
+
+@dataclass
+class Run:
+    """A run as read back from the journal."""
+
+    run_id: str
+    entries: list[Entry] = field(default_factory=list)
+    settled: dict[int, Resolution] = field(default_factory=dict)
+
+    @property
+    def pending(self) -> list[Entry]:
+        """Entries not yet restored or given up on, in the order they happened."""
+        return [e for e in self.entries if e.seq not in self.settled]
 
 
 def _ignore(_: str) -> None:
@@ -33,90 +93,121 @@ def _ignore(_: str) -> None:
 
 
 class Journal:
-    def __init__(self, path: Path | None = None):
-        # Resolve the default at call time so it can be patched in tests.
-        self.path = path or DEFAULT_JOURNAL
+    def __init__(self, path: Path | None = None) -> None:
+        self.path = path or default_journal_path()
 
-    def record_run(self, moves: list[Move], *, warn: Warn = _ignore) -> bool:
-        """Append one run to the journal.
+    # --- writing -------------------------------------------------------------
 
-        Args:
-            moves: The moves the run made, in the order it made them.
-            warn: Called with a human-readable message if the run could not be
-                recorded. The sort is never aborted: the files have already
-                moved, and losing the journal as well as the sort is worse.
+    def _append(self, record: dict[str, Any]) -> None:
+        state.append_line(self.path, json.dumps({"v": VERSION, **record}, ensure_ascii=False))
 
-        Returns:
-            True if the run was recorded and can be undone.
+    def record(self, entry: Entry) -> None:
+        """Append one move, right after it happened.
+
+        Raises:
+            OSError: The journal could not be written.
         """
-        if not moves:
-            return True
-        entry = {
-            "ts": datetime.now().isoformat(timespec="seconds"),
-            "moves": [{"from": str(src), "to": str(dst)} for src, dst in moves],
-        }
-        try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            with self.path.open("a", encoding="utf-8") as handle:
-                handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        except OSError as exc:
-            warn(
-                f"could not write the undo journal at {self.path} ({exc}). "
-                f"{len(moves)} file(s) were moved and 'cubby undo' will not be "
-                "able to put them back."
-            )
-            return False
-        return True
+        self._append(
+            {
+                "run": entry.run,
+                "seq": entry.seq,
+                "op": entry.op,
+                "from": str(entry.source),
+                "to": str(entry.destination),
+            }
+        )
 
-    def _lines(self) -> list[str]:
-        try:
-            raw = self.path.read_text("utf-8")
-        except OSError:
-            return []
-        return [line for line in raw.splitlines() if line.strip()]
+    def settle(self, entry: Entry, resolution: Resolution) -> None:
+        """Mark ``entry`` as dealt with by an undo.
 
-    @staticmethod
-    def _parse(line: str) -> list[Move] | None:
-        """Return the moves in ``line``, or None if it is damaged."""
-        try:
-            entry = json.loads(line)
-            return [(Path(m["from"]), Path(m["to"])) for m in entry["moves"]]
-        except (json.JSONDecodeError, KeyError, TypeError):
-            return None
-
-    def last_run(self) -> list[Move] | None:
-        """The most recent complete run, or None if there is none.
-
-        A line left half-written by an interrupted run is skipped, so a crash
-        during recording costs the run that was in flight and nothing before it.
+        Raises:
+            OSError: The journal could not be written.
         """
-        for line in reversed(self._lines()):
-            moves = self._parse(line)
-            if moves is not None:
-                return moves
-        return None
+        self._append({"run": entry.run, "seq": entry.seq, "op": resolution})
 
-    def drop_last_run(self) -> None:
-        """Remove the most recent complete run, and any damage after it.
-
-        Staged and swapped rather than written in place: an interrupted drop
-        must not be able to truncate the journal.
+    def compact(self) -> None:
+        """Drop the oldest runs once the file passes :data:`MAX_BYTES`.
 
         Raises:
             OSError: The journal could not be rewritten. It is left untouched.
         """
-        lines = self._lines()
-        for index in range(len(lines) - 1, -1, -1):
-            if self._parse(lines[index]) is not None:
-                kept = lines[:index]
-                break
-        else:
-            return
-
-        staging = self.path.with_name(self.path.name + ".staging")
-        staging.write_text("".join(line + "\n" for line in kept), encoding="utf-8")
         try:
-            staging.replace(self.path)
-        except OSError:
-            staging.unlink(missing_ok=True)
-            raise
+            if self.path.stat().st_size <= MAX_BYTES:
+                return
+        except FileNotFoundError:
+            return
+        lines = state.read_lines(self.path)
+        order: list[str] = []
+        for line in lines:
+            run_id = _run_of(line)
+            if run_id and run_id not in order:
+                order.append(run_id)
+        keep = set(order[-KEEP_RUNS:])
+        kept = [line for line in lines if _run_of(line) in keep]
+        state.replace_text(self.path, "".join(line + "\n" for line in kept))
+
+    # --- reading -------------------------------------------------------------
+
+    def runs(self) -> list[Run]:
+        """Every run in the journal, oldest first.
+
+        Raises:
+            OSError: The journal exists but cannot be read.
+        """
+        runs: dict[str, Run] = {}
+        for index, line in enumerate(state.read_lines(self.path)):
+            for item in _parse(line, index):
+                run = runs.setdefault(item.run, Run(item.run))
+                if isinstance(item, Entry):
+                    run.entries.append(item)
+                else:
+                    run.settled[item.seq] = item.resolution
+        return [run for run in runs.values() if run.entries]
+
+    def run(self, run_id: str) -> Run | None:
+        return next((r for r in self.runs() if r.run_id == run_id), None)
+
+    def last_pending_run(self) -> Run | None:
+        """The most recent run with something left to undo."""
+        return next((r for r in reversed(self.runs()) if r.pending), None)
+
+
+def _run_of(line: str) -> str | None:
+    try:
+        record = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(record, dict):
+        return None
+    run = record.get("run")
+    return run if isinstance(run, str) else None
+
+
+def _parse(line: str, index: int) -> Iterator[Entry | Settlement]:
+    """Yield the entries or settlements one line holds.
+
+    Anything malformed yields nothing: a damaged line costs that line only.
+    """
+    try:
+        record = json.loads(line)
+    except json.JSONDecodeError:
+        return
+    if not isinstance(record, dict):
+        return
+    try:
+        if "moves" in record and "v" not in record:  # version 1: one line per run
+            run_id = f"v1-{index:06d}"
+            for seq, move in enumerate(record["moves"]):
+                yield Entry(run_id, seq, "move", Path(move["from"]), Path(move["to"]))
+            return
+        if record.get("v") != VERSION:
+            return
+        op = record["op"]
+        if op in ("move", "dedupe"):
+            yield Entry(
+                str(record["run"]), int(record["seq"]), op, Path(record["from"]), Path(record["to"])
+            )
+        elif op in ("restored", "gone"):
+            yield Settlement(str(record["run"]), int(record["seq"]), op)
+    except (KeyError, TypeError, ValueError):
+        return

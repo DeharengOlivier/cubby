@@ -1,4 +1,4 @@
-from cubby.adapters.journal import Journal
+from cubby.adapters.journal import Entry, Journal
 from cubby.app.sorter import Sorter
 from cubby.app.undo import undo_last_run
 from cubby.domain.category import Category, Config, Settings
@@ -16,9 +16,11 @@ def _config(tmp_path):
 
 def test_journal_round_trip(tmp_path):
     journal = Journal(tmp_path / "journal.jsonl")
-    journal.record_run([(tmp_path / "a.txt", tmp_path / "Documents" / "a.txt")])
-    last = journal.last_run()
-    assert last == [(tmp_path / "a.txt", tmp_path / "Documents" / "a.txt")]
+    entry = Entry("r1", 0, "move", tmp_path / "a.txt", tmp_path / "Documents" / "a.txt")
+    journal.record(entry)
+    last = journal.last_pending_run()
+    assert last is not None
+    assert last.pending == [entry]
 
 
 def test_run_then_undo_restores_files(tmp_path):

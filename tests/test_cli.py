@@ -27,10 +27,7 @@ def test_doctor_runs(capsys):
     assert "service" in out
 
 
-def test_run_then_undo_via_cli(tmp_path, capsys, monkeypatch):
-    from cubby.adapters import journal as journal_mod
-
-    monkeypatch.setattr(journal_mod, "DEFAULT_JOURNAL", tmp_path / "journal.jsonl")
+def test_run_then_undo_via_cli(tmp_path, capsys):
     (tmp_path / "Invoice-1.pdf").write_text("x")
 
     main(["run", "--source", str(tmp_path), "--delay", "0", "--no-content"])
