@@ -25,7 +25,11 @@ skip_ext = ["crdownload", "part"]  # in-progress download extensions to ignore
 month_style = "numeric"    # invoice subfolder style: "numeric" (2026-07) or "letters"
 month_lang = "fr"          # letters language: "fr" (juillet 2026) or "en" (July 2026)
 vendors = ["spotify", "ovh"]  # known vendors, matched first when renaming invoices
+ignore = ["*.torrent", "keep-*"]  # file names cubby never touches (globs, any case)
 ```
+
+`ignore` patterns match the file name, not a path, and are case-insensitive.
+`cubby explain FILE` tells you when a pattern is what keeps a file in place.
 
 `month_style` and `month_lang` can also be set per run with `--month-style`
 and `--month-lang`; `cubby install` bakes them into the background agent.

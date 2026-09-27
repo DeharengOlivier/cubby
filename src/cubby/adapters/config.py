@@ -39,6 +39,38 @@ def user_config_candidates() -> list[Path]:
     return candidates
 
 
+def default_user_config_path() -> Path:
+    """Where ``cubby init`` writes, and the first place looked for a config."""
+    env = os.environ.get("CUBBY_CONFIG")
+    return Path(env).expanduser() if env else Path.home() / ".config" / "cubby" / "config.toml"
+
+
+_STARTER_HEADER = """\
+# Cubby configuration, written by `cubby init`.
+#
+# Edit freely: categories are tried top to bottom within each stage, so put the
+# most specific ones first. `cubby plan` previews the result and `cubby explain
+# FILE` says which rule decides a given file. Reference: docs/configuration.md.
+"""
+
+
+def write_starter_config(path: Path, *, force: bool = False) -> Path:
+    """Write a starter config (the packaged defaults, annotated) to ``path``.
+
+    Raises:
+        FileExistsError: ``path`` exists and ``force`` is false.
+        OSError: The file could not be written.
+    """
+    body = default_config_path().read_text(encoding="utf-8")
+    # Drop the packaged file's own header comment; the starter has its own.
+    body = body[body.index("[settings]") :]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    mode = "w" if force else "x"
+    with path.open(mode, encoding="utf-8") as handle:
+        handle.write(_STARTER_HEADER + "\n" + body)
+    return path
+
+
 def find_user_config() -> Path | None:
     for candidate in user_config_candidates():
         if candidate.is_file():
@@ -76,6 +108,7 @@ def _build_settings(raw: dict[str, Any]) -> Settings:
         month_style=str(raw.get("month_style", defaults.month_style)),
         month_lang=str(raw.get("month_lang", defaults.month_lang)),
         vendors=tuple(raw.get("vendors", defaults.vendors)),
+        ignore=raw.get("ignore", defaults.ignore),
     )
 
 

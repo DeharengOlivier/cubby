@@ -20,6 +20,7 @@ from .category import Config
 from .file_ref import Decision, FileRef, Stage
 
 _CompiledRules = list[tuple[str, list[re.Pattern[str]]]]
+_Match = tuple[str, str]  # (category, the pattern that matched)
 
 # A stem made only of a UUID or a long digit run carries no human signal. We
 # skip the filename stage for these so a spurious substring (say "ad" inside a
@@ -53,10 +54,11 @@ class Engine:
                         self._strong_ext.setdefault(ext, category.name)
 
     @staticmethod
-    def _first_match(text: str, rules: _CompiledRules) -> str | None:
+    def _first_match(text: str, rules: _CompiledRules) -> _Match | None:
         for name, patterns in rules:
-            if any(p.search(text) for p in patterns):
-                return name
+            for pattern in patterns:
+                if pattern.search(text):
+                    return name, pattern.pattern
         return None
 
     def classify(self, ref: FileRef) -> Decision:
@@ -64,23 +66,23 @@ class Engine:
 
         # Stage 0: decisive extensions.
         if ext in self._strong_ext:
-            return Decision(self._strong_ext[ext], Stage.STRONG_EXT)
+            return Decision(self._strong_ext[ext], Stage.STRONG_EXT, f"extension .{ext}")
 
         # Stage 1: filename (skipped for cryptic stems).
         if not _CRYPTIC.match(ref.stem):
-            cat = self._first_match(ref.name, self._name)
-            if cat:
-                return Decision(cat, Stage.NAME)
+            match = self._first_match(ref.name, self._name)
+            if match:
+                return Decision(match[0], Stage.NAME, f"name matches {match[1]!r}")
 
         # Stage 2: content.
         if self._config.settings.content_scan and self._content and ref.is_file:
-            cat = self._first_match(ref.text(), self._content)
-            if cat:
-                return Decision(cat, Stage.CONTENT)
+            match = self._first_match(ref.text(), self._content)
+            if match:
+                return Decision(match[0], Stage.CONTENT, f"content matches {match[1]!r}")
 
         # Stage 3: type fallback.
         for name, extensions in self._ext:
             if ext in extensions:
-                return Decision(name, Stage.TYPE)
+                return Decision(name, Stage.TYPE, f"extension .{ext}")
 
         return Decision(self._config.settings.unsorted_dir, Stage.UNSORTED)

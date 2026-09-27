@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added (features)
+- `cubby explain FILE...`: where each file would go, the rule that decides it,
+  the rename, and why a run would leave it alone. Moves nothing. `--json`.
+- `cubby history`: recent runs with their counts and whether each was undone,
+  so `cubby undo --run ID` has something to point at. `--json`.
+- `cubby init`: writes a starter config that loads cleanly; never overwrites
+  without `--force`.
+- `ignore` setting: glob patterns (case-insensitive) of file names cubby never
+  touches.
+- `cubby plan --json` items carry the deciding rule.
+
 ### Fixed (audit 1, docs/audits/2026-09-28-audit-1.md)
 - Files sorted by the background agent can be undone. `cubby watch` never
   wrote to the undo journal, so everything the agent moved was out of reach of

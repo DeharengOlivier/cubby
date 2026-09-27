@@ -8,6 +8,9 @@
 | `cubby run`       | Sort the folder once. Only files older than `--delay` are moved. |
 | `cubby watch`     | Run the sort loop in the foreground. Ctrl-C to stop.     |
 | `cubby undo`      | Reverse the most recent run, manual or agent, restoring files to where they were. `--run ID` picks an older run. |
+| `cubby explain FILE...` | Say where each file would go, which rule decides (`name matches 'invoice'`, `extension .dmg`...), the rename, and why a run would leave it alone (ignored, in progress, too recent). Moves nothing. `--json`. |
+| `cubby history`   | Recent runs, newest first: when, agent or manual, moved and failed counts, and whether undone. `-n N`, `--json`. |
+| `cubby init`      | Write a starter config (the defaults, annotated) to `~/.config/cubby/config.toml`. Never overwrites without `--force`. |
 | `cubby install`   | Register a background agent that runs `watch` and starts at login. |
 | `cubby uninstall` | Stop and remove the background agent.                    |
 | `cubby status`    | Whether the agent is really running (asked of launchd/systemd), when it last completed a pass, what its last run moved or failed, and the recent log. Exits 1 when an installed agent is not running or has stalled. `--json` for scripts. |

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import errno
+import fnmatch
 import hashlib
 import os
 import shutil
@@ -13,6 +14,7 @@ from pathlib import Path
 from typing import Literal
 
 from ..domain.category import Settings
+from ..domain.duration import format_duration
 from ..domain.file_ref import FileRef
 from ..domain.naming import safe_component
 from .extraction import extract_text
@@ -31,40 +33,61 @@ def build_ref(path: Path, max_bytes: int = 4000) -> FileRef:
     )
 
 
-def iter_candidates(settings: Settings, managed: frozenset[str] = frozenset()) -> Iterator[Path]:
-    """Yield top-level entries in the source folder that cubby may sort.
+def ignored_by(name: str, patterns: tuple[str, ...]) -> str | None:
+    """The first ``ignore`` pattern matching ``name`` (case-insensitive), if any."""
+    lowered = name.lower()
+    return next((p for p in patterns if fnmatch.fnmatchcase(lowered, p.lower())), None)
+
+
+def candidate_skip_reason(path: Path, settings: Settings, managed: frozenset[str]) -> str | None:
+    """Why cubby never considers ``path`` for sorting, or None if it does.
 
     Hidden entries, the ``_Unsorted`` folder and every managed category folder
-    are skipped so a sorted file is never picked up again on the next run.
+    are skipped so a sorted file is never picked up again on the next run;
+    names matching an ``ignore`` pattern are the user's to keep.
     """
+    if path.name.startswith("."):
+        return "hidden file"
+    if path.name in managed or path.name == settings.unsorted_dir:
+        return "a folder cubby files into"
+    if pattern := ignored_by(path.name, settings.ignore):
+        return f"ignored by pattern {pattern!r}"
+    return None
+
+
+def iter_candidates(settings: Settings, managed: frozenset[str] = frozenset()) -> Iterator[Path]:
+    """Yield top-level entries in the source folder that cubby may sort."""
     source = settings.source
     if not source.is_dir():
         return
-    skip = set(managed) | {settings.unsorted_dir}
     for entry in sorted(source.iterdir()):
-        if entry.name.startswith("."):
-            continue
-        if entry.name in skip:
-            continue
-        yield entry
+        if candidate_skip_reason(entry, settings, managed) is None:
+            yield entry
 
 
-def is_eligible(path: Path, settings: Settings, now: float | None = None) -> bool:
-    """True if ``path`` is settled enough to move.
+def not_yet_reason(path: Path, settings: Settings, now: float | None = None) -> str | None:
+    """Why ``path`` is not settled enough to move yet, or None if it is.
 
-    A file is eligible when it is not an in-progress download and its most
+    A file is settled when it is not an in-progress download and its most
     recent change is older than ``settings.delay`` (so a file still being
     written is left alone).
     """
     ext = path.suffix.lower().lstrip(".")
     if ext in settings.skip_ext:
-        return False
+        return f"download in progress (.{ext})"
     try:
         mtime = path.stat().st_mtime
-    except OSError:
-        return False
+    except OSError as exc:
+        return f"cannot be read ({exc.strerror or exc})"
     now = time.time() if now is None else now
-    return (now - mtime) >= settings.delay
+    if (now - mtime) < settings.delay:
+        return f"too recent: moves once it is {format_duration(settings.delay)} old"
+    return None
+
+
+def is_eligible(path: Path, settings: Settings, now: float | None = None) -> bool:
+    """True if ``path`` is settled enough to move (see :func:`not_yet_reason`)."""
+    return not_yet_reason(path, settings, now) is None
 
 
 def resolve_inside(root: Path, destination: Path) -> Path:

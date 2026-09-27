@@ -60,6 +60,7 @@ class Settings:
     month_style: str = "numeric"  # month/year folder style: "numeric" (2026-07) or "letters"
     month_lang: str = "fr"  # language for the letters style: "fr" (juillet) or "en" (July)
     vendors: tuple[str, ...] = ()  # known vendor names, matched first when renaming invoices
+    ignore: tuple[str, ...] = ()  # glob patterns (case-insensitive) of names never touched
 
     def __post_init__(self) -> None:
         """Validate every setting, wherever it came from.
@@ -97,6 +98,8 @@ class Settings:
                 f"month_lang must be one of: {', '.join(MONTH_LANGS)}. Got {self.month_lang!r}."
             )
 
+        object.__setattr__(self, "ignore", _check_ignore(self.ignore))
+
         source = Path(self.source)
         if source == Path(source.anchor) or source == Path.home():
             raise ValueError(
@@ -105,6 +108,30 @@ class Settings:
                 "is not something to do to a whole home directory or a filesystem "
                 "root."
             )
+
+
+def _check_ignore(patterns: object) -> tuple[str, ...]:
+    """Validate the ``ignore`` globs: a list of non-empty file-name patterns.
+
+    Raises:
+        ValueError: Not a list of strings, an empty pattern, or a path.
+    """
+    if isinstance(patterns, str) or not isinstance(patterns, (list, tuple)):
+        raise ValueError(
+            f"ignore must be a list of file-name patterns, got {patterns!r}. "
+            'Example: ignore = ["*.torrent", "keep-*"]'
+        )
+    checked: list[str] = []
+    for pattern in patterns:
+        if not isinstance(pattern, str) or not pattern.strip():
+            raise ValueError(f"ignore patterns must be non-empty text, got {pattern!r}.")
+        if "/" in pattern:
+            raise ValueError(
+                f"ignore patterns match a file name, not a path, got {pattern!r}. "
+                "Cubby only sorts the top level of its folder."
+            )
+        checked.append(pattern.strip())
+    return tuple(checked)
 
 
 @dataclass(frozen=True)
