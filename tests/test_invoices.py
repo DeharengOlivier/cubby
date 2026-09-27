@@ -147,3 +147,24 @@ def test_plan_placement_letters_style():
     )
     assert placement.subdir == "juillet 2026"
     assert placement.new_name == "ovh facture 2026-07-07.pdf"
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("spotify-facture.pdf", "spotify facture 2026-07-07.pdf"),
+        ("spotify-facture.PDF", "spotify facture 2026-07-07.pdf"),
+        ("spotify-facture", "spotify facture 2026-07-07"),
+        ("spotify.facture.tar.gz", "spotify facture 2026-07-07.gz"),
+        (".spotify", "spotify facture 2026-07-07"),
+    ],
+)
+def test_the_renamed_invoice_keeps_the_last_suffix_only(name, expected):
+    placement = plan_placement(
+        name=name,
+        text="Facture du 07/07/2026",
+        fallback_date=date(2020, 1, 1),
+        vendor_rename=True,
+        vendors=("spotify",),
+    )
+    assert placement.new_name == expected

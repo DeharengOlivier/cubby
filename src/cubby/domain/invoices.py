@@ -15,6 +15,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
+from pathlib import PurePath
 
 # --- Month names ----------------------------------------------------------
 
@@ -333,6 +334,6 @@ def plan_placement(
     if vendor_rename:
         vendor = detect_vendor(name, text, vendors)
         if vendor:
-            ext = name.rpartition(".")[2] if "." in name else ""
+            ext = PurePath(name).suffix
             new_name = invoice_filename(vendor, d, ext)
     return Placement(subdir=subdir, new_name=new_name)

@@ -57,3 +57,24 @@ def test_detect_service_selects_by_platform(monkeypatch):
 
     monkeypatch.setattr("shutil.which", lambda name: None)
     assert detect_service() is None
+
+
+def test_launchd_uninstall_removes_the_agent_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(launchd_mod, "_AGENTS_DIR", tmp_path / "LaunchAgents")
+    service = LaunchdService()
+    path = service.install(
+        ServiceSpec(program_args=["/bin/cubby", "watch"], log_path=tmp_path / "l")
+    )
+
+    assert service.uninstall() is True
+    assert not path.exists()
+
+
+def test_systemd_uninstall_removes_the_unit(tmp_path, monkeypatch):
+    monkeypatch.setattr(systemd_mod, "_UNIT_DIR", tmp_path / "user")
+    service = SystemdService()
+    path = service.install(ServiceSpec(program_args=["/bin/cubby", "watch"]))
+
+    assert service.uninstall() is True
+    assert not path.exists()
+    assert service.uninstall() is False

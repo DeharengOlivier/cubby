@@ -87,7 +87,7 @@ def test_every_external_command_is_given_a_timeout(monkeypatch, tmp_path):
 def test_a_tool_that_times_out_yields_nothing(monkeypatch, tmp_path, no_system_tools):
     monkeypatch.setattr(extraction.shutil, "which", lambda name: f"/usr/bin/{name}")
 
-    def timing_out(cmd, capture_output=False, timeout=None):
+    def timing_out(cmd, capture_output=False, timeout=None, check=False):
         raise subprocess.TimeoutExpired(cmd, timeout or 0)
 
     monkeypatch.setattr(extraction.subprocess, "run", timing_out)
@@ -225,3 +225,14 @@ def test_the_resolved_absolute_path_is_executed_not_a_bare_name(monkeypatch, tmp
 def test_a_tool_that_vanishes_between_lookup_and_use_is_survivable(monkeypatch, tmp_path):
     monkeypatch.setattr(extraction.shutil, "which", lambda name: None)
     assert extract_text(_file(tmp_path, "old.doc"), "doc") == ""
+
+
+@pytest.mark.parametrize("ext", ["html", "txt"])
+def test_an_unreadable_file_yields_nothing(monkeypatch, tmp_path, no_system_tools, ext):
+    path = _file(tmp_path, f"page.{ext}")
+
+    def refuse(*args, **kwargs):
+        raise PermissionError(13, "Permission denied", str(path))
+
+    monkeypatch.setattr(extraction.Path, "open", refuse)
+    assert extract_text(path, ext) == ""

@@ -45,10 +45,3 @@ must pass (lint, strict types, layering contracts, tests on macOS and Linux with
 90 % coverage of the changed lines, dependency and secret scanning) and the
 review conversation must be resolved. Administrators are not exempt.
 
-## Releasing
-
-1. Move the `Unreleased` entries of `CHANGELOG.md` under the new version and bump
-   `version` in `pyproject.toml` and `src/cubby/__init__.py`.
-2. Update `docs/READINESS.md` (release log and any status the release changes).
-3. Merge, then tag `vX.Y.Z` on `main`. The release workflow builds the wheel and
-   sdist from the tag and attaches them to a GitHub release.
