@@ -5,41 +5,89 @@ on:
     branches: [main]
   pull_request:
 
+# The token can read the code and nothing else. Jobs that need more ask for it.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  lint:
+    name: Lint, types and layering
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.12"
+      - name: Install (frozen)
+        run: uv sync --locked --all-extras
+      - name: Format
+        run: uv run --locked ruff format --check src tests benchmarks
+      - name: Lint
+        run: uv run --locked ruff check src tests benchmarks
+      - name: Type-check (strict)
+        run: uv run --locked mypy src
+      - name: Layering contracts
+        run: uv run --locked lint-imports
+      - name: Shell scripts
+        run: shellcheck install.sh uninstall.sh
+
   test:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
         python-version: ["3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # diff-cover compares against the base branch
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install
-        run: pip install -e ".[dev]"
-      - name: Lint
-        run: ruff check src tests
-      - name: Type-check
-        run: mypy src
+      - name: Install (frozen)
+        run: uv sync --locked --all-extras
       - name: Test
-        run: pytest --cov --cov-fail-under=90
+        run: uv run --locked pytest --cov --cov-report=xml --cov-fail-under=90
+      - name: Changed-code coverage
+        if: github.event_name == 'pull_request'
+        run: >-
+          uv run --locked diff-cover coverage.xml
+          --compare-branch=origin/${{ github.base_ref }} --fail-under=90
 
   security:
     name: Dependency and code scanning
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the secret scan reads the whole history
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.12"
-      - name: Install
+      - name: Install (frozen)
+        run: uv sync --locked --all-extras
+      - name: Known vulnerabilities in every locked dependency, extras included
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-      - name: Known vulnerabilities in dependencies
-        run: pip-audit --skip-editable
+          uv export --locked --all-extras --no-emit-project --format requirements-txt > locked.txt
+          uv run --locked pip-audit --strict --disable-pip --no-deps -r locked.txt
       - name: Static analysis
-        run: bandit -c pyproject.toml -r src -q
+        run: uv run --locked bandit -c pyproject.toml -r src -q
+      - name: Secrets in the full history
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"
+          echo "${GITLEAKS_SHA256}  ${archive}" | sha256sum --check --strict
+          tar -xzf "$archive" gitleaks
+          ./gitleaks git . --redact --no-banner --exit-code 1

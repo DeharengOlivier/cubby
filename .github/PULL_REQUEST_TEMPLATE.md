@@ -2,10 +2,14 @@
 
 Briefly, what does this change and why.
 
-## Checklist
+## Change profile
 
-- [ ] `ruff check src tests` passes
-- [ ] `ruff format --check src tests` passes
-- [ ] `pytest` passes
-- [ ] New behaviour is covered by a test
-- [ ] Docs / CHANGELOG updated if user-facing
+- Type: feature / fix / docs / CI / dependency
+- Surfaces touched: filesystem moves, journal, service manager, extraction, config, CI
+
+## Evidence
+
+- [ ] `make check` passes locally
+- [ ] Behavior changes are covered by a test; a bug fix has a reproducer that failed first
+- [ ] `docs/READINESS.md` updated if a control status changed
+- [ ] Docs and `CHANGELOG.md` updated if user-facing
