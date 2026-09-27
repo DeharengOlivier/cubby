@@ -56,16 +56,20 @@ def file_logger(path: Path | None = None, *, echo: bool = False) -> LevelLogger:
     """
     destination = path or state.log_path()
     reported = False
+    echoing = echo
 
     def log(message: str, *, level: str = "INFO") -> None:
-        nonlocal reported
+        nonlocal reported, echoing
         record = {
             "ts": datetime.now().isoformat(timespec="seconds"),
             "level": level,
             "msg": message,
         }
-        if echo:
-            print(human_line(record))
+        if echoing:
+            try:
+                print(human_line(record), flush=True)
+            except OSError:
+                echoing = False  # stdout closed (`cubby run -v | head`): the file still gets it
         try:
             _rotate(destination)
             state.append_line(destination, json.dumps(record, ensure_ascii=False))

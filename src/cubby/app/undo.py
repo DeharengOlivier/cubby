@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -70,7 +71,7 @@ def undo_run(journal: Journal, run_id: str | None = None, *, log: Logger = _noop
         return result
 
     for entry in reversed(run.pending):
-        if not entry.destination.exists():
+        if not os.path.lexists(entry.destination):  # a dangling symlink is still there
             log(f"skip (no longer at {entry.destination}): {entry.source.name}")
             journal.settle(entry, "gone")
             result.gone += 1

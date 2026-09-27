@@ -25,13 +25,19 @@ class SortOutcome:
     subdir: str = ""  # month/year subfolder inside the category, when any
     renamed_to: str | None = None  # new filename when the entry is renamed
     error: str | None = None  # why the entry could not be sorted
+    journaled: bool = True  # False when the move happened but could not be journaled
 
     @classmethod
     def failed(cls, source: Path, error: str) -> SortOutcome:
         return cls(source=source, category="", stage=None, error=error)
 
-    def moved(self, destination: Path) -> SortOutcome:
-        return replace(self, moved_to=destination)
+    def moved(self, destination: Path, *, journaled: bool = True) -> SortOutcome:
+        return replace(self, moved_to=destination, journaled=journaled)
+
+    @property
+    def needs_attention(self) -> bool:
+        """Not sorted, or sorted with no way back."""
+        return self.error is not None or not self.journaled
 
     @property
     def name(self) -> str:
@@ -83,6 +89,10 @@ def render_plan(
                 tag += p.dim(f"   (was {outcome.name})")
             lines.append(f"    {outcome.display_name}{tag}")
 
+    unjournaled = [o for o in outcomes if not o.journaled]
+    if unjournaled:
+        lines.append("\n" + p.bold(p.yellow(f"Moved but cannot be undone  ({len(unjournaled)})")))
+        lines.extend(f"    {o.display_name}" for o in unjournaled)
     if failures:
         lines.append("\n" + p.bold(p.yellow(f"Could not sort  ({len(failures)})")))
         lines.extend(f"    {o.name}   {p.dim(o.error or '')}" for o in failures)
@@ -112,6 +122,7 @@ def render_json(outcomes: list[SortOutcome], *, applied: bool) -> str:
                 "stage": o.stage.value if o.stage else None,
                 "moved_to": str(o.moved_to) if o.moved_to else None,
                 "error": o.error,
+                "journaled": o.journaled,
             }
             for o in outcomes
         ],

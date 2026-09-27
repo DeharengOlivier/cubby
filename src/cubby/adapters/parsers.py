@@ -8,17 +8,15 @@ tests, and in production through::
 
     python -m cubby.adapters.parsers <pdf|docx|xlsx> <path> <max_chars>
 
-which prints the text on stdout, under a memory ceiling where the platform
-enforces one. Every failure is an empty result: the engine then falls back to
-the filename and type stages, as designed.
+which prints the text on stdout. The parent sets the timeout, the memory
+ceiling and a neutral working directory (see ``extraction._run``). Every
+failure is an empty result: the engine then falls back to the filename and
+type stages, as designed.
 """
 
 from __future__ import annotations
 
 import sys
-
-#: Address-space ceiling for the child, where the platform enforces RLIMIT_AS.
-MEMORY_LIMIT_BYTES = 1_000_000_000
 
 
 def pdf_text(path: str, max_chars: int) -> str:
@@ -67,22 +65,11 @@ def parse(kind: str, path: str, max_chars: int) -> str:
         return ""
 
 
-def _limit_memory() -> None:
-    try:
-        import resource  # noqa: PLC0415 - POSIX only, and only needed in the child
-
-        resource.setrlimit(resource.RLIMIT_AS, (MEMORY_LIMIT_BYTES, MEMORY_LIMIT_BYTES))
-    except (ImportError, ValueError, OSError):
-        # macOS does not enforce RLIMIT_AS; the parent's timeout still bounds us.
-        return
-
-
 def main(argv: list[str]) -> int:
     if len(argv) != 3:
         print("usage: python -m cubby.adapters.parsers KIND PATH MAX_CHARS", file=sys.stderr)
         return 2
     kind, path, max_chars = argv
-    _limit_memory()
     # Bytes, not text: the child's locale may not be UTF-8, and an accented
     # invoice must not turn into an encoding error.
     sys.stdout.buffer.write(parse(kind, path, int(max_chars)).encode("utf-8"))

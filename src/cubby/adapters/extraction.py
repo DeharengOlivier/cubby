@@ -21,6 +21,7 @@ from __future__ import annotations
 import html
 import importlib.util
 import re
+import resource
 import shutil
 import subprocess
 import sys
@@ -46,6 +47,9 @@ PARSABLE: frozenset[str] = frozenset(
 
 #: The optional library behind each child-process parser.
 _LIBRARIES = {"pdf": "pypdf", "docx": "docx", "xlsx": "openpyxl"}
+
+#: Address-space ceiling for every converter child, where the platform enforces it.
+_CHILD_MEMORY_BYTES = 1_000_000_000
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _TIMEOUT = 15
@@ -73,15 +77,37 @@ def _is_too_large(path: Path) -> bool:
         return True
 
 
+#: Where converters run: never the Downloads folder, whose files are untrusted.
+_NEUTRAL_CWD = "/"
+
+
+def _limit_child_memory() -> None:
+    """Cap a converter's address space where the platform enforces it (Linux)."""
+    try:
+        resource.setrlimit(resource.RLIMIT_AS, (_CHILD_MEMORY_BYTES, _CHILD_MEMORY_BYTES))
+    except (ValueError, OSError):
+        return  # macOS does not enforce RLIMIT_AS; the timeout still bounds the child
+
+
 def _run(cmd: list[str]) -> str:
     """Run ``cmd`` and return its stdout, or "" if anything goes wrong.
 
     The command is a list, never a shell string, and its first element is an
-    absolute path resolved by :func:`_tool`, so neither the file name nor PATH
-    can decide what gets executed.
+    absolute path resolved by :func:`_tool` (or this interpreter), so neither
+    the file name nor PATH can decide what gets executed. It runs from the
+    filesystem root with a timeout and a memory ceiling, so a hostile document
+    costs one timeout and cannot plant code in the working directory.
     """
     try:
-        result = subprocess.run(cmd, capture_output=True, timeout=_TIMEOUT, check=False)
+        # preexec_fn is safe here: cubby starts no threads.
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=_TIMEOUT,
+            check=False,
+            cwd=_NEUTRAL_CWD,
+            preexec_fn=_limit_child_memory,
+        )
         return result.stdout.decode("utf-8", "ignore")
     except (OSError, subprocess.SubprocessError):
         # Missing, not executable, or past its timeout: no text from this backend.
@@ -96,7 +122,12 @@ def _in_child(kind: str, path: Path, max_bytes: int) -> str:
     """
     if importlib.util.find_spec(_LIBRARIES[kind]) is None:
         return ""
-    return _run([sys.executable, "-m", "cubby.adapters.parsers", kind, str(path), str(max_bytes)])
+    # -P: do not put the working directory on sys.path. Run from the Downloads
+    # folder, `python -m` would otherwise import a downloaded docx.py or pypdf.py
+    # in place of the real library.
+    return _run(
+        [sys.executable, "-P", "-m", "cubby.adapters.parsers", kind, str(path), str(max_bytes)]
+    )
 
 
 def _tool(name: str) -> str | None:

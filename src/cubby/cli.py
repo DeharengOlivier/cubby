@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
+import time
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -18,7 +20,14 @@ from .adapters.journal import Journal
 from .adapters.ledger import Ledger
 from .adapters.lock import exclusive
 from .adapters.logging import LevelLogger, file_logger, human_line, read_tail
-from .adapters.service import ServiceError, ServiceSpec, detect_service, get_service
+from .adapters.service import (
+    DEFAULT_LABEL,
+    Service,
+    ServiceError,
+    ServiceSpec,
+    detect_service,
+    get_service,
+)
 from .adapters.ui import Palette, banner, supports_color
 from .app.report import SortOutcome, render_json, render_plan
 from .app.sorter import Sorter
@@ -128,7 +137,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     with exclusive():
         outcomes = sorter.sort_once(apply=True)
     _print_outcomes(outcomes, applied=True)
-    return EXIT_FAILED if any(o.error for o in outcomes) else EXIT_OK
+    return EXIT_FAILED if any(o.needs_attention for o in outcomes) else EXIT_OK
 
 
 def cmd_undo(args: argparse.Namespace) -> int:
@@ -151,7 +160,9 @@ def cmd_undo(args: argparse.Namespace) -> int:
 
 def cmd_watch(args: argparse.Namespace) -> int:
     config = _load(args)
-    if _source_error(config):
+    # The agent waits for a folder that is not there yet (a drive mounted after
+    # login) instead of exiting into a restart loop; a person is told at once.
+    if not getattr(args, "wait_for_source", False) and _source_error(config):
         return EXIT_FAILED
     # Under launchd or systemd, stdout is appended to the log file already
     # written by the logger: echo only to a person at a terminal.
@@ -184,7 +195,7 @@ def _program_args(args: argparse.Namespace) -> list[str]:
     """
     exe = shutil.which("cubby")
     base = [exe] if exe else [sys.executable, "-m", "cubby"]
-    base.append("watch")
+    base += ["watch", "--wait-for-source"]
     if getattr(args, "config", None):
         base += ["--config", str(Path(args.config).expanduser().resolve())]
     if getattr(args, "source", None):
@@ -206,7 +217,10 @@ def cmd_install(args: argparse.Namespace) -> int:
         return EXIT_FAILED
     service = get_service()
     log_path = state.log_path()
-    spec = ServiceSpec(program_args=_program_args(args), log_path=log_path)
+    environment = {"CUBBY_STATE_DIR": str(state.state_dir())}
+    if config_env := os.environ.get("CUBBY_CONFIG"):
+        environment["CUBBY_CONFIG"] = str(Path(config_env).expanduser().resolve())
+    spec = ServiceSpec(program_args=_program_args(args), log_path=log_path, environment=environment)
     path = service.install(spec)
     print(f"Installed {service.name} agent: {path} (running)")
     print(
@@ -241,6 +255,14 @@ def _age(seconds: float) -> str:
     return format_duration(max(0, round(seconds))) + " ago"
 
 
+def _installed_for(service: Service) -> float:
+    """Seconds since the agent's unit file was written."""
+    try:
+        return time.time() - service.unit_path(DEFAULT_LABEL).stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 def _agent_state() -> dict[str, Any]:
     """What the service manager and the heartbeat say about the agent."""
     service = detect_service()
@@ -249,13 +271,17 @@ def _agent_state() -> dict[str, Any]:
     beat = Ledger().heartbeat()
     stale_after = max(3 * beat.interval, 120.0) if beat else None
     age = beat.age_seconds() if beat else None
+    never_passed = bool(
+        service and installed and running and beat is None and _installed_for(service) > 120.0
+    )
     return {
         "manager": service.name if service else None,
         "installed": installed,
         "running": running,
-        "unit": str(service.unit_path("com.cubby.agent")) if service and installed else None,
+        "unit": str(service.unit_path(DEFAULT_LABEL)) if service and installed else None,
         "last_pass_age": age,
         "stale": bool(beat and age is not None and stale_after and age > stale_after),
+        "never_passed": never_passed,
         "watching": beat.source if beat else None,
     }
 
@@ -272,7 +298,9 @@ def cmd_status(args: argparse.Namespace) -> int:
     agent = _agent_state()
     runs = Ledger().runs(limit=1)
     last = runs[0] if runs else None
-    healthy = not agent["installed"] or (agent["running"] and not agent["stale"])
+    healthy = not agent["installed"] or (
+        agent["running"] and not agent["stale"] and not agent["never_passed"]
+    )
 
     if getattr(args, "json", False):
         payload = {
@@ -291,7 +319,9 @@ def cmd_status(args: argparse.Namespace) -> int:
         _kv(pal, "agent file", agent["unit"])
     if agent["watching"]:
         _kv(pal, "watching", agent["watching"])
-    if agent["last_pass_age"] is None:
+    if agent["never_passed"]:
+        _kv(pal, "last pass", pal.yellow("no pass completed since install: see the log"))
+    elif agent["last_pass_age"] is None:
         _kv(pal, "last pass", pal.dim("never"))
     else:
         text = _age(agent["last_pass_age"])
@@ -374,10 +404,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_watch = sub.add_parser("watch", help="keep sorting the folder in the foreground")
     _add_common_flags(p_watch)
+    p_watch.add_argument(
+        "--wait-for-source",
+        action="store_true",
+        help="wait for a missing folder to appear instead of exiting (the agent uses this)",
+    )
     p_watch.set_defaults(func=cmd_watch)
 
     p_undo = sub.add_parser("undo", help="revert the most recent run (or --run ID)")
-    p_undo.add_argument("--run", help="the run to revert, as listed by 'cubby history'")
+    p_undo.add_argument("--run", help="the run to revert (its id, as 'cubby status' shows it)")
     p_undo.set_defaults(func=cmd_undo)
 
     p_status = sub.add_parser(

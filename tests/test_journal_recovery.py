@@ -262,9 +262,9 @@ def test_compaction_keeps_the_most_recent_runs_whole(tmp_path, monkeypatch):
     monkeypatch.setattr(journal_module, "KEEP_RUNS", 2)
     for index in range(5):
         for seq in range(3):
-            journal.record(
-                Entry(f"r{index}", seq, "move", Path(f"/a/{index}-{seq}"), Path(f"/b/{index}"))
-            )
+            entry = Entry(f"r{index}", seq, "move", Path(f"/a/{index}-{seq}"), Path(f"/b/{index}"))
+            journal.record(entry)
+            journal.settle(entry, "restored")  # undone: nothing keeps it but recency
 
     journal.compact()
 

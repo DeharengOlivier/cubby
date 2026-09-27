@@ -27,7 +27,7 @@ After=default.target
 
 [Service]
 Type=simple
-ExecStart={exec_start}
+{environment}ExecStart={exec_start}
 Restart=on-failure
 RestartSec=5
 StandardOutput=append:{log}
@@ -55,6 +55,19 @@ def quote_argument(arg: str) -> str:
         .replace("$", "$$")
     )
     return f'"{escaped}"'
+
+
+def environment_line(key: str, value: str) -> str:
+    """``Environment="KEY=value"``, read back by systemd as exactly that.
+
+    In ``Environment=`` specifiers (``%``) are expanded and C escapes apply
+    inside quotes, but ``$`` has no special meaning.
+    """
+    assignment = f"{key}={value}"
+    escaped = (
+        assignment.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("%", "%%")
+    )
+    return f'Environment="{escaped}"\n'
 
 
 def _unit_path_value(path: Path) -> str:
@@ -86,7 +99,13 @@ class SystemdService(Service):
         path = self.unit_path(spec.label)
         exec_start = " ".join(quote_argument(arg) for arg in spec.program_args)
         path.write_text(
-            _UNIT_TEMPLATE.format(exec_start=exec_start, log=_unit_path_value(spec.log_path)),
+            _UNIT_TEMPLATE.format(
+                environment="".join(
+                    environment_line(k, v) for k, v in sorted(spec.environment.items())
+                ),
+                exec_start=exec_start,
+                log=_unit_path_value(spec.log_path),
+            ),
             encoding="utf-8",
         )
 
