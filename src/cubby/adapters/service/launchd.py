@@ -41,7 +41,7 @@ class LaunchdService(Service):
         path = self.unit_path(spec.label)
 
         # launchd passes ProgramArguments to execve as a list: no quoting layer.
-        plist = {
+        plist: dict[str, object] = {
             "Label": spec.label,
             "ProgramArguments": spec.program_args,
             "RunAtLoad": True,
@@ -50,6 +50,8 @@ class LaunchdService(Service):
             "StandardOutPath": str(spec.log_path),
             "StandardErrorPath": str(spec.log_path),
         }
+        if spec.environment:
+            plist["EnvironmentVariables"] = dict(spec.environment)
         with path.open("wb") as handle:
             plistlib.dump(plist, handle)
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
@@ -114,13 +115,19 @@ class Sorter:
             dedupe=settings.dedupe,
             rename_to=placement.new_name,
         )
-        self._log(f"[{decision.category}] ({decision.stage.value}) {path.name}")
-        self._journal_move(Entry(run_id, seq, moved.op, path, moved.destination))
-        return outcome.moved(moved.destination)
+        # Journal first: once the file has moved, nothing (not even a log line
+        # to a closed pipe) may come between the move and its way back.
+        journaled = self._journal_move(Entry(run_id, seq, moved.op, path, moved.destination))
+        result = outcome.moved(moved.destination, journaled=journaled)
+        # The move and its journal entry are done; a lost log line changes neither.
+        with contextlib.suppress(OSError):
+            self._log(f"[{decision.category}] ({decision.stage.value}) {path.name}")
+        return result
 
-    def _journal_move(self, entry: Entry) -> None:
+    def _journal_move(self, entry: Entry) -> bool:
+        """Record ``entry``. False when a journal was expected and could not be written."""
         if self._journal is None:
-            return
+            return True
         try:
             self._journal.record(entry)
         except OSError as exc:
@@ -130,6 +137,8 @@ class Sorter:
                 f"could not write the undo journal at {self._journal.path} ({exc}); "
                 f"'cubby undo' will not be able to put back {entry.source.name}"
             )
+            return False
+        return True
 
     def sort_once(self, *, apply: bool, respect_age: bool = True) -> list[SortOutcome]:
         """Classify every candidate once.

@@ -26,6 +26,7 @@ Format (version 2), one JSON object per line, appended as each move happens::
 
 from __future__ import annotations
 
+import hashlib
 import json
 import secrets
 from collections.abc import Callable, Iterator
@@ -51,7 +52,7 @@ def default_journal_path() -> Path:
 
 def new_run_id() -> str:
     """A sortable, unique identifier for one sort run."""
-    return f"{datetime.now():%Y%m%dT%H%M%S}-{secrets.token_hex(2)}"
+    return f"{datetime.now():%Y%m%dT%H%M%S}-{secrets.token_hex(4)}"
 
 
 @dataclass(frozen=True)
@@ -136,14 +137,11 @@ class Journal:
                 return
         except FileNotFoundError:
             return
-        lines = state.read_lines(self.path)
-        order: list[str] = []
-        for line in lines:
-            run_id = _run_of(line)
-            if run_id and run_id not in order:
-                order.append(run_id)
-        keep = set(order[-KEEP_RUNS:])
-        kept = [line for line in lines if _run_of(line) in keep]
+        runs = self.runs()
+        # Recent runs stay for history; a run with anything left to undo stays
+        # whatever its age, because dropping it would take away its way back.
+        keep = {r.run_id for r in runs[-KEEP_RUNS:]} | {r.run_id for r in runs if r.pending}
+        kept = [line for line in state.read_lines(self.path) if _run_of(line) in keep]
         state.replace_text(self.path, "".join(line + "\n" for line in kept))
 
     # --- reading -------------------------------------------------------------
@@ -155,8 +153,8 @@ class Journal:
             OSError: The journal exists but cannot be read.
         """
         runs: dict[str, Run] = {}
-        for index, line in enumerate(state.read_lines(self.path)):
-            for item in _parse(line, index):
+        for line in state.read_lines(self.path):
+            for item in _parse(line):
                 run = runs.setdefault(item.run, Run(item.run))
                 if isinstance(item, Entry):
                     run.entries.append(item)
@@ -172,6 +170,11 @@ class Journal:
         return next((r for r in reversed(self.runs()) if r.pending), None)
 
 
+def _v1_run_id(line: str) -> str:
+    """A version 1 run's id: derived from its content, so it survives compaction."""
+    return "v1-" + hashlib.sha256(line.encode("utf-8")).hexdigest()[:12]
+
+
 def _run_of(line: str) -> str | None:
     try:
         record = json.loads(line)
@@ -179,11 +182,24 @@ def _run_of(line: str) -> str | None:
         return None
     if not isinstance(record, dict):
         return None
+    if "moves" in record and "v" not in record:
+        return _v1_run_id(line)
     run = record.get("run")
     return run if isinstance(run, str) else None
 
 
-def _parse(line: str, index: int) -> Iterator[Entry | Settlement]:
+def _seq(value: object) -> int:
+    """A sequence number as written by cubby: a non-negative int, nothing else.
+
+    Raises:
+        ValueError: Anything else (a float, a bool, a string, a huge exponent).
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"not a sequence number: {value!r}")
+    return value
+
+
+def _parse(line: str) -> Iterator[Entry | Settlement]:
     """Yield the entries or settlements one line holds.
 
     Anything malformed yields nothing: a damaged line costs that line only.
@@ -196,7 +212,7 @@ def _parse(line: str, index: int) -> Iterator[Entry | Settlement]:
         return
     try:
         if "moves" in record and "v" not in record:  # version 1: one line per run
-            run_id = f"v1-{index:06d}"
+            run_id = _v1_run_id(line)
             for seq, move in enumerate(record["moves"]):
                 yield Entry(run_id, seq, "move", Path(move["from"]), Path(move["to"]))
             return
@@ -205,9 +221,13 @@ def _parse(line: str, index: int) -> Iterator[Entry | Settlement]:
         op = record["op"]
         if op in ("move", "dedupe"):
             yield Entry(
-                str(record["run"]), int(record["seq"]), op, Path(record["from"]), Path(record["to"])
+                str(record["run"]),
+                _seq(record["seq"]),
+                op,
+                Path(record["from"]),
+                Path(record["to"]),
             )
         elif op in ("restored", "gone"):
-            yield Settlement(str(record["run"]), int(record["seq"]), op)
+            yield Settlement(str(record["run"]), _seq(record["seq"]), op)
     except (KeyError, TypeError, ValueError):
         return

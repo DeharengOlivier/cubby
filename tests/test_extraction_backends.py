@@ -35,7 +35,7 @@ def tools_available(monkeypatch):
     monkeypatch.setattr(extraction.shutil, "which", lambda name: f"/usr/bin/{name}")
     commands: list[list[str]] = []
 
-    def fake_run(cmd, capture_output=False, timeout=None, check=False):
+    def fake_run(cmd, capture_output=False, timeout=None, check=False, **kwargs):
         commands.append(cmd)
         return types.SimpleNamespace(stdout=b"extracted by " + cmd[0].encode())
 
@@ -88,7 +88,7 @@ def test_every_external_command_is_given_a_timeout(monkeypatch, tmp_path):
     monkeypatch.setattr(extraction.shutil, "which", lambda name: f"/usr/bin/{name}")
     seen: dict = {}
 
-    def fake_run(cmd, capture_output=False, timeout=None, check=False):
+    def fake_run(cmd, capture_output=False, timeout=None, check=False, **kwargs):
         seen["timeout"] = timeout
         return types.SimpleNamespace(stdout=b"text")
 
@@ -102,7 +102,7 @@ def test_every_external_command_is_given_a_timeout(monkeypatch, tmp_path):
 def test_a_tool_that_times_out_yields_nothing(monkeypatch, tmp_path, no_system_tools):
     monkeypatch.setattr(extraction.shutil, "which", lambda name: f"/usr/bin/{name}")
 
-    def timing_out(cmd, capture_output=False, timeout=None, check=False):
+    def timing_out(cmd, capture_output=False, timeout=None, check=False, **kwargs):
         raise subprocess.TimeoutExpired(cmd, timeout or 0)
 
     monkeypatch.setattr(extraction.subprocess, "run", timing_out)
@@ -205,7 +205,7 @@ def test_legacy_office_tries_each_tool_in_turn(monkeypatch, tmp_path):
     )
     commands: list[list[str]] = []
 
-    def fake_run(cmd, capture_output=False, timeout=None, check=False):
+    def fake_run(cmd, capture_output=False, timeout=None, check=False, **kwargs):
         commands.append(cmd)
         return types.SimpleNamespace(stdout=b"read by catdoc")
 
@@ -235,7 +235,7 @@ def test_the_resolved_absolute_path_is_executed_not_a_bare_name(monkeypatch, tmp
     monkeypatch.setattr(extraction.shutil, "which", lambda name: f"/opt/tools/{name}")
     commands: list[list[str]] = []
 
-    def fake_run(cmd, capture_output=False, timeout=None, check=False):
+    def fake_run(cmd, capture_output=False, timeout=None, check=False, **kwargs):
         commands.append(cmd)
         return types.SimpleNamespace(stdout=b"text")
 
@@ -278,7 +278,7 @@ def test_the_child_parser_is_given_a_timeout_and_this_interpreter(monkeypatch, t
     monkeypatch.setattr(extraction.importlib.util, "find_spec", lambda name: object())
     commands: list[list[str]] = []
 
-    def fake_run(cmd, capture_output=False, timeout=None, check=False):
+    def fake_run(cmd, capture_output=False, timeout=None, check=False, **kwargs):
         commands.append(cmd)
         assert timeout, "a parser without a timeout can stall the agent"
         return types.SimpleNamespace(stdout=b"text")
@@ -287,7 +287,15 @@ def test_the_child_parser_is_given_a_timeout_and_this_interpreter(monkeypatch, t
     extraction._in_child("pdf", tmp_path / "a.pdf", 100)
 
     assert commands == [
-        [sys.executable, "-m", "cubby.adapters.parsers", "pdf", str(tmp_path / "a.pdf"), "100"]
+        [
+            sys.executable,
+            "-P",
+            "-m",
+            "cubby.adapters.parsers",
+            "pdf",
+            str(tmp_path / "a.pdf"),
+            "100",
+        ]
     ]
 
 
@@ -314,7 +322,6 @@ def test_the_parser_entry_point_rejects_bad_usage(capsys):
 
 
 def test_the_parser_entry_point_writes_utf8(monkeypatch, tmp_path, capsysbinary):
-    monkeypatch.setattr(parsers, "_limit_memory", lambda: None)
     monkeypatch.setitem(parsers.PARSERS, "pdf", lambda path, max_chars: "Facture réglée")
 
     assert parsers.main(["pdf", str(tmp_path / "a.pdf"), "100"]) == 0

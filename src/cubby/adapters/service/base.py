@@ -29,6 +29,8 @@ class ServiceSpec:
     program_args: list[str]  # e.g. ["/usr/local/bin/cubby", "watch"]
     label: str = DEFAULT_LABEL  # reverse-dns id (launchd) / unit name stem
     log_path: Path = field(default_factory=state.log_path)
+    # Environment the agent needs to find the same state and config as the CLI.
+    environment: dict[str, str] = field(default_factory=dict)
 
 
 def run_manager(cmd: list[str]) -> subprocess.CompletedProcess[str]:
