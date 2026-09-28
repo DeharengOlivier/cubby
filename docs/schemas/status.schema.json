@@ -1,0 +1,201 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "cubby status --json",
+  "description": "The agent's health; the command exits 1 when healthy is false.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "healthy": {
+      "type": "boolean"
+    },
+    "agent": {
+      "type": "object",
+      "properties": {
+        "manager": {
+          "enum": [
+            "launchd",
+            "systemd",
+            null
+          ]
+        },
+        "installed": {
+          "type": "boolean"
+        },
+        "running": {
+          "type": "boolean"
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_pass_age": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "stale": {
+          "type": "boolean"
+        },
+        "live_pid": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "never_passed": {
+          "type": "boolean"
+        },
+        "watching": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "installed",
+        "last_pass_age",
+        "live_pid",
+        "manager",
+        "never_passed",
+        "running",
+        "stale",
+        "unit",
+        "watching"
+      ],
+      "additionalProperties": false
+    },
+    "paused": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "string"
+            },
+            "until": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "damaged": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "damaged",
+            "since",
+            "until"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "last_run": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "const": 1
+            },
+            "run": {
+              "type": "string"
+            },
+            "mode": {
+              "enum": [
+                "run",
+                "watch",
+                "undo"
+              ]
+            },
+            "source": {
+              "type": "string"
+            },
+            "started": {
+              "type": "string"
+            },
+            "finished": {
+              "type": "string"
+            },
+            "moved": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failures": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string"
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "error",
+                  "file"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "version": {
+              "type": "string"
+            },
+            "status": {
+              "enum": [
+                "ok",
+                "partial",
+                "failed"
+              ]
+            }
+          },
+          "required": [
+            "failed",
+            "failures",
+            "finished",
+            "mode",
+            "moved",
+            "run",
+            "source",
+            "started",
+            "status",
+            "v",
+            "version"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "log": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "agent",
+    "healthy",
+    "last_run",
+    "log",
+    "paused",
+    "version"
+  ],
+  "additionalProperties": false
+}

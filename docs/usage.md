@@ -21,6 +21,14 @@
 
 `cubby plan` also accepts `--json` for scripting.
 
+## JSON output
+
+`plan`, `status`, `history`, `explain` and `log` take `--json`. Each output has a JSON Schema
+in [`docs/schemas/`](schemas/) (`plan`, `status`, `history`, `explain`, and `log-record` for
+each line of `cubby log --json`), and the test suite checks the real outputs against them,
+so a field is not renamed or dropped by accident. The top-level `version` changes when a
+field is removed or changes meaning; new fields may be added within a version.
+
 ## Common flags
 
 These apply to `plan`, `run`, `watch`, `install` and `doctor`:

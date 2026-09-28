@@ -1,0 +1,106 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "cubby plan --json",
+  "description": "Where each file would go; nothing is moved.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "applied": {
+      "type": "boolean"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "failed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subdir": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "renamed_to": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "stage": {
+            "enum": [
+              "strong-ext",
+              "name",
+              "content",
+              "type",
+              "unsorted",
+              null
+            ]
+          },
+          "rule": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "moved_to": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "journaled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "category",
+          "error",
+          "journaled",
+          "moved_to",
+          "name",
+          "renamed_to",
+          "rule",
+          "source",
+          "stage",
+          "subdir"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "applied",
+    "count",
+    "failed",
+    "items",
+    "version"
+  ],
+  "additionalProperties": false
+}

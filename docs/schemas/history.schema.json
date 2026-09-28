@@ -1,0 +1,110 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "cubby history --json",
+  "description": "Recent runs, newest first, with how much of each was undone.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "v": {
+            "const": 1
+          },
+          "run": {
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "run",
+              "watch",
+              "undo"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "started": {
+            "type": "string"
+          },
+          "finished": {
+            "type": "string"
+          },
+          "moved": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "failed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "failures": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "file": {
+                  "type": "string"
+                },
+                "error": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "error",
+                "file"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "version": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "partial",
+              "failed"
+            ]
+          },
+          "undone": {
+            "type": "boolean"
+          },
+          "undo": {
+            "enum": [
+              "undoable",
+              "partly undone",
+              "undone",
+              "unknown"
+            ]
+          }
+        },
+        "required": [
+          "failed",
+          "failures",
+          "finished",
+          "mode",
+          "moved",
+          "run",
+          "source",
+          "started",
+          "status",
+          "undo",
+          "undone",
+          "v",
+          "version"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "runs",
+    "version"
+  ],
+  "additionalProperties": false
+}
