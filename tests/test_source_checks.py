@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import pytest
 
-from cubby import cli
 from cubby.cli import EXIT_FAILED, main
+from cubby.cli import agent as cli_agent
+from cubby.cli import sorting as cli_sorting
 
 
 class ExplodingWatcher:
@@ -20,8 +21,8 @@ class ExplodingWatcher:
 @pytest.mark.parametrize("command", ["watch", "install", "run", "plan"])
 def test_a_missing_source_is_refused_before_anything_starts(command, tmp_path, monkeypatch, capsys):
     missing = tmp_path / "gone"
-    monkeypatch.setattr(cli, "Watcher", ExplodingWatcher)
-    monkeypatch.setattr(cli, "get_service", lambda: pytest.fail("must not install"))
+    monkeypatch.setattr(cli_sorting, "Watcher", ExplodingWatcher)
+    monkeypatch.setattr(cli_agent, "get_service", lambda: pytest.fail("must not install"))
 
     assert main([command, "--source", str(missing)]) == EXIT_FAILED
 

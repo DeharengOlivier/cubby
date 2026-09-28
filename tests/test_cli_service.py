@@ -15,9 +15,9 @@ from pathlib import Path
 
 import pytest
 
-from cubby import cli
 from cubby.adapters import state
 from cubby.cli import EXIT_OK, main
+from cubby.cli import agent as cli_agent
 
 
 class FakeService:
@@ -61,8 +61,8 @@ def _home_with_downloads(tmp_path, monkeypatch):
 @pytest.fixture
 def fake_service(monkeypatch):
     service = FakeService()
-    monkeypatch.setattr(cli, "get_service", lambda: service)
-    monkeypatch.setattr(cli, "detect_service", lambda: service)
+    monkeypatch.setattr(cli_agent, "get_service", lambda: service)
+    monkeypatch.setattr(cli_agent, "detect_service", lambda: service)
     return service
 
 
@@ -145,7 +145,7 @@ def test_uninstall_says_so_when_nothing_was_installed(fake_service, capsys):
 
 
 def test_uninstall_without_a_service_manager_is_not_an_error(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "detect_service", lambda: None)
+    monkeypatch.setattr(cli_agent, "detect_service", lambda: None)
     assert main(["uninstall"]) == EXIT_OK
     assert "No cubby agent" in capsys.readouterr().out
 
@@ -165,7 +165,7 @@ def test_status_reports_a_missing_agent(fake_service, capsys):
 
 
 def test_status_works_with_no_service_manager_at_all(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "detect_service", lambda: None)
+    monkeypatch.setattr(cli_agent, "detect_service", lambda: None)
     assert main(["status"]) == EXIT_OK
     assert "not installed" in capsys.readouterr().out
 
@@ -183,7 +183,7 @@ def test_doctor_reports_the_environment(tmp_path, config_file, fake_service, cap
 
 
 def test_doctor_without_a_service_manager_says_so(monkeypatch, config_file, capsys):
-    monkeypatch.setattr(cli, "detect_service", lambda: None)
+    monkeypatch.setattr(cli_agent, "detect_service", lambda: None)
     assert main(["doctor", "--config", str(config_file)]) == EXIT_OK
     assert "manual watch" in capsys.readouterr().out
 

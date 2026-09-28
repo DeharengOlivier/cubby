@@ -36,7 +36,7 @@ def test_an_odd_pause_file_pauses_and_is_described(content, capsys, monkeypatch)
     assert pause is not None
     assert pause.damaged
     assert "cubby resume" in pause.describe()
-    monkeypatch.setattr("cubby.cli.detect_service", lambda: None)
+    monkeypatch.setattr("cubby.cli.agent.detect_service", lambda: None)
     assert main(["status"]) == EXIT_OK
     assert "no file is moved" in capsys.readouterr().out
 

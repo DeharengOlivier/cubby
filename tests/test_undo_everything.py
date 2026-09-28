@@ -13,13 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from cubby import cli
 from cubby.adapters.journal import Journal
 from cubby.app import sorter as sorter_mod
 from cubby.app.sorter import Sorter
 from cubby.app.undo import undo_last_run
 from cubby.app.watcher import Watcher
 from cubby.cli import EXIT_OK, main
+from cubby.cli import sorting as cli_sorting
 from cubby.domain.category import Category, Config, Settings
 
 
@@ -59,7 +59,7 @@ def test_files_sorted_by_the_agent_can_be_undone(downloads, tmp_path, monkeypatc
         def run(self, **_):
             return super().run(max_cycles=1)
 
-    monkeypatch.setattr(cli, "Watcher", OneCycle)
+    monkeypatch.setattr(cli_sorting, "Watcher", OneCycle)
     argv = ["watch", "--config", str(config), "--source", str(downloads), "--delay", "0"]
     assert main(argv) == EXIT_OK
     assert _files(downloads) == ["Images/photo.png", "Invoices/invoice-2026.txt"]

@@ -157,36 +157,30 @@ def _day_month(a: int, b: int) -> tuple[int, int]:
 
 def _find_dates(text: str) -> list[tuple[int, date]]:
     """Every plausible date in ``text`` as ``(start_offset, date)`` pairs."""
-    found: list[tuple[int, date]] = []
+    candidates = [
+        *((m.start(), _iso_date(m)) for m in _ISO.finditer(text)),
+        *((m.start(), _numeric_date(m)) for m in _NUMERIC.finditer(text)),
+        *((m.start(), _worded_date(m, day=1, month=2)) for m in _DAY_MONTH.finditer(text)),
+        *((m.start(), _worded_date(m, day=2, month=1)) for m in _MONTH_DAY.finditer(text)),
+    ]
+    return [(start, d) for start, d in candidates if d is not None]
 
-    for m in _ISO.finditer(text):
-        d = _valid(int(m[1]), int(m[2]), int(m[3]))
-        if d:
-            found.append((m.start(), d))
 
-    for m in _NUMERIC.finditer(text):
-        year = int(m[3])
-        year += 2000 if year < 100 else 0
-        day, month = _day_month(int(m[1]), int(m[2]))
-        d = _valid(year, month, day)
-        if d:
-            found.append((m.start(), d))
+def _iso_date(m: re.Match[str]) -> date | None:
+    return _valid(int(m[1]), int(m[2]), int(m[3]))
 
-    for m in _DAY_MONTH.finditer(text):
-        num = _month_num(m[2])
-        if num:
-            d = _valid(int(m[3]), num, int(m[1]))
-            if d:
-                found.append((m.start(), d))
 
-    for m in _MONTH_DAY.finditer(text):
-        num = _month_num(m[1])
-        if num:
-            d = _valid(int(m[3]), num, int(m[2]))
-            if d:
-                found.append((m.start(), d))
+def _numeric_date(m: re.Match[str]) -> date | None:
+    year = int(m[3])
+    year += 2000 if year < 100 else 0
+    day, month = _day_month(int(m[1]), int(m[2]))
+    return _valid(year, month, day)
 
-    return found
+
+def _worded_date(m: re.Match[str], *, day: int, month: int) -> date | None:
+    """A date with the month in words; ``day`` and ``month`` are group numbers."""
+    num = _month_num(m[month])
+    return _valid(int(m[3]), num, int(m[day])) if num else None
 
 
 def parse_invoice_date(text: str, fallback: date) -> date:
