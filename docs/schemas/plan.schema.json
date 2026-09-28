@@ -102,7 +102,7 @@
       }
     },
     "left_alone": {
-      "description": "Entries not sorted this time, with why: a download in progress, or (run only) too recent.",
+      "description": "Entries a run would leave alone, with why: a download in progress. A plan ignores the age, so a file that is too recent is listed as it will be sorted.",
       "type": "array",
       "items": {
         "type": "object",

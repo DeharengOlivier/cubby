@@ -136,7 +136,8 @@ def render_plan(
         lines.append("\n" + p.bold(p.yellow(f"Moved but cannot be undone  ({len(unjournaled)})")))
         lines.extend(f"    {o.display_name}" for o in unjournaled)
     if failures:
-        lines.append("\n" + p.bold(p.yellow(f"Could not sort  ({len(failures)})")))
+        title = "Could not sort" if applied else "Would fail"
+        lines.append("\n" + p.bold(p.yellow(f"{title}  ({len(failures)})")))
         lines.extend(f"    {o.name}   {p.dim(o.error or '')}" for o in failures)
 
     lines.extend(_left_alone_lines(p, left_alone or []))
@@ -148,7 +149,7 @@ def render_plan(
     else:
         summary = f"{'Moved' if applied else 'Would move'} {moved} item(s)."
     if failures:
-        summary += f" {len(failures)} could not be sorted."
+        summary += f" {len(failures)} {'could not be sorted' if applied else 'would fail'}."
     lines.append("\n" + (p.green(summary) if applied and not failures else p.bold(summary)))
     return "\n".join(lines).lstrip("\n")
 
@@ -160,7 +161,8 @@ def _left_alone_lines(p: Palette, left_alone: list[LeftAlone]) -> list[str]:
     shown = sorted(left_alone, key=lambda item: item[0].lower())[:_LEFT_ALONE_SHOWN]
     lines.extend(f"    {name}   {p.dim(reason)}" for name, reason in shown)
     if len(left_alone) > _LEFT_ALONE_SHOWN:
-        lines.append(p.dim(f"    and {len(left_alone) - _LEFT_ALONE_SHOWN} more"))
+        more = len(left_alone) - _LEFT_ALONE_SHOWN
+        lines.append(p.dim(f"    and {more} more; 'cubby explain FILE' says why for any file"))
     return lines
 
 
