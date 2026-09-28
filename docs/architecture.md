@@ -74,8 +74,9 @@ run and undo takes an exclusive lock (`cubby.lock` in the state folder, an
 `fcntl` advisory lock) and waits up to 30 s (the agent) or 60 s (a command) for
 it. So the agent and a manual `cubby run` never interleave.
 
-- **Limit**: one folder per user, one pass at a time. A pass over 20 000 files
-  takes a few seconds (see `docs/PERFORMANCE.md`); the agent polls every 30 s.
+- **Limit**: one folder per user, one pass at a time. A first pass over 20 000 files
+  takes 11 to 15 s, and a pass over a sorted folder about 10 ms (see
+  `docs/PERFORMANCE.md`); the agent polls every 30 s.
 - **Not protected**: another program moving files in the same folder at the
   same moment. The no-clobber move still never overwrites a file, and a file
   that vanished mid-pass is reported, not lost.
