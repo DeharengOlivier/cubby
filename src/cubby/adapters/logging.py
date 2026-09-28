@@ -20,10 +20,14 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol, get_args
 
 from .. import __version__
 from . import state
+
+#: How much a log line matters. Typed, so a level cubby would later read back
+#: as foreign text (see :func:`_parse`) cannot be written in the first place.
+Level = Literal["INFO", "WARNING", "ERROR"]
 
 #: The run a log line belongs to, so it can be matched with the ledger and the
 #: journal (``jq 'select(.run == "...")'``). Set by :func:`run_context`.
@@ -52,7 +56,7 @@ class LevelLogger(Protocol):
     deciding what is worth shouting about is the caller's business.
     """
 
-    def __call__(self, message: str, *, level: str = "INFO") -> None: ...
+    def __call__(self, message: str, *, level: Level = "INFO") -> None: ...
 
 
 def human_line(record: dict[str, str]) -> str:
@@ -79,7 +83,7 @@ def file_logger(path: Path | None = None, *, echo: bool = False) -> LevelLogger:
     reported = False
     echoing = echo
 
-    def log(message: str, *, level: str = "INFO") -> None:
+    def log(message: str, *, level: Level = "INFO") -> None:
         nonlocal reported, echoing
         record = {
             "ts": datetime.now().isoformat(timespec="seconds"),
@@ -131,7 +135,7 @@ def read_all(path: Path | None = None) -> list[dict[str, str]]:
 
 
 #: The levels cubby writes; a record with another is not one of cubby's.
-LEVELS = ("INFO", "WARNING", "ERROR")
+LEVELS: tuple[Level, ...] = get_args(Level)
 
 
 def _parse(line: str) -> dict[str, str]:

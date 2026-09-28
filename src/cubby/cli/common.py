@@ -11,7 +11,7 @@ from ..adapters.config import (
     find_user_config,
     load_config,
 )
-from ..adapters.logging import LevelLogger
+from ..adapters.logging import Level, LevelLogger
 from ..adapters.pause import MAX_DURATION as MAX_PAUSE
 from ..adapters.ui import Palette, supports_color
 from ..domain.category import Config
@@ -81,7 +81,7 @@ def source_error(config: Config) -> bool:
 def make_loud(log: LevelLogger) -> LevelLogger:
     """A logger whose warnings and errors also reach stderr, whatever the verbosity."""
 
-    def log_and_tell(message: str, *, level: str = "INFO") -> None:
+    def log_and_tell(message: str, *, level: Level = "INFO") -> None:
         log(message, level=level)
         if level != "INFO":
             print(f"cubby: {level.lower()}: {message}", file=sys.stderr)

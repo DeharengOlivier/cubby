@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import typing
 from pathlib import Path
 
@@ -29,6 +30,8 @@ from cubby.cli import agent as cli_agent
 from cubby.cli import main
 from cubby.domain.file_ref import Stage
 from tests.helpers import aged_file, process_named_cubby_watch
+
+needs_permissions = pytest.mark.skipif(os.geteuid() == 0, reason="root ignores folder permissions")
 
 SCHEMAS = Path(__file__).resolve().parents[1] / "docs" / "schemas"
 META = Path(__file__).resolve().parent / "data" / "json-schema-draft-07.json"
@@ -163,7 +166,8 @@ def test_plan(downloads, capsys):
     assert {item["stage"] for item in payload["items"]} >= {"name", "type"}
 
 
-def test_history_in_every_undo_state_with_failures(downloads, capsys, monkeypatch):
+@needs_permissions
+def test_history_with_a_partial_run_and_a_partly_undone_one(downloads, capsys, monkeypatch):
     real_move = sorter_module.move_into
 
     def refuse_png(path, *args, **kwargs):
@@ -212,12 +216,34 @@ def test_status_in_its_pause_states(downloads, capsys, monkeypatch, pause):
     payload = _json_of(capsys, ["status", "--json"])
 
     _validator("status")(payload)
-    expected = {"none": None, "timed": False, "damaged": True}[pause]
-    assert (payload["paused"] and payload["paused"]["damaged"]) == expected or (
-        pause == "none" and payload["paused"] is None
-    )
-    if pause == "timed":
-        assert isinstance(payload["paused"]["until"], float)
+    paused = payload["paused"]
+    if pause == "none":
+        assert paused is None
+    elif pause == "timed":
+        assert paused["damaged"] is False
+        assert isinstance(paused["until"], float)
+    else:
+        assert paused["damaged"] is True
+
+
+def test_status_after_a_run_with_failures(downloads, capsys, monkeypatch):
+    monkeypatch.setattr(cli_agent, "detect_service", lambda: None)
+    real_move = sorter_module.move_into
+
+    def refuse_png(path, *args, **kwargs):
+        if path.suffix == ".png":
+            raise PermissionError(13, "Permission denied")
+        return real_move(path, *args, **kwargs)
+
+    monkeypatch.setattr(sorter_module, "move_into", refuse_png)
+    main(["run", "--source", str(downloads), "--delay", "0"])
+    capsys.readouterr()
+
+    payload = _json_of(capsys, ["status", "--json"])
+
+    _validator("status")(payload)
+    assert payload["last_run"]["status"] == "partial"
+    assert payload["last_run"]["failures"][0]["error"]
 
 
 def test_status_with_a_surviving_agent(capsys, monkeypatch):
