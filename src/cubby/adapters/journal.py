@@ -151,14 +151,18 @@ class Journal:
             self._compacted_size = 0  # rewritten or removed since: start afresh
         if size <= max(MAX_BYTES, 2 * self._compacted_size):
             return
-        lines = state.read_lines(self.path)
-        tallies = _tally(lines)
+        # Two streamed reads rather than one whole: the journal holds every move
+        # still undoable, and holding it whole (text, lines and parsed fields)
+        # cost three times its size at every compaction.
+        census = _Census()
+        for line in state.iter_lines(self.path):
+            census.add(line)
         # Recent runs stay for history; a run with anything left to undo stays
         # whatever its age, because dropping it would take away its way back.
-        keep = set(list(tallies)[-KEEP_RUNS:]) | {run for run, (_, left) in tallies.items() if left}
-        kept = [line for line in lines if _run_of(line) in keep]
-        if len(kept) < len(lines):
-            state.replace_text(self.path, "".join(line + "\n" for line in kept))
+        keep = census.worth_keeping(KEEP_RUNS)
+        if not census.keys <= keep:
+            lines = state.iter_lines(self.path)
+            state.replace_lines(self.path, (line for line in lines if _run_of(line) in keep))
         self._compacted_size = self.path.stat().st_size
 
     # --- reading -------------------------------------------------------------
@@ -246,6 +250,47 @@ def _tally(lines: list[str]) -> dict[str, tuple[int, int]]:
     """Moves and pending moves per run with moves, oldest first."""
     counts = {run_id: _count(fields) for run_id, fields in _group(lines).items()}
     return {run_id: count for run_id, count in counts.items() if count[0]}
+
+
+@dataclass
+class _RunCensus:
+    """What compaction must know of one run: whether it moved anything, and what is left."""
+
+    moved: bool = False
+    unsettled: set[int] = field(default_factory=set)  # moves not settled so far
+    settled: set[int] = field(default_factory=set)
+
+
+class _Census:
+    """The journal as compaction sees it, gathered one line at a time.
+
+    Holds sequence numbers, not lines or parsed entries, so a compaction of a
+    journal of 200 000 undoable moves holds a few megabytes, not the journal.
+    It answers what :func:`_tally` answered about the whole list of lines.
+    """
+
+    def __init__(self) -> None:
+        self.runs: dict[str, _RunCensus] = {}  # in order of first appearance, as _group
+        self.keys: set[str | None] = set()  # every line's run as _run_of keys it
+
+    def add(self, line: str) -> None:
+        self.keys.add(_run_of(line))
+        for run_id, seq, op, *_ in _fields(line):
+            run = self.runs.setdefault(run_id, _RunCensus())
+            if op == "move" or op == "dedupe":  # noqa: PLR1714 - as in _run_from
+                run.moved = True
+                if seq not in run.settled:
+                    run.unsettled.add(seq)
+            else:
+                run.settled.add(seq)
+                run.unsettled.discard(seq)
+
+    def worth_keeping(self, recent: int) -> set[str | None]:
+        """The ``recent`` last runs with moves, and every run with a move left to undo."""
+        with_moves = [run_id for run_id, run in self.runs.items() if run.moved]
+        pending = (run_id for run_id in with_moves if self.runs[run_id].unsettled)
+        keep: set[str | None] = {*with_moves[-recent:], *pending}
+        return keep
 
 
 def _run_of(line: str) -> str | None:

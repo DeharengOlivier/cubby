@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -115,6 +116,50 @@ def read_lines(path: Path) -> list[str]:
     # also breaks on U+2028, U+0085 and others, which JSON leaves unescaped, so a
     # file named with one of them tore its journal line in two.
     return [line for line in raw.split("\n") if line.strip()]
+
+
+def iter_lines(path: Path) -> Iterator[str]:
+    """The lines :func:`read_lines` returns, read one at a time.
+
+    For a file too large to hold whole. The file is decoded as ``read_lines``
+    decodes it (UTF-8, damage replaced, ``\\r`` and ``\\r\\n`` read as ``\\n``)
+    and split on ``\\n`` only, for the same reason.
+
+    Raises:
+        OSError: The file exists but cannot be read.
+    """
+    try:
+        handle = path.open(encoding="utf-8", errors="replace")
+    except FileNotFoundError:
+        return
+    with handle:
+        for line in handle:
+            stripped = line.removesuffix("\n")
+            if stripped.strip():
+                yield stripped
+
+
+def replace_lines(path: Path, lines: Iterable[str]) -> None:
+    """Replace ``path``'s content with ``lines`` atomically, one line at a time.
+
+    Like :func:`replace_text`, without holding the new content whole: an
+    interrupted replace, a failed write or a failed read of ``lines`` leaves the
+    previous content intact.
+
+    Raises:
+        OSError: The file could not be written. The original is untouched.
+    """
+    ensure_parent(path)
+    staging = path.with_name(path.name + ".staging")
+    fd = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, PRIVATE_FILE)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            for line in lines:
+                handle.write(line + "\n")
+        staging.replace(path)
+    except OSError:
+        staging.unlink(missing_ok=True)
+        raise
 
 
 def keep_last_lines(path: Path, *, max_bytes: int, keep: int) -> None:

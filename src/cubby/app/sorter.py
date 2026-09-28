@@ -23,13 +23,13 @@ from ..adapters.filesystem import (
     not_yet_reason,
 )
 from ..adapters.journal import Entry, Journal, new_run_id
-from ..adapters.ledger import Failure, Ledger, RunRecord, now_iso
+from ..adapters.ledger import Ledger, RunRecord, now_iso
 from ..adapters.logging import run_context
 from ..domain.category import Category, Config
 from ..domain.engine import Engine
 from ..domain.file_ref import FileRef
 from ..domain.invoices import Placement, is_month_folder, plan_placement
-from .report import SortOutcome
+from .report import PassTally, SortOutcome
 
 Logger = Callable[[str], None]
 
@@ -93,6 +93,10 @@ def _where(path: Path, root: Path | None) -> str:
 
 def _never() -> bool:
     return False
+
+
+def _drop(_: SortOutcome) -> None:
+    return None
 
 
 def _ignore(_: Path, __: str) -> None:
@@ -273,7 +277,38 @@ class Sorter:
         run_id: str | None = None,
         on_waiting: Callable[[Path, str], None] = _ignore,
     ) -> list[SortOutcome]:
-        """Classify every candidate once.
+        """Classify every candidate once, and return every outcome.
+
+        For the commands that print what was (or would be) done file by file:
+        the list grows with the folder. The agent, which only counts, calls
+        :meth:`sort_pass`. The arguments are those of :meth:`sort_pass`.
+        """
+        outcomes: list[SortOutcome] = []
+        self.sort_pass(
+            apply=apply,
+            on_outcome=outcomes.append,
+            respect_age=respect_age,
+            stop=stop,
+            run_id=run_id,
+            on_waiting=on_waiting,
+        )
+        return outcomes
+
+    def sort_pass(
+        self,
+        *,
+        apply: bool,
+        on_outcome: Callable[[SortOutcome], None] = _drop,
+        respect_age: bool = True,
+        stop: Callable[[], bool] = _never,
+        run_id: str | None = None,
+        on_waiting: Callable[[Path, str], None] = _ignore,
+    ) -> PassTally:
+        """Classify every candidate once, handing each outcome on as it is made.
+
+        Keeps no outcome: each goes to ``on_outcome``, then only its counts
+        stay, so a pass over any number of files holds what one file needs
+        (plus the sorted listing of names). Returns those counts.
 
         When ``apply`` is true, eligible files are moved, each move is journaled
         as it happens, and a file that cannot be moved is reported in its
@@ -289,16 +324,19 @@ class Sorter:
         """
         run_id = run_id or new_run_id()
         started = now_iso()
-        outcomes: list[SortOutcome] = []
-        unread: list[Path] = []
+        tally = PassTally()
+
+        def count_and_hand_on(outcome: SortOutcome) -> None:
+            tally.add(outcome)
+            on_outcome(outcome)
 
         def on_extraction_failure(path: Path, failures: tuple[ConverterFailure, ...]) -> None:
-            unread.append(path)
+            tally.extraction_failures += 1  # counted, like the outcomes, not kept
             self._report_extraction_failure(path, failures)
 
         with run_context(run_id):
             self._sort_each(
-                outcomes,
+                count_and_hand_on,
                 apply=apply,
                 respect_age=respect_age,
                 stop=stop,
@@ -307,14 +345,14 @@ class Sorter:
                 on_extraction_failure=on_extraction_failure,
             )
             if apply:
-                self._record_run(run_id, started, outcomes, extraction_failures=len(unread))
+                self._record_run(run_id, started, tally)
                 if self._journal is not None:
                     self._compact_journal(self._journal)
-        return outcomes
+        return tally
 
     def _sort_each(
         self,
-        outcomes: list[SortOutcome],
+        emit: Callable[[SortOutcome], None],
         *,
         apply: bool,
         respect_age: bool,
@@ -325,32 +363,54 @@ class Sorter:
     ) -> None:
         settings = self._config.settings
         claimed: dict[Path, Path] = {}
+        seq = 0  # the journal numbers every outcome of the pass, failed ones included
         for path in iter_candidates(settings, self._config.managed_dirs):
             if stop():
                 break
             if reason := not_yet_reason(path, settings, ignore_age=not respect_age):
                 on_waiting(path, reason)
                 continue
-            try:
-                outcomes.append(
-                    self._outcome(
-                        path,
-                        apply=apply,
-                        run_id=run_id,
-                        seq=len(outcomes),
-                        claimed=claimed,
-                        on_extraction_failure=on_extraction_failure,
-                    )
+            emit(
+                self._outcome_or_failure(
+                    path,
+                    apply=apply,
+                    run_id=run_id,
+                    seq=seq,
+                    claimed=claimed,
+                    on_extraction_failure=on_extraction_failure,
                 )
-            except Exception as exc:  # noqa: BLE001 - reported below, and the others still sort
-                # Whatever stops one file (permissions, a file that vanished, a
-                # refused destination, a parser bug) must not stop the rest: the
-                # agent would otherwise fail on the same file every minute and
-                # never reach the files after it. The failure is not hidden: it
-                # goes to stderr or the log, the ledger, and the exit code.
-                error = describe_error(exc, self.source)
-                self._warn(f"could not sort {path.name}: {error}")
-                outcomes.append(SortOutcome.failed(path, error))
+            )
+            seq += 1
+
+    def _outcome_or_failure(
+        self,
+        path: Path,
+        *,
+        apply: bool,
+        run_id: str,
+        seq: int,
+        claimed: dict[Path, Path],
+        on_extraction_failure: ExtractionFailureHandler,
+    ) -> SortOutcome:
+        """:meth:`_outcome`, or the failed outcome saying why there is none."""
+        try:
+            return self._outcome(
+                path,
+                apply=apply,
+                run_id=run_id,
+                seq=seq,
+                claimed=claimed,
+                on_extraction_failure=on_extraction_failure,
+            )
+        except Exception as exc:  # noqa: BLE001 - reported below, and the others still sort
+            # Whatever stops one file (permissions, a file that vanished, a
+            # refused destination, a parser bug) must not stop the rest: the
+            # agent would otherwise fail on the same file every minute and
+            # never reach the files after it. The failure is not hidden: it
+            # goes to stderr or the log, the ledger, and the exit code.
+            error = describe_error(exc, self.source)
+            self._warn(f"could not sort {path.name}: {error}")
+            return SortOutcome.failed(path, error)
 
     def _report_extraction_failure(
         self, path: Path, failures: tuple[ConverterFailure, ...]
@@ -367,27 +427,20 @@ class Sorter:
         with contextlib.suppress(OSError):
             self._warn(f"content extraction failed for {_shown(path, self.source)}: {what}")
 
-    def _record_run(
-        self,
-        run_id: str,
-        started: str,
-        outcomes: list[SortOutcome],
-        *,
-        extraction_failures: int,
-    ) -> None:
-        if self._ledger is None or not outcomes:
+    def _record_run(self, run_id: str, started: str, tally: PassTally) -> None:
+        if self._ledger is None or not tally.count:
             return
-        failures = tuple(Failure(o.name, o.error) for o in outcomes if o.error)
         record = RunRecord(
             run=run_id,
             mode=self._mode,
             source=str(self._config.settings.source),
             started=started,
             finished=now_iso(),
-            moved=sum(1 for o in outcomes if o.moved_to is not None),
-            failed=len(failures),
-            failures=failures,
-            extraction_failures=extraction_failures,
+            moved=tally.moved,
+            failed=tally.failed,
+            # The first failures only, as many as the ledger writes of a run.
+            failures=tuple(tally.failures),
+            extraction_failures=tally.extraction_failures,
         )
         try:
             self._ledger.record(record)

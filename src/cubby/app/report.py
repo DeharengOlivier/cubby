@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from ..adapters.ledger import MAX_FAILURES_RECORDED, Failure
 from ..adapters.ui import Palette, dumps_for_terminal
 from ..adapters.ui import escape_for_terminal as shown
 from ..domain.file_ref import Stage
@@ -56,6 +57,39 @@ class SortOutcome:
     def display_name(self) -> str:
         """The name the entry ends up with (renamed when applicable)."""
         return self.renamed_to or self.name
+
+
+@dataclass
+class PassTally:
+    """What one pass did, counted as it goes instead of kept file by file.
+
+    The agent's pass hands each outcome to its caller and keeps only this, so
+    its memory does not grow with the number of files it sorts. ``failures``
+    are the first ones only, as many as the ledger writes (``MAX_FAILURES_RECORDED``);
+    the counts are always exact.
+    """
+
+    count: int = 0  # outcomes, failed ones included
+    moved: int = 0
+    failed: int = 0
+    failures: list[Failure] = field(default_factory=list)
+    #: Files whose content was lost to broken converters (sorted by name and
+    #: type all the same), one per file, as the ledger records them.
+    extraction_failures: int = 0
+
+    def add(self, outcome: SortOutcome) -> None:
+        self.count += 1
+        if outcome.moved_to is not None:
+            self.moved += 1
+        if outcome.error is not None:
+            self.failed += 1
+        if outcome.error and len(self.failures) < MAX_FAILURES_RECORDED:
+            self.failures.append(Failure(outcome.name, outcome.error))
+
+    @property
+    def sorted(self) -> int:
+        """Outcomes without an error: moved, deleted as duplicates, or planned."""
+        return self.count - self.failed
 
 
 #: A file left for later, or for good, and why (``Sorter.sort_once(on_waiting=...)``).

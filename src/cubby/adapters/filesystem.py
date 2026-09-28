@@ -80,7 +80,11 @@ def iter_candidates(settings: Settings, managed: frozenset[str] = frozenset()) -
     source = settings.source
     if not source.is_dir():
         return
-    for entry in sorted(source.iterdir()):
+    # The listing is held whole to be sorted: names, in the order their paths
+    # sort in, and each path made when its turn comes. A Path and its cached
+    # text cost about 490 bytes a file, its name about 70 (docs/PERFORMANCE.md).
+    for name in sorted(child.name for child in source.iterdir()):
+        entry = source / name
         if candidate_skip_reason(entry, settings, managed) is None:
             yield entry
 

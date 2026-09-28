@@ -31,6 +31,7 @@ from cubby.adapters.filesystem import build_ref
 from cubby.adapters.ledger import Ledger, RunRecord
 from cubby.app.activity import summarize
 from cubby.app.sorter import Sorter
+from cubby.app.watcher import Watcher
 from cubby.cli import agent as cli_agent
 from cubby.cli import main
 from cubby.domain.category import Category
@@ -308,6 +309,32 @@ def test_a_broken_converter_changes_no_destination(monkeypatch, tmp_path, only_p
     assert outcome.moved_to is not None
     assert expected.moved_to is not None
     assert outcome.moved_to.relative_to(broken) == expected.moved_to.relative_to(clean)
+
+
+def test_the_agent_pass_counts_extraction_failures_without_keeping_outcomes(
+    monkeypatch, tmp_path, only_pdftotext
+):
+    # The agent's pass counts instead of keeping outcomes (docs/PERFORMANCE.md,
+    # "Memory of one pass"): its ledger line and tally must count what the
+    # full list of sort_once counts.
+    _pdftotext_does(monkeypatch, _times_out)
+    agent_folder, pass_folder = tmp_path / "agent", tmp_path / "pass"
+    for folder in (agent_folder, pass_folder):
+        for name in ("a.pdf", "b.pdf", "c.pdf"):
+            _pdf(folder, name)
+        aged_file(folder, "notes.txt", "plain")
+    ledger = Ledger(tmp_path / "state")
+    agent = Sorter(_content_config(agent_folder), ledger=ledger, mode="watch")
+
+    sorted_count = Watcher(agent, 1.0, sleep=lambda _: None, ledger=ledger).run(max_cycles=1)
+    tally = Sorter(_content_config(pass_folder)).sort_pass(apply=True)
+
+    assert sorted_count == 4
+    (record,) = ledger.runs()
+    assert record.mode == "watch"
+    assert record.extraction_failures == 3
+    assert record.failed == 0
+    assert (tally.count, tally.extraction_failures) == (4, 3)
 
 
 def test_the_sorter_warns_and_counts_extraction_failures(monkeypatch, tmp_path, only_pdftotext):
