@@ -225,8 +225,8 @@ def test_the_journal_lives_in_the_state_folder():
     assert default_journal_path() == state.state_dir() / "journal.jsonl"
 
 
-def test_run_ids_sort_by_time_and_carry_eight_hex_digits():
-    assert re.fullmatch(r"\d{8}T\d{6}-[0-9a-f]{8}", new_run_id())
+def test_run_ids_sort_by_time_and_carry_sixteen_hex_digits():
+    assert re.fullmatch(r"\d{8}T\d{6}-[0-9a-f]{16}", new_run_id())
 
 
 def test_a_version_1_run_reads_as_numbered_plain_moves(tmp_path):

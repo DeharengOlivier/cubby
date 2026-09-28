@@ -23,6 +23,10 @@ All notable changes to this project are documented here. The format is based on
   the version too; older records read as `unknown`.
 
 ### Fixed
+- Run ids carry 64 random bits instead of 32. Two runs started in the same
+  second could draw the same id (CI saw it once in 5 000 draws), and their
+  moves then shared one journal entry list: undoing one reverted both. Older
+  ids stay valid.
 - A move whose source could not be removed (a read-only folder) left the file
   under both names. After a failed undo, the retry then restored a second copy,
   `name (1).ext`, beside `name.ext`. A failed move now changes nothing.
