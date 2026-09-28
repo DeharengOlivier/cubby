@@ -13,30 +13,45 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import unicodedata
 from typing import Any, TextIO
 
 from .. import __version__
 
-#: Invisible characters kept as they are: the zero-width non-joiner and joiner
-#: shape Persian or Indic words and compose emoji (a family, a flag), and a
-#: terminal does not act on them.
+#: Invisible characters kept as they are, since a terminal does not act on
+#: them: the zero-width non-joiner and joiner shape Persian or Indic words and
+#: compose emoji (a family), and the tag characters spell the subdivision of a
+#: flag (England, Scotland, Wales). Spaces (category Zs) are kept too: macOS
+#: puts U+202F in a screenshot's name, and Option+Space types U+00A0.
 _JOINERS = frozenset("\u200c\u200d")
+_TAGS = range(0xE0020, 0xE0080)
 #: Escapes shorter than their code, as Python writes them.
 _SHORT_ESCAPES = {"\\": "\\\\", "\t": "\\t", "\n": "\\n", "\r": "\\r"}
+#: Where a character that is not plain ASCII can hide in a JSON text.
+_NOT_ASCII = re.compile(r"[^\x00-\x7e]")
+
+
+def is_harmless(ch: str) -> bool:
+    """Whether a terminal shows ``ch`` as text: it has a glyph, or it is one of
+    the invisible characters that only join, tag or space the glyphs around it."""
+    return (
+        ch.isprintable() or ch in _JOINERS or ord(ch) in _TAGS or unicodedata.category(ch) == "Zs"
+    )
 
 
 def escape_for_terminal(text: str) -> str:
     """``text`` with every character a terminal could act on shown as an escape.
 
-    A character with no glyph of its own (a control from C0, DEL or C1, a
-    format character such as a bidi override or isolate, a line or paragraph
-    separator, a space other than U+0020, a surrogate from an undecodable
-    name, a private or unassigned code point) becomes a Python-style escape:
-    ``\\t``, ``\\n``, ``\\r``, else ``\\xNN``, ``\\uNNNN`` or ``\\UNNNNNNNN``. A
-    name holding ``ESC [2J`` then reads ``\\x1b[2J`` instead of clearing the
-    screen, and a right-to-left override reads ``\\u202e`` instead of turning
-    ``fdp.exe`` around. Every other character, accented letters, CJK, emoji,
-    is left as it is, so ordinary names read as they are.
+    A character that is not :func:`is_harmless` (a control from C0, DEL or C1,
+    a format character such as a bidi override or isolate, a line or paragraph
+    separator, a surrogate from an undecodable name, a private or unassigned
+    code point) becomes a Python-style escape: ``\\t``, ``\\n``, ``\\r``, else
+    ``\\xNN``, ``\\uNNNN`` or ``\\UNNNNNNNN``. A name holding ``ESC [2J`` then
+    reads ``\\x1b[2J`` instead of clearing the screen, and a right-to-left
+    override reads ``\\u202e`` instead of turning ``fdp.exe`` around. Every
+    other character, accented letters, CJK, emoji, spaces, is left as it is,
+    so ordinary names read as they are.
 
     A backslash is always doubled. Without that, a harmless file literally
     named ``a\\x1b`` would read exactly like a file holding a real ESC; with
@@ -50,7 +65,7 @@ def escape_for_terminal(text: str) -> str:
 def _escape_character(ch: str) -> str:
     if ch in _SHORT_ESCAPES:
         return _SHORT_ESCAPES[ch]
-    if ch.isprintable() or ch in _JOINERS:
+    if is_harmless(ch):
         return ch
     code = ord(ch)
     if code <= 0xFF:
@@ -60,9 +75,49 @@ def _escape_character(ch: str) -> str:
     return f"\\U{code:08x}"
 
 
+def os_error_text(error: OSError) -> str:
+    """What ``str(error)`` says, with the file names as they are.
+
+    Python quotes the file names of an ``OSError`` with ``repr()``, which
+    escapes their controls in its own way; :func:`escape_for_terminal` would
+    then double those backslashes, and a real ESC would read ``\\\\x1b``, the
+    way a name holding a literal backslash reads. The names are kept raw here
+    so that the one escaping, done where the text is shown, applies once.
+    """
+    if error.strerror is None:
+        return str(error)
+    text = error.strerror if error.errno is None else f"[Errno {error.errno}] {error.strerror}"
+    names = [_file_name(name) for name in (error.filename, error.filename2) if name is not None]
+    return f"{text}: {' -> '.join(names)}" if names else text
+
+
+def _file_name(name: object) -> str:
+    return f"'{os.fsdecode(name) if isinstance(name, str | bytes) else name}'"
+
+
 def dumps_for_terminal(value: Any) -> str:
-    """``value`` as the indented JSON of a ``--json`` output."""
-    return json.dumps(value, ensure_ascii=False, indent=2)
+    """``value`` as the indented JSON of a ``--json`` output, safe to print.
+
+    The encoder escapes C0 controls only (``ensure_ascii`` would escape every
+    accent and ideogram too). Every other character that is not
+    :func:`is_harmless` (DEL, C1, bidi and other format characters, line
+    separators, lone surrogates) is written as ``\\uXXXX``, a pair of them
+    above U+FFFF, so a ``--json`` output printed to a terminal cannot drive it
+    either, and still decodes to the same values. Such characters can only be
+    inside a JSON string: the rest of the text is ASCII.
+    """
+    return _NOT_ASCII.sub(_json_escape, json.dumps(value, ensure_ascii=False, indent=2))
+
+
+def _json_escape(match: re.Match[str]) -> str:
+    ch = match.group()
+    if is_harmless(ch):
+        return ch
+    code = ord(ch)
+    if code <= 0xFFFF:
+        return f"\\u{code:04x}"
+    code -= 0x10000
+    return f"\\u{0xD800 + (code >> 10):04x}\\u{0xDC00 + (code & 0x3FF):04x}"
 
 
 _RESET = "\033[0m"

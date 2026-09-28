@@ -11,7 +11,7 @@ from .. import __version__
 from ..adapters.service import (
     ServiceError,
 )
-from ..adapters.ui import banner
+from ..adapters.ui import banner, os_error_text
 from ..adapters.ui import escape_for_terminal as shown
 from .agent import cmd_doctor, cmd_install, cmd_status, cmd_uninstall
 from .common import (
@@ -204,7 +204,8 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, UnicodeError) as exc:
         # UnicodeError before ValueError, which it subclasses: a name or a text
         # cubby could not encode is not a setting to correct.
-        print(f"cubby: {shown(str(exc))}", file=sys.stderr)
+        text = os_error_text(exc) if isinstance(exc, OSError) else str(exc)
+        print(f"cubby: {shown(text)}", file=sys.stderr)
         return EXIT_FAILED
     except ValueError as exc:
         # A setting cubby cannot act on. The message names it; a traceback

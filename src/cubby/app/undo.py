@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ..adapters.filesystem import move_no_clobber, same_file, unique_destination
 from ..adapters.journal import Entry, Journal, Run
+from ..adapters.ui import os_error_text
 
 Logger = Callable[[str], None]
 
@@ -136,7 +137,7 @@ def undo_run(journal: Journal, run_id: str | None = None, *, log: Logger = _noop
                 name = _restore(entry)
         except OSError as exc:
             log(
-                f"pending (cannot restore {entry.destination.name}): {exc}; "
+                f"pending (cannot restore {entry.destination.name}): {os_error_text(exc)}; "
                 f"fix the cause, then retry with 'cubby undo --run {run.run_id}'"
             )
             result.failed.append(entry.destination.name)
