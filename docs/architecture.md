@@ -36,30 +36,61 @@ function of its inputs and trivially unit-testable in memory.
 
 Each adapter implements one IO concern behind a small surface:
 
-- `extraction.py` - text extraction with graceful multi-backend fallback.
+- `extraction.py`, `parsers.py` - text extraction with graceful multi-backend
+  fallback; the Python parsers run in a bounded child process.
 - `filesystem.py` - candidate discovery, eligibility, collision-safe moves, and
   the `build_ref` factory that wires extraction into a `FileRef`.
-- `config.py` - load and merge TOML into the domain `Config`.
+- `config.py` - load, merge and strictly validate TOML into the domain `Config`.
+- `state.py` - the state folder and its owner-only, append-only files.
+- `journal.py`, `ledger.py` - the undo journal and the run ledger with heartbeat.
+- `lock.py` - the pass lock (see "One writer" below).
+- `pause.py`, `notify.py` - the pause switch and desktop notifications.
 - `service/` - background-service backends (`launchd`, `systemd`) behind a
   common `Service` interface, chosen by `factory.detect_service`.
-- `logging.py` - an append-only file logger.
+- `logging.py` - a JSON-lines file logger, rotated.
 
 ### `app/` - use cases
 
 - `sorter.py` - `Sorter` orchestrates engine + filesystem for one pass.
-- `watcher.py` - `Watcher` runs the poll loop; `sleep` and `stop` are injected
-  so it is unit-testable without real time.
+- `watcher.py` - `Watcher` runs the poll loop; `sleep`, `stop`, the pause check
+  and the alert channel are injected so it is unit-testable without real time.
+- `undo.py`, `explain.py`, `history.py` - the other use cases.
 - `report.py` - result types and human-readable rendering.
 
-### `cli.py` - entry point
+### `cli/` - entry point
 
-Parses arguments, builds overrides, loads config, and calls a use case. It holds
-no business logic.
+`main.py` parses arguments; `sorting.py`, `inspect.py` and `agent.py` hold the
+commands, each a thin call into a use case; `common.py` holds exit codes,
+config loading and output helpers. No business logic lives here.
+
+Layering is enforced by import-linter in CI (`[tool.importlinter]` in
+`pyproject.toml`): cli over app over adapters over domain, and the domain never
+imports `os`, `shutil` or `subprocess`.
+
+## One writer
+
+Cubby assumes it is the only process moving files in its folder. Every pass,
+run and undo takes an exclusive lock (`cubby.lock` in the state folder, an
+`fcntl` advisory lock) and waits up to 30 s (the agent) or 60 s (a command) for
+it. So the agent and a manual `cubby run` never interleave.
+
+- **Limit**: one folder per user, one pass at a time. A pass over 20 000 files
+  takes a few seconds (see `docs/PERFORMANCE.md`); the agent polls every 30 s.
+- **Not protected**: another program moving files in the same folder at the
+  same moment. The no-clobber move still never overwrites a file, and a file
+  that vanished mid-pass is reported, not lost.
+- **Exit path** if one writer ever stops being enough (several folders, a
+  shared network folder): one lock and one agent per folder, keyed by the
+  folder's path, and a per-folder state folder. The journal already records
+  absolute paths, so undo would not change.
 
 ## Why this shape
 
-- **Testability**: 55 tests run in well under a second with no real files for
-  the domain, because the engine has no IO.
+- **Testability**: the domain is tested in memory with no real files, because
+  the engine has no IO; the adapters on temporary folders; the agent as a real
+  process.
 - **Portability**: swapping launchd for systemd is a new adapter, nothing else
   changes. The poll-based watcher avoids OS-specific file-event APIs.
-- **Safety**: all filesystem mutation is confined to `adapters/filesystem.py`.
+- **Safety**: moves go through `adapters/filesystem.py` (containment check,
+  no-clobber move); undo reverses them through the same functions. Cubby's own
+  bookkeeping goes through `adapters/state.py`.

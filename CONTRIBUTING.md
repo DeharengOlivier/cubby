@@ -20,7 +20,7 @@ See [docs/architecture.md](docs/architecture.md). In short:
 
 - `domain/` is pure: no IO, no third-party imports, fully unit-testable.
 - `adapters/` is where every IO concern lives.
-- `app/` holds use cases; `cli.py` only wires things together.
+- `app/` holds use cases; `cli/` only wires things together.
 
 When adding a feature, put logic in the layer that owns it. If the engine needs
 new data about a file, add it to `FileRef` and have the filesystem adapter
