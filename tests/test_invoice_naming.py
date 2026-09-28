@@ -217,7 +217,7 @@ def test_explain_reads_a_file_given_by_a_relative_path(tmp_path, monkeypatch, ca
     from cubby.adapters import extraction
 
     seen: list[str] = []
-    monkeypatch.setattr(extraction, "_from_pdf", lambda path, _: seen.append(str(path)) or "")
+    monkeypatch.setattr(extraction, "_from_pdf", lambda path, *_: seen.append(str(path)) or "")
     (tmp_path / "a.pdf").write_bytes(b"%PDF-1.4")
     monkeypatch.chdir(tmp_path)
     from cubby.cli import main

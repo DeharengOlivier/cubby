@@ -189,6 +189,11 @@
                 ]
               }
             },
+            "extraction_failures": {
+              "description": "Files whose content a converter broke on (timeout, crash, non-zero exit): sorted anyway by name and type, so not counted in failed. 0 in a record written before the count existed.",
+              "type": "integer",
+              "minimum": 0
+            },
             "version": {
               "type": "string"
             },
@@ -201,6 +206,7 @@
             }
           },
           "required": [
+            "extraction_failures",
             "failed",
             "failures",
             "finished",
@@ -236,6 +242,11 @@
           "minimum": 0
         },
         "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "extraction_failures": {
+          "description": "Files of those runs whose content a converter broke on (timeout, crash, non-zero exit): sorted anyway by name and type, so not counted in failed.",
           "type": "integer",
           "minimum": 0
         },
@@ -289,6 +300,7 @@
       "required": [
         "complete",
         "errors",
+        "extraction_failures",
         "failed",
         "hours",
         "moved",

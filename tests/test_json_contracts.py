@@ -12,13 +12,14 @@ from __future__ import annotations
 import copy
 import json
 import os
+import subprocess
 import typing
 from pathlib import Path
 
 import fastjsonschema
 import pytest
 
-from cubby.adapters import state
+from cubby.adapters import extraction, state
 from cubby.adapters.ledger import Ledger, PassMetrics, RunRecord
 from cubby.adapters.logging import LEVELS, file_logger, run_context
 from cubby.adapters.pause import pause_path, set_pause
@@ -263,6 +264,35 @@ def test_status_after_a_run_with_failures(downloads, capsys, monkeypatch):
     assert payload["last_run"]["status"] == "partial"
     assert payload["last_run"]["failures"][0]["error"]
     assert payload["activity"]["errors"][0]["kind"].startswith("PermissionError")
+
+
+def test_status_and_history_after_a_run_where_a_converter_broke(downloads, capsys, monkeypatch):
+    # invoice-2026-03.pdf is read for its content: its converter times out.
+    monkeypatch.setattr(cli_agent, "detect_service", lambda: None)
+    monkeypatch.setattr(
+        extraction.shutil, "which", lambda name: "/bin/pdftotext" if name == "pdftotext" else None
+    )
+    monkeypatch.setattr(extraction.importlib.util, "find_spec", lambda name: None)
+    real_run = subprocess.run
+
+    def pdftotext_hangs(cmd, *args, **kwargs):
+        if cmd[0] == "/bin/pdftotext":
+            raise subprocess.TimeoutExpired(cmd, 15)
+        return real_run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(extraction.subprocess, "run", pdftotext_hangs)
+    main(["run", "--source", str(downloads), "--delay", "0"])
+    capsys.readouterr()
+
+    status = _json_of(capsys, ["status", "--json"])
+    history = _json_of(capsys, ["history", "--json"])
+
+    _validator("status")(status)
+    _validator("history")(history)
+    assert status["last_run"]["extraction_failures"] == 1
+    assert status["last_run"]["status"] == "ok"
+    assert status["activity"]["extraction_failures"] == 1
+    assert history["runs"][0]["extraction_failures"] == 1
 
 
 def test_status_with_a_surviving_agent(capsys, monkeypatch):

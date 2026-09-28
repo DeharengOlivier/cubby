@@ -250,6 +250,10 @@ def _print_activity(pal: Palette, day: Activity) -> None:
     summary = f"{day.runs} run{'s' if day.runs != 1 else ''}, moved {day.moved}"
     if day.failed:
         summary += pal.yellow(f", {day.failed} failed")
+    if day.extraction_failures:
+        # Sorted by name and type, so not failed: but a converter broke on them.
+        unread = f", content unreadable for {day.extraction_failures} (see cubby log --warnings)"
+        summary += pal.yellow(unread)
     if not day.complete:
         summary += pal.yellow(
             f" (the ledger keeps its last {KEEP_LINES} runs: older ones may be missing)"

@@ -1,9 +1,15 @@
 """Best-effort text extraction for the engine's content stage.
 
 Each backend is optional and degrades gracefully: when neither a system tool
-nor a Python library can read a format, extraction returns ``""`` and the engine
+nor a Python library can read a format, extraction gives no text and the engine
 simply falls back to filename / type rules. Nothing here raises to the caller,
 so a corrupt or password-protected file never breaks a sort run.
+
+Degrading is not the same as hiding. A converter that was there and broke (it
+timed out, was killed, exited non-zero, or could not be started) is returned
+as a :class:`ConverterFailure` next to the text, for the caller to log and
+count. A converter that is not installed is not a failure: ``cubby doctor``
+reports it, and the agent does not repeat it on every pass.
 
 Reading is bounded three ways. A file larger than :data:`MAX_SOURCE_BYTES` is
 not opened at all: cubby only needs a few thousand characters to decide where a
@@ -23,9 +29,12 @@ import importlib.util
 import re
 import resource
 import shutil
+import signal
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 # Formats we know how to read as text. Anything else skips the content stage.
 PARSABLE: frozenset[str] = frozenset(
@@ -89,15 +98,60 @@ def _limit_child_memory() -> None:
         return  # macOS does not enforce RLIMIT_AS; the timeout still bounds the child
 
 
-def _run(cmd: list[str]) -> str:
-    """Run ``cmd`` and return its stdout, or "" if anything goes wrong.
+#: How a converter broke: it ran past its timeout, exited with a non-zero
+#: status, was killed by a signal (a crash, or the kernel's out-of-memory
+#: killer), or could not be run or read at all.
+FailureKind = Literal["timeout", "exit", "crash", "error"]
+
+#: The longest detail kept from what a converter said: one line, not its dump.
+_MAX_DETAIL = 200
+
+
+@dataclass(frozen=True)
+class ConverterFailure:
+    """A converter that was there and did not do its job."""
+
+    converter: str  # "pdftotext", "pdf parser", ...
+    kind: FailureKind
+    detail: str
+
+    def describe(self) -> str:
+        """``converter: kind: detail``, the kind as a word a log filter can match."""
+        return f"{self.converter}: {self.kind}: {self.detail}"
+
+
+@dataclass(frozen=True)
+class Extraction:
+    """The text read from a file, and the converters that broke on the way."""
+
+    text: str
+    failures: tuple[ConverterFailure, ...] = ()
+
+
+def _printable(raw: str) -> str:
+    """The first non-blank line of ``raw``, printable and bounded."""
+    line = next((part.strip() for part in raw.splitlines() if part.strip()), "")
+    return "".join(c if c.isprintable() else "?" for c in line)[:_MAX_DETAIL]
+
+
+def _signal_name(number: int) -> str:
+    try:
+        return signal.Signals(number).name
+    except ValueError:
+        return f"signal {number}"
+
+
+def _run(cmd: list[str], failures: list[ConverterFailure], name: str | None = None) -> str:
+    """Run ``cmd`` and return its stdout; a converter that broke is added to ``failures``.
 
     The command is a list, never a shell string, and its first element is an
     absolute path resolved by :func:`_tool` (or this interpreter), so neither
     the file name nor PATH can decide what gets executed. It runs from the
     filesystem root with a timeout and a memory ceiling, so a hostile document
-    costs one timeout and cannot plant code in the working directory.
+    costs one timeout and cannot plant code in the working directory. ``name``
+    is how a failure names the converter (the executable's name by default).
     """
+    converter = name or Path(cmd[0]).name
     try:
         # preexec_fn is safe here: cubby starts no threads.
         result = subprocess.run(
@@ -108,17 +162,31 @@ def _run(cmd: list[str]) -> str:
             cwd=_NEUTRAL_CWD,
             preexec_fn=_limit_child_memory,
         )
-        return result.stdout.decode("utf-8", "ignore")
-    except (OSError, subprocess.SubprocessError):
-        # Missing, not executable, or past its timeout: no text from this backend.
+    except subprocess.TimeoutExpired:
+        failures.append(ConverterFailure(converter, "timeout", f"no answer after {_TIMEOUT} s"))
         return ""
+    except (OSError, subprocess.SubprocessError) as exc:
+        # Found on PATH a moment ago, and yet it could not be run.
+        detail = _printable(f"{type(exc).__name__}: {exc}")
+        failures.append(ConverterFailure(converter, "error", detail))
+        return ""
+    if result.returncode < 0:
+        detail = f"killed by {_signal_name(-result.returncode)}"
+        failures.append(ConverterFailure(converter, "crash", detail))
+    elif result.returncode > 0:
+        said = _printable(result.stderr.decode("utf-8", "replace"))
+        detail = f"status {result.returncode}" + (f", {said}" if said else "")
+        failures.append(ConverterFailure(converter, "exit", detail))
+    # Whatever a converter printed before failing is still text to classify on.
+    return result.stdout.decode("utf-8", "ignore")
 
 
-def _in_child(kind: str, path: Path, max_bytes: int) -> str:
+def _in_child(kind: str, path: Path, max_bytes: int, failures: list[ConverterFailure]) -> str:
     """Run the ``kind`` Python parser in a child process (see ``parsers.py``).
 
     The interpreter is the one running cubby, by absolute path. When the
-    library is not installed, no process is started at all.
+    library is not installed, no process is started at all, and that is not a
+    failure: the parser is optional.
     """
     if importlib.util.find_spec(_LIBRARIES[kind]) is None:
         return ""
@@ -126,7 +194,9 @@ def _in_child(kind: str, path: Path, max_bytes: int) -> str:
     # folder, `python -m` would otherwise import a downloaded docx.py or pypdf.py
     # in place of the real library.
     return _run(
-        [sys.executable, "-P", "-m", "cubby.adapters.parsers", kind, str(path), str(max_bytes)]
+        [sys.executable, "-P", "-m", "cubby.adapters.parsers", kind, str(path), str(max_bytes)],
+        failures,
+        f"{kind} parser",
     )
 
 
@@ -140,52 +210,58 @@ def _tool(name: str) -> str | None:
     return shutil.which(name)
 
 
-def _from_pdf(path: Path, max_bytes: int) -> str:
+def _from_pdf(path: Path, max_bytes: int, failures: list[ConverterFailure]) -> str:
     if pdftotext := _tool("pdftotext"):  # poppler, common on macOS and Linux
-        text = _run([pdftotext, "-l", "2", "-q", str(path), "-"])
+        text = _run([pdftotext, "-l", "2", "-q", str(path), "-"], failures)
         if text.strip():
             return text
-    return _in_child("pdf", path, max_bytes)
+    return _in_child("pdf", path, max_bytes, failures)
 
 
-def _from_docx(path: Path, max_bytes: int) -> str:
-    text = _in_child("docx", path, max_bytes)
+def _from_docx(path: Path, max_bytes: int, failures: list[ConverterFailure]) -> str:
+    text = _in_child("docx", path, max_bytes, failures)
     if text.strip():
         return text
     # python-docx missing or the document unreadable by it: fall through to
     # the system converter, which is the whole point of a cascade.
     if textutil := _tool("textutil"):  # macOS native
-        return _run([textutil, "-convert", "txt", "-stdout", str(path)])
+        return _run([textutil, "-convert", "txt", "-stdout", str(path)], failures)
     return text
 
 
-def _from_legacy_office(path: Path) -> str:
+def _from_legacy_office(path: Path, failures: list[ConverterFailure]) -> str:
     if textutil := _tool("textutil"):  # macOS reads .doc/.rtf natively
-        return _run([textutil, "-convert", "txt", "-stdout", str(path)])
+        return _run([textutil, "-convert", "txt", "-stdout", str(path)], failures)
     for name in ("antiword", "catdoc"):  # common on Linux
         if tool := _tool(name):
-            return _run([tool, str(path)])
+            return _run([tool, str(path)], failures)
     return ""
 
 
-def _from_html(path: Path, max_bytes: int) -> str:
+def _read_failed(exc: Exception) -> ConverterFailure:
+    return ConverterFailure("direct read", "error", _printable(f"{type(exc).__name__}: {exc}"))
+
+
+def _from_html(path: Path, max_bytes: int, failures: list[ConverterFailure]) -> str:
     if textutil := _tool("textutil"):
-        text = _run([textutil, "-convert", "txt", "-stdout", str(path)])
+        text = _run([textutil, "-convert", "txt", "-stdout", str(path)], failures)
         if text.strip():
             return text
     try:
         with path.open("r", encoding="utf-8", errors="ignore") as handle:
             raw = handle.read(_raw_window(max_bytes))
         return html.unescape(_TAG_RE.sub(" ", raw))
-    except Exception:  # noqa: BLE001 - a corrupt document yields no text, never a crash
+    except Exception as exc:  # noqa: BLE001 - reported, and the file still sorts by name and type
+        failures.append(_read_failed(exc))
         return ""
 
 
-def _from_text(path: Path, max_bytes: int) -> str:
+def _from_text(path: Path, max_bytes: int, failures: list[ConverterFailure]) -> str:
     try:
         with path.open("r", encoding="utf-8", errors="ignore") as handle:
             return handle.read(max_bytes)
-    except Exception:  # noqa: BLE001 - a corrupt document yields no text, never a crash
+    except Exception as exc:  # noqa: BLE001 - reported, and the file still sorts by name and type
+        failures.append(_read_failed(exc))
         return ""
 
 
@@ -200,32 +276,40 @@ def can_read(ext: str) -> bool:
     return ext.lower() in READABLE
 
 
-def extract_text(path: Path, ext: str, max_bytes: int = 4000) -> str:
-    """Return up to ``max_bytes`` of extracted text, or ``""``.
+def extract(path: Path, ext: str, max_bytes: int = 4000) -> Extraction:
+    """Up to ``max_bytes`` of extracted text, and the converters that broke.
 
-    Returns the empty string when the format is unsupported, the file cannot be
-    read, or it is larger than :data:`MAX_SOURCE_BYTES`. The engine then falls
-    back to its filename and file-type stages, which is the designed behaviour
-    for anything the content stage cannot speak for.
+    The text is empty when the format is unsupported, no converter is
+    installed, every converter failed, or the file is larger than
+    :data:`MAX_SOURCE_BYTES`. The engine then falls back to its filename and
+    file-type stages, which is the designed behaviour for anything the content
+    stage cannot speak for. Only the converters that broke are in
+    ``failures``: a missing one, or a large file left unread, is not a failure.
     """
     # Converters run from the filesystem root: a relative path would name
     # another file there, or none.
     path = path.absolute()
     if not path.is_file() or _is_too_large(path):
-        return ""
+        return Extraction("")
+    failures: list[ConverterFailure] = []
     ext = ext.lower()
     if ext == "pdf":
-        text = _from_pdf(path, max_bytes)
+        text = _from_pdf(path, max_bytes, failures)
     elif ext == "docx":
-        text = _from_docx(path, max_bytes)
+        text = _from_docx(path, max_bytes, failures)
     elif ext in {"doc", "rtf"}:
-        text = _from_legacy_office(path)
+        text = _from_legacy_office(path, failures)
     elif ext in {"html", "htm"}:
-        text = _from_html(path, max_bytes)
+        text = _from_html(path, max_bytes, failures)
     elif ext in {"txt", "md", "csv", "tsv", "log"}:
-        text = _from_text(path, max_bytes)
+        text = _from_text(path, max_bytes, failures)
     elif ext == "xlsx":
-        text = _in_child("xlsx", path, max_bytes)
+        text = _in_child("xlsx", path, max_bytes, failures)
     else:
         text = ""
-    return text[:max_bytes]
+    return Extraction(text[:max_bytes], tuple(failures))
+
+
+def extract_text(path: Path, ext: str, max_bytes: int = 4000) -> str:
+    """The text alone of :func:`extract`, for callers with no one to report failures to."""
+    return extract(path, ext, max_bytes).text

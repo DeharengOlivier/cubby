@@ -2,8 +2,9 @@
 
 The journal answers "how do I put it back?". The ledger answers "what did cubby
 do, and did it work?": one line per run that moved or failed something, with
-its counts and failures. The heartbeat is one small file the agent rewrites on
-every pass, so ``cubby status`` can tell a live agent from an installed one.
+its counts and failures, and how many files a content converter broke on. The
+heartbeat is one small file the agent rewrites on every pass, so ``cubby
+status`` can tell a live agent from an installed one.
 
 Both are read by ``cubby status`` and ``cubby history``, never by the sort.
 """
@@ -48,6 +49,9 @@ class RunRecord:
     moved: int
     failed: int
     failures: tuple[Failure, ...] = field(default_factory=tuple)
+    #: Files whose content a converter broke on (timeout, crash, non-zero
+    #: exit). They were still sorted, by name and type: not failed moves.
+    extraction_failures: int = 0
     version: str = __version__  # the cubby that made the run
 
     @property
@@ -75,6 +79,7 @@ class RunRecord:
             failures=tuple(
                 Failure(str(f["file"]), str(f["error"])) for f in data.get("failures", [])
             ),
+            extraction_failures=int(data.get("extraction_failures", 0)),  # older records: 0
             version=str(data.get("version", "unknown")),  # records from before 0.3
         )
 

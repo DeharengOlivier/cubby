@@ -10,7 +10,9 @@ from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
+from ..adapters.extraction import ConverterFailure
 from ..adapters.filesystem import (
+    ExtractionFailureHandler,
     build_ref,
     duplicate_in,
     file_in_the_way,
@@ -152,7 +154,14 @@ class Sorter:
         )
 
     def _outcome(
-        self, path: Path, *, apply: bool, run_id: str, seq: int, claimed: dict[Path, Path]
+        self,
+        path: Path,
+        *,
+        apply: bool,
+        run_id: str,
+        seq: int,
+        claimed: dict[Path, Path],
+        on_extraction_failure: ExtractionFailureHandler,
     ) -> SortOutcome:
         """Classify one entry and, when applying, move it and journal the move.
 
@@ -165,7 +174,9 @@ class Sorter:
             ValueError: The destination was refused (outside the watched folder).
         """
         settings = self._config.settings
-        ref = build_ref(path, settings.content_max_bytes)
+        ref = build_ref(
+            path, settings.content_max_bytes, on_extraction_failure=on_extraction_failure
+        )
         decision = self._engine.classify(ref)
         placement = self.placement_for(path, ref, decision.category)
         outcome = SortOutcome(
@@ -268,6 +279,12 @@ class Sorter:
         run_id = run_id or new_run_id()
         started = now_iso()
         outcomes: list[SortOutcome] = []
+        unread: list[Path] = []
+
+        def on_extraction_failure(path: Path, failures: tuple[ConverterFailure, ...]) -> None:
+            unread.append(path)
+            self._report_extraction_failure(path, failures)
+
         with run_context(run_id):
             self._sort_each(
                 outcomes,
@@ -276,9 +293,10 @@ class Sorter:
                 stop=stop,
                 run_id=run_id,
                 on_waiting=on_waiting,
+                on_extraction_failure=on_extraction_failure,
             )
             if apply:
-                self._record_run(run_id, started, outcomes)
+                self._record_run(run_id, started, outcomes, extraction_failures=len(unread))
                 if self._journal is not None:
                     self._compact_journal(self._journal)
         return outcomes
@@ -292,6 +310,7 @@ class Sorter:
         stop: Callable[[], bool],
         run_id: str,
         on_waiting: Callable[[Path, str], None],
+        on_extraction_failure: ExtractionFailureHandler,
     ) -> None:
         settings = self._config.settings
         claimed: dict[Path, Path] = {}
@@ -304,7 +323,12 @@ class Sorter:
             try:
                 outcomes.append(
                     self._outcome(
-                        path, apply=apply, run_id=run_id, seq=len(outcomes), claimed=claimed
+                        path,
+                        apply=apply,
+                        run_id=run_id,
+                        seq=len(outcomes),
+                        claimed=claimed,
+                        on_extraction_failure=on_extraction_failure,
                     )
                 )
             except Exception as exc:  # noqa: BLE001 - reported below, and the others still sort
@@ -317,7 +341,29 @@ class Sorter:
                 self._warn(f"could not sort {path.name}: {error}")
                 outcomes.append(SortOutcome.failed(path, error))
 
-    def _record_run(self, run_id: str, started: str, outcomes: list[SortOutcome]) -> None:
+    def _report_extraction_failure(
+        self, path: Path, failures: tuple[ConverterFailure, ...]
+    ) -> None:
+        """Warn that a converter broke on ``path``; the file still sorts by name and type.
+
+        A missing converter never gets here (see ``extraction.extract``), so
+        this is a converter that was installed and failed: worth a WARNING
+        line, with the run id the log adds inside a pass.
+        """
+        what = "; ".join(failure.describe() for failure in failures)
+        # The log line is written before stderr is tried: a closed stderr must
+        # not turn an unreadable content into a file that failed to sort.
+        with contextlib.suppress(OSError):
+            self._warn(f"content extraction failed for {_shown(path, self.source)}: {what}")
+
+    def _record_run(
+        self,
+        run_id: str,
+        started: str,
+        outcomes: list[SortOutcome],
+        *,
+        extraction_failures: int,
+    ) -> None:
         if self._ledger is None or not outcomes:
             return
         failures = tuple(Failure(o.name, o.error) for o in outcomes if o.error)
@@ -330,6 +376,7 @@ class Sorter:
             moved=sum(1 for o in outcomes if o.moved_to is not None),
             failed=len(failures),
             failures=failures,
+            extraction_failures=extraction_failures,
         )
         try:
             self._ledger.record(record)
