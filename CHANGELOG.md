@@ -14,6 +14,8 @@ All notable changes to this project are documented here. The format is based on
   the last 24 hours: runs, moves, failures, and the failures grouped by kind
   of error (the file name blanked out), with the files and cubby versions
   that hit each. `--json` has them as `agent.last_pass` and `activity`.
+  When the ledger holds its full 2000 runs, older ones may have been trimmed,
+  and `status` says the 24 hours may be incomplete (`activity.complete`).
 - `scripts/rebuild.sh` checks that the wheel and sdist are reproducible, and
   with `--against SHA256SUMS` that a release matches its tagged source. CI
   runs it on every pull request, the release workflow against the artifacts
