@@ -28,7 +28,7 @@ itself is pure Python and platform-independent.
 is JSON lines, one per event, in `~/Library/Logs/cubby.log` on macOS and
 `~/.local/state/cubby/cubby.log` elsewhere (with the default state folder;
 `cubby doctor` prints where it is):
-`jq -r 'select(.level != "INFO") | "\(.ts) \(.msg)"' ~/.local/state/cubby/cubby.log`
+`cubby log --json | jq -r 'select(.level != "INFO") | "\(.ts) \(.msg)"'`
 lists only what went wrong. Each line also names the cubby `version` that wrote it
 and, during a pass, its `run` id: the same id as in `cubby history` and
 `cubby undo --run`, so `jq 'select(.run == "<id>")'` shows everything one pass did.

@@ -47,7 +47,8 @@ All notable changes to this project are documented here. The format is based on
   `install` now passes on to the agent) logs to `~/Library/Logs` whether or not
   it is named; a folder chosen elsewhere keeps its log beside it. The log of an
   agent from 0.2 or 0.3 stays in its state folder, and an agent rolled back to
-  0.3 logs there again.
+  0.3 logs there again. With `XDG_STATE_HOME` set, run `cubby install` again
+  after upgrading so the agent is given it.
 - A folder whose name matches an invoice rule was renamed and filed like an
   invoice: `invoice-archive` became `Invoices/2026-09/archive facture`. A
   folder matched by its name is now moved whole under its own name, at the
