@@ -45,8 +45,9 @@ All notable changes to this project are documented here. The format is based on
   `cubby install` passes that variable to the agent, which launchd and
   systemd would not, so the agent reads the same file. A relative value is
   ignored, as the XDG spec says. A `--source` that is a folder cubby files
-  into inside the watched folder is refused (exit 2), also on a
-  case-insensitive disk.
+  into inside the watched folder is refused (exit 2), also when a part of
+  its path differs only by case on a case-insensitive disk (not verified on
+  macOS by a test).
 - A regular file named like a folder cubby sorts into (`_Unsorted`, a
   category, or a month folder inside one) made every move into that folder
   fail with `[Errno 17] File exists`. The file is still left alone, and the

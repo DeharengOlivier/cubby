@@ -88,10 +88,12 @@ def _refuse_a_managed_source(
         watched = load_config(
             user_path=user_path, overrides={"settings": others} if others else {}
         ).settings.source.resolve()
+        chosen = config.settings.source.resolve()
     except ValueError:
         return  # the configured folder is unusable: --source replaces it, nothing to nest in
-    chosen = config.settings.source.resolve()
-    inside = chosen.relative_to(watched).parts if chosen.is_relative_to(watched) else ()
+    except (OSError, RuntimeError):
+        return  # a symlink loop (RuntimeError before 3.13): the source check reports it
+    inside = _parts_below(chosen, watched)
     # Another folder inside the watched one (an inbox) is fine; a folder cubby
     # files into is not, whatever the case of its name on a case-insensitive disk.
     if inside and _is_managed(watched, inside[0], config.managed_dirs):
@@ -100,6 +102,23 @@ def _refuse_a_managed_source(
             f"in {inside[0]}/, a folder cubby files into: its files would be sorted into "
             f"{chosen.name}/{inside[0]}/... Sort {watched} instead."
         )
+
+
+def _parts_below(chosen: Path, watched: Path) -> tuple[str, ...]:
+    """The names leading from ``watched`` down to ``chosen``; empty if it is not below.
+
+    Compared as folders, not as strings, so that on a case-insensitive disk
+    ``~/downloads/Documents`` is found below ``~/Downloads``.
+    """
+    if chosen.is_relative_to(watched):
+        return chosen.relative_to(watched).parts
+    for parent in chosen.parents:
+        try:
+            if parent.exists() and watched.exists() and parent.samefile(watched):
+                return chosen.relative_to(parent).parts
+        except OSError:
+            continue
+    return ()
 
 
 def _is_managed(watched: Path, name: str, managed: frozenset[str]) -> bool:
