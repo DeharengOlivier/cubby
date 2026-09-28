@@ -160,14 +160,15 @@ opened at all (its name and type still route it), each backend reads a window
 rather than the whole file, and every external converter runs with a timeout.
 Asking for 4 KB of text out of a 315 MB page costs neither time nor memory.
 
-Sorting itself is linear in the number of files, journal included: about 0.6 ms
-of CPU per file moved, and nothing once the folder is sorted.
+Sorting itself is linear in the number of files, journal included: 0.6 to 0.9 ms
+of CPU per file moved (on a busy machine), and nothing once the folder is sorted.
 
-| Files | Apply (CPU, median) | Idle pass | Peak memory |
+| Files | Apply (CPU, median) | Idle pass | Memory of the agent's pass |
 | ---: | ---: | ---: | ---: |
-| 1 000 | 0.7 s | 0.00 s | 1 MB |
-| 20 000 | 11 s | 0.00 s | 29 MB |
-| 200 000 | 125 s | 0.01 s | 528 MB |
+| 1 000 | 0.7 s | 0.00 s | under 1 MB |
+| 20 000 | 11 to 15 s | 0.00 s | 4 MB |
+| 200 000 | 180 s | 0.01 s | 26 MB |
+| 400 000 | 337 s | 0.01 s | 54 MB |
 
 Measured, not estimated (method, limits and next steps in
 [docs/PERFORMANCE.md](docs/PERFORMANCE.md)), and re-runnable on your own hardware:
@@ -177,9 +178,9 @@ python benchmarks/bench_sort.py
 python benchmarks/bench_sort.py 500 5000 --repeat 7
 ```
 
-Apply is dominated by the moves themselves. The ceiling of this design is that
-one pass holds the whole folder listing and its outcomes in memory, which is a
-few tens of megabytes at twenty thousand files.
+Apply is dominated by the moves themselves. The agent's pass holds the sorted
+names of the folder and nothing per file it sorts, about 135 bytes a file.
+`cubby plan` and `cubby run` keep every outcome to print it, 1.3 to 1.4 KB a file.
 
 ## Configure
 

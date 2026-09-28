@@ -23,6 +23,20 @@ All notable changes to this project are documented here. The format is based on
   (`last_run`, `activity`, `runs[]`): output from cubby 0.3 does not validate
   against them.
 
+### Changed
+- One pass of the agent holds about 135 bytes per file instead of 2.6 KB:
+  54 MB at 400 000 files, measured (522 MB at 200 000 before). The pass
+  counts its outcomes instead of keeping them, lists the folder as names,
+  and compacts the journal by streaming it instead of reading it whole,
+  which cost three times the journal's size. Moves, journal and ledger
+  lines, alerts, `status`, `run` and `plan` output and exit codes are
+  unchanged. `cubby plan` and `cubby run` still keep every outcome to print
+  it, 1.3 to 1.4 KB per file (`run` over 200 000 files went from 515 MB to
+  275 MB); `docs/PERFORMANCE.md`, "Memory of one pass".
+- `benchmarks/bench_sort.py` measures the plan and the agent's pass in
+  separate processes, and `benchmarks/profile_pass.py` shows where the
+  memory of a pass goes.
+
 ### Fixed
 - A folder whose name matches an invoice rule was renamed and filed like an
   invoice: `invoice-archive` became `Invoices/2026-09/archive facture`. A
