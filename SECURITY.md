@@ -60,7 +60,8 @@ Releases before 0.3.0 have no `scripts/rebuild.sh`: check out the tag, then run
 the script from main, `git show main:scripts/rebuild.sh | sh -s -- --against SHA256SUMS`.
 
 Then check the files you downloaded against the same sums, in the folder that
-holds them: `sha256sum -c SHA256SUMS` (on macOS, `shasum -a 256 -c SHA256SUMS`).
+holds them: `sha256sum -c --ignore-missing SHA256SUMS` (on macOS,
+`shasum -a 256 -c --ignore-missing SHA256SUMS`), which checks the ones you have.
 
 CI runs the same script on every pull request (two builds in different
 environments must be identical), and the release workflow runs it against the
