@@ -91,6 +91,8 @@ max-complexity = 10
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S108", "PLR0913", "PLC0415", "TID251"]
+# Maintenance scripts read GitHub's JSON, not cubby's state files.
+"scripts/**" = ["TID251"]
 "src/cubby/adapters/state.py" = ["TID251"]
 "benchmarks/**" = ["S", "T20", "TID251"]
 

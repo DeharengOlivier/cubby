@@ -27,9 +27,9 @@ jobs:
       - name: Install (frozen)
         run: uv sync --locked --all-extras
       - name: Format
-        run: uv run --locked ruff format --check src tests benchmarks
+        run: uv run --locked ruff format --check src tests benchmarks scripts
       - name: Lint
-        run: uv run --locked ruff check src tests benchmarks
+        run: uv run --locked ruff check src tests benchmarks scripts
       - name: Type-check (strict)
         run: uv run --locked mypy src
       - name: Layering contracts

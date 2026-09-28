@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- `make flaky-rate` measures how often CI fails on a commit that later passes
+  unchanged, against the 2% budget in `docs/READINESS.md`.
+
 ## [0.3.0] - 2026-09-28
 
 ### Added
