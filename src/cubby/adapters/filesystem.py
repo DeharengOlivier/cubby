@@ -233,6 +233,41 @@ def move_no_clobber(source: Path, destination: Path) -> None:
     shutil.move(str(source), str(destination))
 
 
+def _make_folder(folder: Path, root: Path) -> None:
+    """Create ``folder`` and its parents under ``root``.
+
+    Raises:
+        OSError: A file stands where a folder must go (named, with the remedy),
+            or the folder could not be created.
+    """
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+    except (FileExistsError, NotADirectoryError) as exc:
+        blocker = _file_in_the_way(folder, root)
+        if blocker is None:
+            raise
+        try:
+            shown = blocker.relative_to(root).as_posix()
+        except ValueError:
+            shown = str(blocker)
+        raise type(exc)(
+            exc.errno,
+            f"a file named {shown} is in the way of the folder cubby sorts into; rename or move it",
+            str(blocker),
+        ) from exc
+
+
+def _file_in_the_way(folder: Path, root: Path) -> Path | None:
+    """The highest non-folder on the way from ``root`` down to ``folder``, if any."""
+    blocker = None
+    for path in [folder, *folder.parents]:
+        if path in (root, path.parent):
+            break
+        if path.exists() and not path.is_dir():
+            blocker = path
+    return blocker
+
+
 def move_into(
     path: Path,
     category_dir: Path,
@@ -257,7 +292,7 @@ def move_into(
     target_name = safe_component(rename_to, field="rename_to") if rename_to else path.name
     # Check before creating anything: a refused move must leave no trace.
     resolve_inside(root, category_dir)
-    category_dir.mkdir(parents=True, exist_ok=True)
+    _make_folder(category_dir, root)
     same_name = category_dir / target_name
     if dedupe and same_name.exists() and files_identical(path, same_name):
         path.unlink()
