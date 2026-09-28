@@ -189,6 +189,17 @@ def _from_text(path: Path, max_bytes: int) -> str:
         return ""
 
 
+#: The extensions :func:`extract_text` can read; any other gives "".
+READABLE = frozenset(
+    {"pdf", "docx", "doc", "rtf", "html", "htm", "txt", "md", "csv", "tsv", "log", "xlsx"}
+)
+
+
+def can_read(ext: str) -> bool:
+    """Whether cubby tries to read the content of a file with extension ``ext``."""
+    return ext.lower() in READABLE
+
+
 def extract_text(path: Path, ext: str, max_bytes: int = 4000) -> str:
     """Return up to ``max_bytes`` of extracted text, or ``""``.
 
@@ -197,6 +208,9 @@ def extract_text(path: Path, ext: str, max_bytes: int = 4000) -> str:
     back to its filename and file-type stages, which is the designed behaviour
     for anything the content stage cannot speak for.
     """
+    # Converters run from the filesystem root: a relative path would name
+    # another file there, or none.
+    path = path.absolute()
     if not path.is_file() or _is_too_large(path):
         return ""
     ext = ext.lower()

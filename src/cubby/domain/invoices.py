@@ -183,10 +183,21 @@ def _worded_date(m: re.Match[str], *, day: int, month: int) -> date | None:
     return _valid(int(m[3]), num, int(m[day])) if num else None
 
 
-# 2026-08 or 2026_08 in a file name, with no day after it.
-_YEAR_MONTH = re.compile(r"\b(\d{4})[-_. ](\d{1,2})\b(?![-_. ]\d)")
-# août 2026, August 2026.
-_MONTH_YEAR = re.compile(rf"\b({_MONTHS_ALT})\.?\s+(\d{{4}})\b", re.IGNORECASE)
+# Dates in a file name. Names carry ids, versions and phone numbers, so only
+# unmistakable shapes count: a four-digit year from 2000, a month from 1 to 12.
+_YEAR = r"(20\d{2})"
+_MONTH = r"(0?[1-9]|1[0-2])"
+_DAY = r"(0?[1-9]|[12]\d|3[01])"
+_NAME_DAYS = (  # (pattern, group of the year, of the month, of the day)
+    (re.compile(rf"\b{_YEAR}[-. ]{_MONTH}[-. ]{_DAY}\b"), 1, 2, 3),  # 2026-07-15
+    (re.compile(r"\b(20\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\b"), 1, 2, 3),  # 20260715
+    (re.compile(rf"\b{_DAY}[-./ ]{_MONTH}[-./ ]{_YEAR}\b"), 3, 2, 1),  # 15.07.2026
+)
+_NAME_MONTHS = (  # (pattern, group of the year, of the month)
+    (re.compile(r"\b(20\d{2})[- ](0[1-9]|1[0-2])\b(?![-. ]?\d)"), 1, 2),  # 2026-08
+    (re.compile(r"(?<![\d.-])\b(0[1-9]|1[0-2])[- ](20\d{2})\b"), 2, 1),  # 08-2026
+    (re.compile(rf"\b({_MONTHS_ALT})\.?[- ]+(20\d{{2}})\b", re.IGNORECASE), 2, 1),  # août 2026
+)
 
 
 @dataclass(frozen=True)
@@ -208,18 +219,27 @@ class InvoiceDate:
 
 def name_date(name: str) -> InvoiceDate | None:
     """A date stated in the file name ``name``, day first, else a month; None if none."""
-    stem = re.sub(r"[_]+", " ", name.rsplit(".", 1)[0] if "." in name else name)
-    candidates = _find_dates(stem)
-    if candidates:
-        return InvoiceDate(min(candidates, key=lambda pair: pair[0])[1])
-    for pattern, year_group, month_group in ((_YEAR_MONTH, 1, 2), (_MONTH_YEAR, 2, 1)):
-        if m := pattern.search(stem):
-            month = (
-                _month_num(m[month_group]) if not m[month_group].isdigit() else int(m[month_group])
-            )
-            if month and (found := _valid(int(m[year_group]), month, 1)):
+    stem = (name.rsplit(".", 1)[0] if "." in name else name).replace("_", " ")
+    days = [
+        (m.start(), found)
+        for pattern, year, month, day in _NAME_DAYS
+        for m in pattern.finditer(stem)
+        if (found := _valid(int(m[year]), int(m[month]), int(m[day])))
+    ]
+    days += [(start, found) for start, found in _find_dates(stem) if _worded(stem, start)]
+    if days:
+        return InvoiceDate(min(days, key=lambda pair: pair[0])[1])
+    for pattern, year, month in _NAME_MONTHS:
+        for m in pattern.finditer(stem):
+            number = int(m[month]) if m[month].isdigit() else _month_num(m[month])
+            if number and (found := _valid(int(m[year]), number, 1)):
                 return InvoiceDate(found, day_known=False)
     return None
+
+
+def _worded(text: str, start: int) -> bool:
+    """Whether the date found at ``start`` spells its month in words (7 juillet 2026)."""
+    return any(p.match(text, start) for p in (_DAY_MONTH, _MONTH_DAY))
 
 
 def invoice_date(name: str, text: str, fallback: date) -> InvoiceDate:

@@ -38,6 +38,11 @@ class FileRef:
     read_text: Callable[[], str] = lambda: ""
     _cached_text: str | None = field(default=None, repr=False, compare=False)
 
+    @property
+    def text_read(self) -> bool:
+        """Whether the content has been read (by the content stage or a caller)."""
+        return self._cached_text is not None
+
     def text(self) -> str:
         if self._cached_text is None:
             self._cached_text = self.read_text() or ""

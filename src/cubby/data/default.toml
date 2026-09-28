@@ -46,9 +46,10 @@ name_patterns = [
 content_patterns = [
     "num[ée]ro de facture", "invoice number", "payment confirmation",
     "montant (?:total|à payer|du)", "amount due", "total due", "\\bvat\\b.*total",
-    # The word alone is not enough (a note can mention an invoice): it must
-    # come with a date or an amount.
-    "\\b(?:facture|invoice)\\b.{0,80}?(?:\\b\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4}\\b|\\b\\d{4}-\\d{2}-\\d{2}\\b|\\d[\\d ]*[,.]\\d{2} ?(?:€|eur\\b|usd\\b|\\$))",
+    # The word alone is not enough (a note, a statement or a contract can
+    # mention an invoice): it must be the document's title, in its first two
+    # lines, and come with a date or an amount soon after.
+    '\A\s*(?:[^\n]*\n)?[^\n]*?\b(?:facture|invoice)\b[\s\S]{0,120}?(?:\b\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b|\d[\d ]*[,.]\d{2} ?(?:€|eur\b|usd\b|\$)|(?:€|\$|\beur\b|\busd\b) ?\d[\d ]*[,.]\d{2})',
 ]
 
 [[category]]

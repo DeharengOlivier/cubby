@@ -99,6 +99,9 @@ All notable changes to this project are documented here. The format is based on
   a date or an amount (`Facture Free Mobile du 05/08/2026 montant 19,99 EUR`),
   and `explain` says when it read a file's content and nothing matched
   (`content_chars` in `--json`). Found by an exploratory session.
+  A config written by `cubby init` keeps its own copy of the categories: to
+  get the new Invoices content pattern, copy it from the packaged defaults
+  (`cubby init --path /tmp/cubby-defaults.toml` writes them).
 - A regular file named like a folder cubby sorts into (`_Unsorted`, a
   category, or a month folder inside one) made every move into that folder
   fail with `[Errno 17] File exists`. The file is still left alone, and the
