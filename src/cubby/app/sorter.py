@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import errno
 import os
+import time
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import date
@@ -324,7 +325,14 @@ class Sorter:
         """
         run_id = run_id or new_run_id()
         started = now_iso()
+        clock_started = time.monotonic()
         tally = PassTally()
+        waiting = 0
+
+        def count_waiting(path: Path, reason: str) -> None:
+            nonlocal waiting
+            waiting += 1
+            on_waiting(path, reason)
 
         def count_and_hand_on(outcome: SortOutcome) -> None:
             tally.add(outcome)
@@ -341,11 +349,12 @@ class Sorter:
                 respect_age=respect_age,
                 stop=stop,
                 run_id=run_id,
-                on_waiting=on_waiting,
+                on_waiting=count_waiting,
                 on_extraction_failure=on_extraction_failure,
             )
             if apply:
-                self._record_run(run_id, started, tally)
+                duration_ms = round((time.monotonic() - clock_started) * 1000)
+                self._record_run(run_id, started, tally, duration_ms=duration_ms, waiting=waiting)
                 if self._journal is not None:
                     self._compact_journal(self._journal)
         return tally
@@ -427,7 +436,9 @@ class Sorter:
         with contextlib.suppress(OSError):
             self._warn(f"content extraction failed for {_shown(path, self.source)}: {what}")
 
-    def _record_run(self, run_id: str, started: str, tally: PassTally) -> None:
+    def _record_run(
+        self, run_id: str, started: str, tally: PassTally, *, duration_ms: int, waiting: int
+    ) -> None:
         if self._ledger is None or not tally.count:
             return
         record = RunRecord(
@@ -441,6 +452,8 @@ class Sorter:
             # The first failures only, as many as the ledger writes of a run.
             failures=tuple(tally.failures),
             extraction_failures=tally.extraction_failures,
+            duration_ms=duration_ms,
+            waiting=waiting,
         )
         try:
             self._ledger.record(record)

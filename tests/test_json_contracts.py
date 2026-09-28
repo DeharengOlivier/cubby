@@ -20,6 +20,7 @@ import fastjsonschema
 import pytest
 
 from cubby.adapters import extraction, state
+from cubby.adapters.config import load_config
 from cubby.adapters.ledger import Ledger, PassMetrics, RunRecord
 from cubby.adapters.logging import LEVELS, file_logger, run_context
 from cubby.adapters.pause import pause_path, set_pause
@@ -306,6 +307,33 @@ def test_status_with_a_surviving_agent(capsys, monkeypatch):
     _validator("status")(payload)
     assert payload["agent"]["live_pid"] == pid
     assert payload["agent"]["last_pass"]["waiting"] == 2
+
+
+def test_status_with_run_times_a_backlog_and_a_degraded_readiness(downloads, capsys, monkeypatch):
+    monkeypatch.setattr(cli_agent, "detect_service", lambda: None)
+    monkeypatch.setattr(
+        cli_agent, "converters_present", lambda: dict.fromkeys(extraction.CONVERTERS, False)
+    )
+    aged_file(downloads, "Documents")  # in the way: a readiness problem
+    sorter = sorter_module.Sorter(
+        load_config(overrides={"settings": {"source": str(downloads), "delay": 0}}),
+        ledger=Ledger(),
+        mode="watch",  # only the agent's runs make its run time
+    )
+    sorter.sort_once(apply=True)
+    with process_named_cubby_watch() as pid:
+        monkeypatch.setattr("os.getpid", lambda: pid)
+        Ledger().beat(downloads, 30.0)
+
+        payload = _json_of(capsys, ["status", "--json"])
+
+    _validator("status")(payload)
+    assert payload["activity"]["pass_ms"]["count"] == 1
+    assert payload["activity"]["backlog"] == {"first": 0, "last": 0, "peak": 0}
+    assert payload["activity"]["saturation"] is not None
+    assert payload["readiness"]["problems"]
+    assert payload["readiness"]["degraded"]
+    assert payload["last_run"]["duration_ms"] is not None
 
 
 def test_explain_inside_and_outside_the_folder(downloads, tmp_path, capsys):

@@ -206,6 +206,9 @@ def test_status_names_the_pid_of_a_running_agent(monkeypatch, capsys, agent_pid)
     class Running:
         name = "fake"
 
+        def program_args(self, label: str = "com.cubby.agent") -> list[str] | None:
+            return None
+
         def is_installed(self, label: str = "com.cubby.agent") -> bool:
             return True
 

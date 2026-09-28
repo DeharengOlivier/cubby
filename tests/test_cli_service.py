@@ -43,6 +43,9 @@ class FakeService:
     def unit_path(self, label: str) -> Path:
         return Path("/tmp/fake.agent")
 
+    def program_args(self, label: str = "com.cubby.agent") -> list[str] | None:
+        return None  # no unit to read: readiness uses the default config
+
     def is_installed(self, label: str = "com.cubby.agent") -> bool:
         return self.installed
 
@@ -220,15 +223,13 @@ def test_watch_stops_cleanly_on_an_interrupt(monkeypatch, tmp_path, config_file,
     assert "cubby stopped" in log
 
 
-def test_doctor_reports_a_library_that_fails_to_import(monkeypatch, config_file, capsys):
-    real_import = __import__
-
-    def broken(name, *args, **kwargs):
-        if name == "openpyxl":
-            raise ImportError("broken wheel")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr("builtins.__import__", broken)
+def test_doctor_reports_a_library_that_fails_to_import(tmp_path, monkeypatch, config_file, capsys):
+    # The libraries are imported in a child process (a planted module in the
+    # working folder must not run): a broken package first on its path.
+    broken = tmp_path / "broken" / "openpyxl"
+    broken.mkdir(parents=True)
+    (broken / "__init__.py").write_text('raise ImportError("broken wheel")\n', "utf-8")
+    monkeypatch.setenv("PYTHONPATH", str(broken.parent))
     assert main(["doctor", "--config", str(config_file)]) == EXIT_OK
     assert "openpyxl -" in capsys.readouterr().out
 

@@ -121,6 +121,8 @@ def test_the_pass_summary_and_ledger_equal_those_of_the_full_list(tmp_path):
         moved=7,
         failed=25,
         failures=tuple(Failure(o.name, o.error) for o in seen if o.error),
+        duration_ms=stored["duration_ms"],  # added in 0.5, with the files left to settle
+        waiting=0,
     ).to_json()
     assert stored == expected
     assert len(stored["failures"]) == MAX_FAILURES_RECORDED

@@ -242,6 +242,9 @@ def test_status_flags_an_agent_that_never_completed_a_pass(tmp_path, monkeypatch
     class Agent:
         name = "fake"
 
+        def program_args(self, label="com.cubby.agent"):
+            return None
+
         def is_installed(self, label="com.cubby.agent"):
             return True
 

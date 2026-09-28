@@ -288,6 +288,9 @@ class Agent:
     def __init__(self, *, installed: bool, running: bool) -> None:
         self.installed, self.running = installed, running
 
+    def program_args(self, label: str = "com.cubby.agent") -> list[str] | None:
+        return None  # no unit to read: readiness uses the default config
+
     def is_installed(self, label: str = "com.cubby.agent") -> bool:
         return self.installed
 
@@ -310,8 +313,8 @@ def test_status_says_not_running_when_the_manager_says_so(monkeypatch, capsys):
     assert code == EXIT_FAILED
 
 
-def test_status_of_a_healthy_agent(monkeypatch, capsys):
-    Ledger().beat(Path("/d"), 30)
+def test_status_of_a_healthy_agent(monkeypatch, capsys, tmp_path):
+    Ledger().beat(tmp_path, 30)  # a folder that exists: the agent is ready too
     Ledger().record(_record("r9", moved=2, failed=1))
 
     code, out = _status(monkeypatch, capsys, Agent(installed=True, running=True))

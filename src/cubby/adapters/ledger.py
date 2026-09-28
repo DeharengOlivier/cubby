@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import __version__
+from ..domain.category import Config
 from . import state
 
 VERSION = 1
@@ -55,6 +56,10 @@ class RunRecord:
     #: and type: not failed moves.
     extraction_failures: int = 0
     version: str = __version__  # the cubby that made the run
+    #: How long the run took, and how many files it left because they had not
+    #: settled yet. None in a record from before 0.5, which had neither.
+    duration_ms: int | None = None
+    waiting: int | None = None
 
     @property
     def status(self) -> str:
@@ -79,7 +84,14 @@ class RunRecord:
         """
         moved, failed = data["moved"], data["failed"]
         extraction_failures = data.get("extraction_failures", 0)  # older records: 0
-        if not all(_is_count(v) for v in (moved, failed, extraction_failures)):
+        duration_ms, waiting = data.get("duration_ms"), data.get("waiting")  # older: None
+        counts = (
+            moved,
+            failed,
+            extraction_failures,
+            *(v for v in (duration_ms, waiting) if v is not None),
+        )
+        if not all(_is_count(v) for v in counts):
             raise ValueError(f"a count is not a non-negative integer in run {data.get('run')!r}")
         return cls(
             run=str(data["run"]),
@@ -94,6 +106,8 @@ class RunRecord:
             ),
             extraction_failures=extraction_failures,
             version=str(data.get("version", "unknown")),  # records from before 0.3
+            duration_ms=duration_ms,
+            waiting=waiting,
         )
 
 
@@ -133,12 +147,50 @@ def _is_duration(value: object) -> bool:
 
 
 @dataclass(frozen=True)
+class RunsWith:
+    """The settings the agent runs with, as it reports them: what status checks readiness by."""
+
+    config: str | None  # the config file it read; None for the packaged defaults
+    folders: tuple[str, ...]  # the folders it files into, the unsorted one included
+    unsorted_dir: str
+    content_scan: bool
+
+    @classmethod
+    def of(cls, config: Config, config_file: Path | None) -> RunsWith:
+        return cls(
+            config=str(config_file) if config_file else None,
+            folders=tuple(sorted(config.managed_dirs)),
+            unsorted_dir=config.settings.unsorted_dir,
+            content_scan=config.settings.content_scan,
+        )
+
+    @classmethod
+    def from_json(cls, data: Any) -> RunsWith | None:
+        """The report, or None when absent (a cubby before 0.5) or damaged."""
+        try:
+            config, folders = data["config"], data["folders"]
+            unsorted_dir, content_scan = data["unsorted_dir"], data["content_scan"]
+        except (KeyError, TypeError):
+            return None
+        if not (
+            (config is None or isinstance(config, str))
+            and isinstance(folders, list)
+            and all(isinstance(name, str) for name in folders)
+            and isinstance(unsorted_dir, str)
+            and isinstance(content_scan, bool)
+        ):
+            return None
+        return cls(config, tuple(folders), unsorted_dir, content_scan)
+
+
+@dataclass(frozen=True)
 class Heartbeat:
     at: datetime
     pid: int
     source: str
     interval: float
     last_pass: PassMetrics | None = None  # None after a pause, or from an older cubby
+    runs_with: RunsWith | None = None  # None from a cubby before 0.5
 
     def age_seconds(self, now: datetime | None = None) -> float:
         return ((now or datetime.now()) - self.at).total_seconds()
@@ -238,7 +290,14 @@ class Ledger:
                 break
         return records
 
-    def beat(self, source: Path, interval: float, last_pass: PassMetrics | None = None) -> None:
+    def beat(
+        self,
+        source: Path,
+        interval: float,
+        last_pass: PassMetrics | None = None,
+        *,
+        runs_with: RunsWith | None = None,
+    ) -> None:
         """Record that the agent completed a pass (measured by ``last_pass``) just now.
 
         Raises:
@@ -251,6 +310,7 @@ class Ledger:
             "source": str(source),
             "interval": interval,
             "last_pass": asdict(last_pass) if last_pass else None,
+            "runs_with": asdict(runs_with) if runs_with else None,
         }
         state.replace_text(self.heartbeat_path, json.dumps(payload) + "\n")
 
@@ -258,12 +318,18 @@ class Ledger:
         """The agent's last heartbeat, or None if there is none (or it is unreadable)."""
         try:
             data = state.parse_json(self.heartbeat_path.read_text("utf-8"))
+            interval = data["interval"]
+            # A damaged interval would make the stale limit and the saturation
+            # meaningless (a negative share of a negative interval).
+            if not _is_duration(interval) or interval <= 0:
+                raise ValueError(f"not an interval: {interval!r}")
             return Heartbeat(
                 at=datetime.fromisoformat(data["at"]),
                 pid=int(data["pid"]),
                 source=str(data["source"]),
-                interval=float(data["interval"]),
+                interval=float(interval),
                 last_pass=PassMetrics.from_json(data.get("last_pass")),
+                runs_with=RunsWith.from_json(data.get("runs_with")),
             )
         except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
             # Absent or unreadable: either way there is no heartbeat to report.

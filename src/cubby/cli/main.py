@@ -99,6 +99,7 @@ def _add_agent_commands(sub: Subcommands) -> None:
         "status", help="is the agent running, and what did it do last (exit 1 if unhealthy)"
     )
     p_status.add_argument("--json", action="store_true", help="output the status as JSON")
+    p_status.add_argument("--config", help="the config file the agent uses, to check readiness")
     p_status.set_defaults(func=cmd_status)
 
     p_install = sub.add_parser("install", help="install the background agent (auto-start)")

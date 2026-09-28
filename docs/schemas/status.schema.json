@@ -90,6 +90,13 @@
               ]
             }
           ]
+        },
+        "interval": {
+          "description": "Seconds between passes, from the heartbeat (since 0.5). Null when there is no heartbeat.",
+          "type": [
+            "number",
+            "null"
+          ]
         }
       },
       "required": [
@@ -203,6 +210,22 @@
                 "partial",
                 "failed"
               ]
+            },
+            "duration_ms": {
+              "description": "How long the run took, in milliseconds. Null in a record written before 0.5.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "waiting": {
+              "description": "Files the run left because they had not settled yet. Null in a record written before 0.5.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
             }
           },
           "required": [
@@ -295,6 +318,79 @@
         "complete": {
           "description": "False when the ledger holds as many runs as it keeps (2000) and none older than the window: runs of the window may have been dropped. A hint, not a proof.",
           "type": "boolean"
+        },
+        "pass_ms": {
+          "description": "Durations of the agent's runs (mode watch) of the window, in milliseconds, nearest rank, over the runs that recorded one (since 0.5). Only runs that moved or failed a file are recorded. Null when none did.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "count": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "p50": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "p95": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "max": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "count",
+                "max",
+                "p50",
+                "p95"
+              ]
+            }
+          ]
+        },
+        "backlog": {
+          "description": "Files left to settle by the agent's runs (mode watch) of the window: the oldest run's count, the newest's and the largest (since 0.5). Null when no run of the window recorded it.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "first": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "last": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "peak": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "first",
+                "last",
+                "peak"
+              ]
+            }
+          ]
+        },
+        "saturation": {
+          "description": "pass_ms.p95 as a share of the interval between passes (0.1 is 10 %), since 0.5. Null without a timed run or a heartbeat.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
         }
       },
       "required": [
@@ -305,6 +401,56 @@
         "hours",
         "moved",
         "runs"
+      ]
+    },
+    "live": {
+      "description": "Liveness (since 0.5): an agent process is alive and passing, going by the service manager and the heartbeat.",
+      "type": "boolean"
+    },
+    "readiness": {
+      "description": "Readiness (since 0.5): whether the agent can sort now. Not ready when a problem stops it or it is paused. healthy is false when an installed or live agent has a problem; a pause alone keeps it true.",
+      "type": "object",
+      "properties": {
+        "ready": {
+          "type": "boolean"
+        },
+        "problems": {
+          "description": "What stops the sorting, apart from a pause: the watched folder missing, unreadable or unwritable, the state folder unwritable, a file where a category folder goes, a config error.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "degraded": {
+          "description": "Formats (extensions) no installed converter reads: such files are sorted by name and type only. Empty when content_scan is off.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "basis": {
+          "description": "Whose settings readiness was checked with: agent (reported in its heartbeat, since 0.5), unit (the installed agent's command line), flag (status --config) or default (the default config).",
+          "enum": [
+            "agent",
+            "unit",
+            "flag",
+            "default"
+          ]
+        },
+        "config": {
+          "description": "The config file of those settings; null for the packaged defaults.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "basis",
+        "config",
+        "degraded",
+        "problems",
+        "ready"
       ]
     }
   },
