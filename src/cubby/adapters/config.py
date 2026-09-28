@@ -37,7 +37,9 @@ def user_config_candidates() -> list[Path]:
     env = os.environ.get("CUBBY_CONFIG")
     if env:
         candidates.append(Path(env).expanduser())
-    candidates.append(Path.home() / ".config" / "cubby" / "config.toml")
+    candidates.append(_config_home() / "cubby" / "config.toml")
+    if _config_home() != Path.home() / ".config":
+        candidates.append(Path.home() / ".config" / "cubby" / "config.toml")
     candidates.append(Path.home() / ".cubby.toml")
     return candidates
 
@@ -45,7 +47,13 @@ def user_config_candidates() -> list[Path]:
 def default_user_config_path() -> Path:
     """Where ``cubby init`` writes, and the first place looked for a config."""
     env = os.environ.get("CUBBY_CONFIG")
-    return Path(env).expanduser() if env else Path.home() / ".config" / "cubby" / "config.toml"
+    return Path(env).expanduser() if env else _config_home() / "cubby" / "config.toml"
+
+
+def _config_home() -> Path:
+    """``$XDG_CONFIG_HOME``, as the state folder honours ``$XDG_STATE_HOME``; else ~/.config."""
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    return Path(xdg).expanduser() if xdg else Path.home() / ".config"
 
 
 _STARTER_HEADER = """\
@@ -238,4 +246,9 @@ def load_config(
     categories = tuple(_build_category(c) for c in data.get("category", ()))
     if not categories:
         raise ValueError("configuration defines no categories")
+    names = [category.name for category in categories]
+    if twice := next((name for name in names if names.count(name) > 1), None):
+        raise ValueError(
+            f"category {twice!r} is defined twice; merge the two [[category]] blocks into one"
+        )
     return Config(settings=_build_settings(data.get("settings", {})), categories=categories)

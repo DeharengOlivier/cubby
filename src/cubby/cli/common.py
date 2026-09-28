@@ -56,23 +56,48 @@ def config_path_of(args: argparse.Namespace) -> Path | str:
 
 
 def load_from_args(args: argparse.Namespace) -> Config:
+    """The configuration, with the command line's overrides.
+
+    Raises:
+        ValueError: The configuration is invalid, or ``--source`` names a folder
+            cubby files into inside the watched folder (it would be sorted into
+            itself, ``Documents/Documents``).
+    """
     user_path = Path(args.config).expanduser() if getattr(args, "config", None) else None
-    return load_config(user_path=user_path, overrides=build_overrides(args))
+    overrides = build_overrides(args)
+    config = load_config(user_path=user_path, overrides=overrides)
+    if getattr(args, "source", None):
+        watched = load_config(user_path=user_path).settings.source.resolve()
+        chosen = config.settings.source.resolve()
+        inside = chosen.relative_to(watched).parts if chosen.is_relative_to(watched) else ()
+        # Another folder inside the watched one (an inbox) is fine; a folder
+        # cubby files into is not.
+        if inside and inside[0] in config.managed_dirs:
+            raise ValueError(
+                f"--source {config.settings.source} is inside the watched folder {watched}, "
+                f"in {inside[0]}/, a folder cubby files into: its files would be sorted into "
+                f"{chosen.name}/{inside[0]}/... Sort {watched} instead."
+            )
+    return config
 
 
-def require_source(config: Config) -> str | None:
+def require_source(config: Config, args: argparse.Namespace | None = None) -> str | None:
     """Return an error message if the source folder is unusable, else None."""
     source = config.settings.source
+    origin = ""
+    if args is not None:
+        from_flag = getattr(args, "source", None)
+        origin = " (--source)" if from_flag else f" (source in {config_path_of(args)})"
     if not source.exists():
-        return f"source folder does not exist: {source}"
+        return f"source folder does not exist: {source}{origin}"
     if not source.is_dir():
-        return f"source is not a folder: {source}"
+        return f"source is not a folder: {source}{origin}"
     return None
 
 
-def source_error(config: Config) -> bool:
+def source_error(config: Config, args: argparse.Namespace | None = None) -> bool:
     """Print why the source folder is unusable, if it is. True means stop."""
-    if error := require_source(config):
+    if error := require_source(config, args):
         print(f"cubby: {error}", file=sys.stderr)
         return True
     return False
@@ -94,6 +119,15 @@ def at_least_one(value: str) -> int:
     if number < 1:
         raise argparse.ArgumentTypeError(f"must be at least 1, got {number}")
     return number
+
+
+def duration_text(value: str) -> str:
+    """A duration flag, checked here so a bad one names the flag (and is exit 2)."""
+    try:
+        parse_duration(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(str(error)) from None
+    return value
 
 
 def positive_duration(value: str) -> float:

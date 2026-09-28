@@ -39,7 +39,7 @@ def _print_outcomes(outcomes: list[SortOutcome], *, applied: bool) -> None:
 
 def cmd_plan(args: argparse.Namespace) -> int:
     config = load_from_args(args)
-    if source_error(config):
+    if source_error(config, args):
         return EXIT_FAILED
     outcomes = Sorter(config).sort_once(apply=False, respect_age=False)
     if getattr(args, "json", False):
@@ -51,7 +51,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
 
 def cmd_run(args: argparse.Namespace) -> int:
     config = load_from_args(args)
-    if source_error(config):
+    if source_error(config, args):
         return EXIT_FAILED
     log = file_logger(echo=args.verbose)
     loud = make_loud(log)
@@ -95,11 +95,11 @@ def cmd_watch(args: argparse.Namespace) -> int:
     config = load_from_args(args)
     # The agent waits for a folder that is not there yet (a drive mounted after
     # login) instead of exiting into a restart loop; a person is told at once.
-    if not getattr(args, "wait_for_source", False) and source_error(config):
+    if not getattr(args, "wait_for_source", False) and source_error(config, args):
         return EXIT_FAILED
     # Under launchd or systemd, stdout is appended to the log file already
     # written by the logger: echo only to a person at a terminal.
-    log = file_logger(echo=sys.stdout.isatty())
+    log = file_logger(echo=sys.stdout.isatty() or getattr(args, "verbose", False))
     loud = make_loud(log) if sys.stderr.isatty() else log
 
     def warn(message: str) -> None:
