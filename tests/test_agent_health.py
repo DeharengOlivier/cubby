@@ -24,14 +24,7 @@ from cubby.app.watcher import Watcher
 from cubby.cli import EXIT_FAILED, EXIT_OK, main
 from cubby.cli import agent as cli_agent
 from cubby.cli import sorting as cli_sorting
-from cubby.domain.category import Category, Config, Settings
-
-
-def _config(source: Path) -> Config:
-    return Config(
-        settings=Settings(source=source, delay=0, content_scan=False),
-        categories=(Category(name="Documents", extensions=frozenset({"txt"})),),
-    )
+from tests.helpers import config_for
 
 
 class Recorder:
@@ -120,7 +113,7 @@ def test_a_sort_records_its_run_with_failures(tmp_path, monkeypatch):
     monkeypatch.setattr(sorter_module, "move_into", refuse_b)
     ledger = Ledger(tmp_path / "state")
 
-    Sorter(_config(source), ledger=ledger, mode="watch").sort_once(apply=True)
+    Sorter(config_for(source), ledger=ledger, mode="watch").sort_once(apply=True)
 
     (record,) = ledger.runs()
     assert (record.mode, record.moved, record.failed, record.status) == ("watch", 1, 1, "partial")
@@ -133,7 +126,7 @@ def test_a_pass_with_nothing_to_do_leaves_no_ledger_line(tmp_path):
     source.mkdir()
     ledger = Ledger(tmp_path / "state")
 
-    Sorter(_config(source), ledger=ledger).sort_once(apply=True)
+    Sorter(config_for(source), ledger=ledger).sort_once(apply=True)
 
     assert ledger.runs() == []
 
@@ -146,7 +139,7 @@ def test_a_ledger_that_cannot_be_written_is_reported(tmp_path):
     blocked.write_text("a file where the folder should be")
     warnings: list[str] = []
 
-    Sorter(_config(source), ledger=Ledger(blocked), warn=warnings.append).sort_once(apply=True)
+    Sorter(config_for(source), ledger=Ledger(blocked), warn=warnings.append).sort_once(apply=True)
 
     assert any("run ledger" in w for w in warnings)
 
@@ -208,7 +201,7 @@ def test_a_second_cubby_waits_then_gives_up_with_a_clear_error(tmp_path):
 def test_a_pass_that_raises_is_logged_and_the_next_pass_runs(tmp_path, monkeypatch):
     source = tmp_path / "Downloads"
     source.mkdir()
-    sorter = Sorter(_config(source))
+    sorter = Sorter(config_for(source))
     calls = {"n": 0}
     real = sorter.sort_once
 
@@ -230,7 +223,7 @@ def test_a_pass_that_raises_is_logged_and_the_next_pass_runs(tmp_path, monkeypat
 def test_a_missing_folder_is_reported_once_and_its_return_noticed(tmp_path):
     source = tmp_path / "Drive"
     source.mkdir()
-    sorter = Sorter(_config(source))
+    sorter = Sorter(config_for(source))
     log = Recorder()
     watcher = Watcher(sorter, interval=0, sleep=lambda _: None, log=log)
 
@@ -254,7 +247,7 @@ def test_a_busy_lock_skips_the_pass_without_failing(tmp_path, monkeypatch):
         raise Busy("another cubby process is sorting")
 
     monkeypatch.setattr("cubby.app.watcher.exclusive", busy)
-    total = Watcher(Sorter(_config(source)), interval=0, log=log).run(max_cycles=1)
+    total = Watcher(Sorter(config_for(source)), interval=0, log=log).run(max_cycles=1)
 
     assert total == 0
     assert any("skipped" in m for m in log.at("WARNING"))
@@ -265,7 +258,7 @@ def test_each_completed_pass_beats(tmp_path):
     source.mkdir()
     ledger = Ledger(tmp_path / "state")
 
-    Watcher(Sorter(_config(source)), interval=45, ledger=ledger).run(max_cycles=1)
+    Watcher(Sorter(config_for(source)), interval=45, ledger=ledger).run(max_cycles=1)
 
     beat = ledger.heartbeat()
     assert beat is not None
@@ -281,7 +274,7 @@ def test_failed_items_are_announced_as_a_warning(tmp_path, monkeypatch):
     )
     log = Recorder()
 
-    Watcher(Sorter(_config(source)), interval=0, log=log).run(max_cycles=1)
+    Watcher(Sorter(config_for(source)), interval=0, log=log).run(max_cycles=1)
 
     assert any("could not be sorted" in m for m in log.at("WARNING"))
 

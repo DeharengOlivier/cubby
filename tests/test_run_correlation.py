@@ -15,7 +15,7 @@ from cubby.adapters.journal import Journal
 from cubby.adapters.ledger import Ledger, RunRecord
 from cubby.adapters.logging import file_logger, run_context
 from cubby.app.sorter import Sorter
-from cubby.domain.category import Category, Config, Settings
+from tests.helpers import config_for
 
 
 def _lines(path: Path) -> list[dict]:
@@ -41,10 +41,7 @@ def test_the_log_lines_of_a_pass_carry_the_run_id_of_its_ledger_and_journal(tmp_
     source = tmp_path / "Downloads"
     source.mkdir()
     (source / "notes.txt").write_text("x")
-    config = Config(
-        settings=Settings(source=source, delay=0, content_scan=False),
-        categories=(Category(name="Documents", extensions=frozenset({"txt"})),),
-    )
+    config = config_for(source)
     ledger = Ledger(tmp_path / "state")
     journal = Journal(tmp_path / "state" / "journal.jsonl")
     log_path = tmp_path / "cubby.log"

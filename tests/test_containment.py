@@ -14,10 +14,7 @@ the tree it was given.
 
 from __future__ import annotations
 
-import os
 import textwrap
-import time
-from pathlib import Path
 
 import pytest
 
@@ -26,6 +23,7 @@ from cubby.adapters.filesystem import move_into
 from cubby.app.sorter import Sorter
 from cubby.domain.category import Category, Config, Settings
 from cubby.domain.engine import Engine
+from tests.helpers import aged_file
 
 ESCAPING_NAMES = [
     "../escaped",
@@ -37,15 +35,6 @@ ESCAPING_NAMES = [
     "",
     "   ",
 ]
-
-
-def _aged_file(folder: Path, name: str = "report.pdf") -> Path:
-    folder.mkdir(parents=True, exist_ok=True)
-    path = folder / name
-    path.write_text("content", encoding="utf-8")
-    old = time.time() - 10_000
-    os.utime(path, (old, old))
-    return path
 
 
 # --- barrier 1: the configuration refuses the name -------------------------
@@ -106,7 +95,7 @@ def test_ordinary_names_are_still_accepted(tmp_path):
 
 def test_move_into_refuses_a_destination_outside_its_root(tmp_path):
     source = tmp_path / "downloads"
-    path = _aged_file(source)
+    path = aged_file(source, "report.pdf")
     outside = tmp_path / "escaped"
 
     with pytest.raises(ValueError, match="outside"):
@@ -119,7 +108,7 @@ def test_move_into_refuses_a_destination_outside_its_root(tmp_path):
 @pytest.mark.parametrize("rename_to", ["../escaped.pdf", "sub/dir.pdf", "/tmp/x.pdf"])
 def test_move_into_refuses_a_rename_that_escapes(rename_to, tmp_path):
     source = tmp_path / "downloads"
-    path = _aged_file(source)
+    path = aged_file(source, "report.pdf")
     category = source / "Documents"
 
     with pytest.raises(ValueError, match=r"outside|name"):
@@ -130,7 +119,7 @@ def test_move_into_refuses_a_rename_that_escapes(rename_to, tmp_path):
 
 def test_move_into_still_accepts_a_destination_inside_the_root(tmp_path):
     source = tmp_path / "downloads"
-    path = _aged_file(source)
+    path = aged_file(source, "report.pdf")
 
     destination = move_into(path, source / "Documents" / "2026-08", root=source).destination
 
@@ -152,7 +141,7 @@ def test_the_escaping_name_cannot_even_be_constructed(tmp_path):
 
 def test_a_sort_keeps_every_file_inside_the_watched_folder(tmp_path):
     source = tmp_path / "downloads"
-    _aged_file(source)
+    aged_file(source, "report.pdf")
     config = Config(
         settings=Settings(source=source, delay=0, content_scan=False),
         categories=(Category(name="Documents", extensions=frozenset({"pdf"}), strong_ext=True),),
