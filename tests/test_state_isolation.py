@@ -22,10 +22,13 @@ top. These tests are what keeps both honest.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import textwrap
 from pathlib import Path
+
+import pytest
 
 from cubby.adapters import state
 from cubby.adapters.journal import Entry, Journal
@@ -140,7 +143,9 @@ def test_a_new_state_folder_and_a_removed_file_are_caught(tmp_path):
     assert f"disappeared: {config}" in found
 
 
-def _run_session(tmp_path: Path, test_body: str) -> subprocess.CompletedProcess[str]:
+def _run_session(
+    tmp_path: Path, test_body: str, **extra_env: str
+) -> subprocess.CompletedProcess[str]:
     """Run a one-test pytest session with only the guard loaded, HOME=tmp_path/real."""
     real_home = tmp_path / "real"
     real_home.mkdir()
@@ -153,7 +158,7 @@ def _run_session(tmp_path: Path, test_body: str) -> subprocess.CompletedProcess[
         for key, value in os.environ.items()
         if not key.startswith(("XDG_", "CUBBY_", "PYTEST_"))
     }
-    env |= {"HOME": str(real_home), "PYTHONPATH": str(_REPO)}
+    env |= {"HOME": str(real_home), "PYTHONPATH": str(_REPO), **extra_env}
     return subprocess.run(
         [sys.executable, "-m", "pytest", "-p", "tests.real_state_guard", "-p", "no:cacheprovider"],
         cwd=project,
@@ -165,22 +170,72 @@ def _run_session(tmp_path: Path, test_body: str) -> subprocess.CompletedProcess[
     )
 
 
-def test_a_session_writing_to_the_real_home_fails(tmp_path):
-    result = _run_session(
-        tmp_path,
-        """
-        from tests.real_state_guard import REAL_HOME
+_WRITES_TO_THE_REAL_HOME = """
+from tests.real_state_guard import REAL_HOME
 
-        def test_writes_where_it_must_not():
-            log = REAL_HOME / ".local" / "state" / "cubby" / "cubby.log"
-            log.parent.mkdir(parents=True)
-            log.write_text("a line from the test suite\\n")
-        """,
-    )
+def test_writes_where_it_must_not():
+    log = REAL_HOME / ".local" / "state" / "cubby" / "cubby.log"
+    log.parent.mkdir(parents=True)
+    log.write_text("a line from the test suite\\n")
+"""
+
+
+def test_a_session_writing_to_the_real_home_fails(tmp_path):
+    result = _run_session(tmp_path, _WRITES_TO_THE_REAL_HOME)
     assert result.returncode == 1, result.stdout + result.stderr
     assert "1 passed" in result.stdout
     real_log = tmp_path / "real" / ".local" / "state" / "cubby" / "cubby.log"
     assert f"appeared: {real_log}" in result.stdout + result.stderr
+
+
+def test_the_failure_says_how_to_fix_it(tmp_path):
+    # A running agent rewrites its heartbeat every 30 seconds: the message must
+    # name that cause and the two ways out, or the guard gets bypassed.
+    result = _run_session(tmp_path, _WRITES_TO_THE_REAL_HOME)
+    output = result.stdout + result.stderr
+    assert "cubby agent" in output
+    assert "stop" in output
+    assert "make test" in output
+    assert "HOME=$(mktemp -d)" in output
+
+
+def test_a_violation_is_recorded_in_the_report_file(tmp_path):
+    # mutmut counts a failed session as a killed mutant: `make mutation` reads
+    # this file to tell a mutant that reached the real home from a killed one.
+    report = tmp_path / "violations.txt"
+    _run_session(tmp_path, _WRITES_TO_THE_REAL_HOME, CUBBY_TEST_GUARD_REPORT=str(report))
+    real_log = tmp_path / "real" / ".local" / "state" / "cubby" / "cubby.log"
+    assert f"appeared: {real_log}" in report.read_text("utf-8")
+
+
+def test_an_interrupted_session_keeps_its_exit_status(tmp_path):
+    result = _run_session(
+        tmp_path,
+        _WRITES_TO_THE_REAL_HOME + "\ndef test_interrupted():\n    raise KeyboardInterrupt\n",
+    )
+    assert result.returncode == pytest.ExitCode.INTERRUPTED, result.stdout + result.stderr
+    assert "appeared: " in result.stdout + result.stderr
+
+
+def test_a_session_folder_that_cannot_be_removed_is_reported_not_raised(tmp_path):
+    result = _run_session(
+        tmp_path,
+        """
+        from pathlib import Path
+
+        def test_locks_a_folder_in_the_session_home():
+            Path("home.txt").write_text(str(Path.home()))
+            locked = Path.home() / "locked"
+            locked.mkdir()
+            (locked / "file").write_text("")
+            locked.chmod(0o500)
+        """,
+    )
+    session_home = Path((tmp_path / "project" / "home.txt").read_text())
+    (session_home / "locked").chmod(0o700)
+    shutil.rmtree(session_home)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"could not remove {session_home}" in result.stderr
 
 
 def test_a_session_using_the_default_folders_leaves_the_real_home_alone(tmp_path):
