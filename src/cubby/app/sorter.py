@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import date
@@ -11,6 +12,9 @@ from pathlib import Path
 from ..adapters.filesystem import (
     build_ref,
     duplicate_in,
+    file_in_the_way,
+    files_identical,
+    in_the_way,
     iter_candidates,
     move_into,
     not_yet_reason,
@@ -111,8 +115,14 @@ class Sorter:
             vendors=settings.vendors,
         )
 
-    def _outcome(self, path: Path, *, apply: bool, run_id: str, seq: int) -> SortOutcome:
+    def _outcome(
+        self, path: Path, *, apply: bool, run_id: str, seq: int, claimed: dict[Path, Path]
+    ) -> SortOutcome:
         """Classify one entry and, when applying, move it and journal the move.
+
+        ``claimed`` maps each destination a plan has given out in this pass to
+        the file given it: a later file with the same bytes and destination is
+        what a run would delete as its duplicate, although nothing is filed yet.
 
         Raises:
             OSError: The entry could not be read or moved.
@@ -132,10 +142,7 @@ class Sorter:
         )
         folder = settings.source / decision.category / placement.subdir
         if not apply:
-            if settings.dedupe:  # what the run would do: delete a byte-identical duplicate
-                name = placement.new_name or path.name
-                return replace(outcome, duplicate_of=duplicate_in(path, folder, name))
-            return outcome
+            return self._planned(path, outcome, folder, placement.new_name or path.name, claimed)
 
         moved = move_into(
             path,
@@ -163,6 +170,25 @@ class Sorter:
             done = f"deleted, duplicate of {where}" if moved.op == "dedupe" else f"-> {where}"
             self._log(f"[{decision.category}] ({decision.stage.value}) {path.name} {done}")
         return result
+
+    def _planned(
+        self, path: Path, outcome: SortOutcome, folder: Path, name: str, claimed: dict[Path, Path]
+    ) -> SortOutcome:
+        """What a run would do with ``path``: fail, delete it as a duplicate, or move it."""
+        settings = self._config.settings
+        # The run would fail on a file standing where a folder must go.
+        if (blocker := file_in_the_way(folder, settings.source)) is not None:
+            return replace(outcome, error=in_the_way(blocker, settings.source))
+        target = folder / name
+        if settings.dedupe:  # what the run would do: delete a byte-identical duplicate
+            duplicate = duplicate_in(path, folder, name)
+            if duplicate is None and target in claimed and files_identical(path, claimed[target]):
+                duplicate = target
+            if duplicate is not None:
+                return replace(outcome, duplicate_of=duplicate)
+        if not os.path.lexists(target):
+            claimed.setdefault(target, path)
+        return outcome
 
     def _journal_move(self, entry: Entry) -> bool:
         """Record ``entry``. False when a journal was expected and could not be written."""
@@ -232,6 +258,7 @@ class Sorter:
         on_waiting: Callable[[Path, str], None],
     ) -> None:
         settings = self._config.settings
+        claimed: dict[Path, Path] = {}
         for path in iter_candidates(settings, self._config.managed_dirs):
             if stop():
                 break
@@ -239,7 +266,11 @@ class Sorter:
                 on_waiting(path, reason)
                 continue
             try:
-                outcomes.append(self._outcome(path, apply=apply, run_id=run_id, seq=len(outcomes)))
+                outcomes.append(
+                    self._outcome(
+                        path, apply=apply, run_id=run_id, seq=len(outcomes), claimed=claimed
+                    )
+                )
             except Exception as exc:  # noqa: BLE001 - reported below, and the others still sort
                 # Whatever stops one file (permissions, a file that vanished, a
                 # refused destination, a parser bug) must not stop the rest: the

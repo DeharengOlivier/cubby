@@ -107,11 +107,6 @@ def not_yet_reason(
     return None
 
 
-def is_eligible(path: Path, settings: Settings, now: float | None = None) -> bool:
-    """True if ``path`` is settled enough to move (see :func:`not_yet_reason`)."""
-    return not_yet_reason(path, settings, now) is None
-
-
 def resolve_inside(root: Path, destination: Path) -> Path:
     """Return ``destination`` resolved, or raise if it escapes ``root``.
 
@@ -374,23 +369,24 @@ def _make_folder(folder: Path, root: Path) -> None:
         folder.mkdir(parents=True, exist_ok=True)
     except (FileExistsError, NotADirectoryError) as exc:
         try:
-            blocker = _file_in_the_way(folder, root)
+            blocker = file_in_the_way(folder, root)
         except OSError:
             raise exc from None  # the search failed: the real error is the useful one
         if blocker is None:
             raise
-        try:
-            shown = blocker.relative_to(root).as_posix()
-        except ValueError:
-            shown = str(blocker)
-        raise type(exc)(
-            exc.errno,
-            f"a file named {shown} is in the way of the folder cubby sorts into; rename or move it",
-            str(blocker),
-        ) from exc
+        raise type(exc)(exc.errno, in_the_way(blocker, root), str(blocker)) from exc
 
 
-def _file_in_the_way(folder: Path, root: Path) -> Path | None:
+def in_the_way(blocker: Path, root: Path) -> str:
+    """What to tell the user about ``blocker``, a file where a folder must go."""
+    try:
+        shown = blocker.relative_to(root).as_posix()
+    except ValueError:
+        shown = str(blocker)
+    return f"a file named {shown} is in the way of the folder cubby sorts into; rename or move it"
+
+
+def file_in_the_way(folder: Path, root: Path) -> Path | None:
     """The highest non-folder on the way from ``root`` down to ``folder``, if any."""
     blocker = None
     for path in [folder, *folder.parents]:

@@ -47,16 +47,23 @@ def _print_explanation(pal: Palette, item: Explanation, source: Path) -> None:
     # What a run does comes first; where the file would go otherwise, after.
     stays = "not in the watched folder: a run would not see it" if item.outside else item.skipped
     if stays:
-        kv(pal, "  stays where it is", pal.yellow(stays))
+        kv(pal, "  stays where it is", pal.yellow(stays), _WIDTH)
     shown = _near(item.destination, source)
     if item.duplicate_of is not None and not stays:
-        kv(pal, "  deleted", pal.accent(f"as a duplicate of {_near(item.duplicate_of, source)}"))
-    else:
-        kv(pal, "  would go to" if stays else "  goes to", pal.accent(shown))
+        where = f"as a duplicate of {_near(item.duplicate_of, source)}"
+        kv(pal, "  deleted", pal.accent(where), _WIDTH)
+    elif not stays:
+        kv(pal, "  goes to", pal.accent(shown), _WIDTH)
+    elif item.sortable or item.outside:  # never sorted: no destination to announce
+        kv(pal, "  would go to", pal.accent(shown), _WIDTH)
     rule = f"{item.rule}  ({item.stage.value} stage)" if item.rule else "no rule matched"
-    kv(pal, "  decided by", rule)
+    kv(pal, "  decided by", rule, _WIDTH)
     if item.renamed_to:
-        kv(pal, "  renamed", item.renamed_to)
+        kv(pal, "  renamed", item.renamed_to, _WIDTH)
+
+
+#: The key column of ``explain``: its longest key and two spaces.
+_WIDTH = len("  stays where it is") + 2
 
 
 def _near(path: Path, folder: Path) -> str:

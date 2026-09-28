@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..adapters.filesystem import build_ref, candidate_skip_reason, duplicate_in, not_yet_reason
+from ..adapters.filesystem import build_ref, candidate_skip_reason, not_yet_reason
 from ..domain.category import Config
 from ..domain.engine import Engine
 from ..domain.file_ref import Stage
@@ -25,6 +25,9 @@ class Explanation:
     skipped: str | None  # why a run would leave it alone, if it would
     outside: bool  # the file is not in the watched folder
     duplicate_of: Path | None = None  # with dedupe: the filed copy it would be deleted for
+    # False when no run ever sorts it (hidden, ignored, a folder cubby files
+    # into): then ``destination`` is only what the rules would say.
+    sortable: bool = True
 
 
 def explain(path: Path, config: Config) -> Explanation:
@@ -45,12 +48,13 @@ def explain(path: Path, config: Config) -> Explanation:
     # The entry itself is not resolved: a run sorts a symlink sitting in the
     # folder, wherever it points, so only the folder it sits in matters.
     outside = path.absolute().parent.resolve() != source
-    skipped = candidate_skip_reason(path, settings, config.managed_dirs) or not_yet_reason(
-        path, settings
-    )
+    never = candidate_skip_reason(path, settings, config.managed_dirs)
+    skipped = never or not_yet_reason(path, settings)
     name = placement.new_name or path.name
     folder = settings.source / decision.category / placement.subdir
-    duplicate = duplicate_in(path, folder, name) if settings.dedupe and path.is_file() else None
+    duplicate = None
+    if settings.dedupe and not (skipped or outside):
+        duplicate = _duplicate_in_pass(path, config, engine)
     return Explanation(
         path=path,
         category=decision.category,
@@ -61,4 +65,14 @@ def explain(path: Path, config: Config) -> Explanation:
         skipped=skipped,
         outside=outside,
         duplicate_of=duplicate,
+        sortable=never is None,
     )
+
+
+def _duplicate_in_pass(path: Path, config: Config, engine: Engine) -> Path | None:
+    """The copy a run would delete ``path`` for: filed already, or filed earlier in the pass."""
+    target = config.settings.source / path.name
+    for outcome in Sorter(config, engine).sort_once(apply=False):
+        if outcome.source == target:
+            return outcome.duplicate_of
+    return None

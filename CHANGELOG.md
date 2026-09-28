@@ -75,8 +75,12 @@ All notable changes to this project are documented here. The format is based on
   lists downloads still in progress as going to `_Unsorted`. `plan` and `run`
   list what they left alone and why (`left_alone` in `--json`), and name a
   file standing where a category folder goes (`blocked`). `explain` says
-  first whether a file stays where it is, then where it would go. Found by an
-  exploratory session.
+  first whether a file stays where it is, then where it would go. A duplicate
+  made within the same pass (two identical files renamed to the same invoice
+  name) is predicted too, and `plan` counts a file bound for a folder blocked
+  by a file (a category or a month folder) under "Would fail", not as a move.
+  In `plan --json`, `count` no longer includes downloads in progress. Found by
+  an exploratory session.
 - A regular file named like a folder cubby sorts into (`_Unsorted`, a
   category, or a month folder inside one) made every move into that folder
   fail with `[Errno 17] File exists`. The file is still left alone, and the

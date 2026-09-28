@@ -3,9 +3,9 @@ import time
 
 from cubby.adapters.filesystem import (
     build_ref,
-    is_eligible,
     iter_candidates,
     move_into,
+    not_yet_reason,
     unique_destination,
 )
 from cubby.domain.category import Settings
@@ -41,16 +41,16 @@ def test_eligibility_respects_delay(tmp_path):
     f = tmp_path / "fresh.txt"
     f.write_text("x")
     settings = Settings(delay=60)
-    assert is_eligible(f, settings, now=time.time()) is False
+    assert not_yet_reason(f, settings, now=time.time()) is not None
     old = time.time() + 120  # pretend "now" is well past the delay
-    assert is_eligible(f, settings, now=old) is True
+    assert not_yet_reason(f, settings, now=old) is None
 
 
 def test_eligibility_skips_in_progress_downloads(tmp_path):
     f = tmp_path / "movie.mp4.crdownload"
     f.write_text("x")
     os.utime(f, (0, 0))  # very old, so only the extension can disqualify it
-    assert is_eligible(f, Settings(delay=0), now=time.time()) is False
+    assert not_yet_reason(f, Settings(delay=0), now=time.time()) is not None
 
 
 def test_iter_candidates_skips_hidden_and_managed(tmp_path):

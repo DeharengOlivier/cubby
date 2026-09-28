@@ -131,3 +131,105 @@ def test_explain_names_a_file_that_has_a_category_folder_name(tmp_path, capsys):
     _, text = _cli(capsys, "explain", "--source", str(tmp_path), str(tmp_path / "Documents"))
 
     assert "a file with the name of a folder cubby files into: rename or move it" in text
+
+
+# --- from the review of this change ---------------------------------------------
+
+
+@pytest.fixture
+def twins(tmp_path):
+    # Both are renamed to the same invoice name: the second one the run meets
+    # is a duplicate of the first, although nothing was filed before the run.
+    aged_file(tmp_path, "spotify invoice.txt", content="SAME")
+    aged_file(tmp_path, "spotify invoice (1).txt", content="SAME")
+    return tmp_path
+
+
+def test_plan_predicts_a_duplicate_made_within_the_same_pass(twins, capsys):
+    config = _config_file(twins, dedupe=True)
+
+    _, planned = _cli(capsys, "plan", "--config", config, "--source", str(twins))
+    _, ran = _cli(capsys, "run", "--config", config, "--source", str(twins))
+
+    assert "Would move 1 item(s) and delete 1 duplicate(s)." in planned
+    assert "Moved 1 item(s) and deleted 1 duplicate(s)." in ran
+
+
+def test_explain_predicts_a_duplicate_made_within_the_same_pass(twins, capsys):
+    config = _config_file(twins, dedupe=True)
+    first, second = twins / "spotify invoice (1).txt", twins / "spotify invoice.txt"
+
+    _, raw = _cli(capsys, "explain", "--config", config, "--source", str(twins), "--json",
+                  str(first), str(second))  # fmt: skip
+    items = json.loads(raw)["items"]
+
+    assert items[0]["duplicate_of"] is None
+    assert items[1]["duplicate_of"] == items[1]["destination"]
+
+
+def test_plan_does_not_count_a_file_bound_for_a_blocked_folder_as_moved(tmp_path, capsys):
+    aged_file(tmp_path, "Documents", content="a plain file")
+    aged_file(tmp_path, "notes.txt")
+
+    _, planned = _cli(capsys, "plan", "--source", str(tmp_path))
+    code, ran = _cli(capsys, "run", "--source", str(tmp_path), "--delay", "0")
+
+    assert "Would move 0 item(s). 1 would fail." in planned
+    assert "notes.txt   a file named Documents is in the way" in planned
+    assert code == 1
+    assert "Moved 0 item(s). 1 could not be sorted." in ran
+
+
+def test_plan_names_a_file_blocking_a_month_folder(tmp_path, capsys):
+    aged_file(tmp_path, "spotify invoice.txt")
+    _, raw = _cli(capsys, "plan", "--source", str(tmp_path), "--json")
+    (item,) = json.loads(raw)["items"]
+    month = tmp_path / item["category"] / item["subdir"]
+    aged_file(month.parent, month.name, content="a file where the month folder goes")
+
+    _, planned = _cli(capsys, "plan", "--source", str(tmp_path))
+
+    shown = f"{item['category']}/{item['subdir']}"
+    assert f"a file named {shown} is in the way" in planned
+    assert "1 would fail." in planned
+
+
+def test_explain_values_line_up(folder, capsys):
+    _, text = _cli(capsys, "explain", "--source", str(folder), str(folder / "movie.mkv.crdownload"))
+    lines = text.splitlines()[1:]
+
+    starts = {line.index(value) for line, value in zip(lines, _values(lines), strict=True)}
+    assert len(starts) == 1, text
+
+
+def _values(lines: list[str]) -> list[str]:
+    return [line.strip().split("  ", 1)[1].strip() for line in lines]
+
+
+def test_explain_gives_no_destination_for_a_file_never_sorted(tmp_path, capsys):
+    aged_file(tmp_path, "Documents", content="a plain file")
+    aged_file(tmp_path, ".hidden")
+
+    _, text = _cli(capsys, "explain", "--source", str(tmp_path),
+                   str(tmp_path / "Documents"), str(tmp_path / ".hidden"))  # fmt: skip
+
+    assert "would go to" not in text
+
+
+def test_explain_names_no_duplicate_for_a_file_that_stays(tmp_path):
+    aged_file(tmp_path / "Documents", "report.txt", content="SAME")
+    aged_file(tmp_path, "report.txt", content="SAME", age=0)
+
+    item = explain(tmp_path / "report.txt", config_for(tmp_path, dedupe=True, delay=3600))
+
+    assert item.skipped is not None
+    assert item.duplicate_of is None
+
+
+def test_the_run_says_where_to_see_every_file_it_left_alone(tmp_path, capsys):
+    for i in range(12):
+        aged_file(tmp_path, f"f{i:02}.txt", age=0)
+
+    _, text = _cli(capsys, "run", "--source", str(tmp_path))
+
+    assert "and 2 more; 'cubby explain FILE' says why for any file" in text

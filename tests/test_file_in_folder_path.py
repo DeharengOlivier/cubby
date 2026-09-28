@@ -75,7 +75,7 @@ def test_a_dangling_symlink_in_the_way_is_named(tmp_path):
 
 def test_a_blocker_gone_before_the_search_leaves_the_original_error(tmp_path, monkeypatch):
     notes = aged_file(tmp_path, "notes.txt")
-    monkeypatch.setattr(filesystem, "_file_in_the_way", lambda folder, root: None)
+    monkeypatch.setattr(filesystem, "file_in_the_way", lambda folder, root: None)
     aged_file(tmp_path, "Documents")
 
     with pytest.raises(FileExistsError) as caught:
@@ -92,7 +92,7 @@ def test_a_search_that_fails_leaves_the_original_error(tmp_path, monkeypatch):
     def refused(folder, root):
         raise PermissionError(errno.EACCES, "Permission denied")
 
-    monkeypatch.setattr(filesystem, "_file_in_the_way", refused)
+    monkeypatch.setattr(filesystem, "file_in_the_way", refused)
 
     with pytest.raises(FileExistsError):
         move_into(notes, tmp_path / "Documents", root=tmp_path)
