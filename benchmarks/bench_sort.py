@@ -12,7 +12,9 @@ samples a p90 or p99 is the maximum anyway).
 Three timings per repetition:
 
 - plan: ``cubby plan`` over the folder, nothing moved;
-- apply: one pass that moves every file, journal and ledger included;
+- apply: one pass that moves every file, journal and ledger included, in wall
+  clock and in CPU time of the process (user + system), which a busy machine
+  disturbs far less than the wall clock;
 - idle: the next pass of the agent, once the folder is sorted, which is what the
   agent pays every interval in the steady state.
 """
@@ -86,9 +88,10 @@ def measure(n: int) -> dict[str, float]:
         planned = sorter.sort_once(apply=False)
         plan_s = time.perf_counter() - started
 
-        started = time.perf_counter()
+        started, cpu_started = time.perf_counter(), time.process_time()
         applied = sorter.sort_once(apply=True)
         apply_s = time.perf_counter() - started
+        apply_cpu_s = time.process_time() - cpu_started
 
         started = time.perf_counter()
         left = sorter.sort_once(apply=True)
@@ -103,6 +106,7 @@ def measure(n: int) -> dict[str, float]:
             "n": n,
             "plan_s": plan_s,
             "apply_s": apply_s,
+            "apply_cpu_s": apply_cpu_s,
             "idle_s": idle_s,
             "memory_mb": peak_rss_mb() - before,
         }
@@ -135,13 +139,14 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"Median / slowest of {args.repeat} runs, each in a fresh process on a fresh folder.")
     print()
-    print("| Files | Plan | Apply | Apply per file | Idle pass | Peak memory |")
-    print("| ---: | ---: | ---: | ---: | ---: | ---: |")
+    print("| Files | Plan | Apply | Apply CPU | CPU per file | Idle pass | Peak memory |")
+    print("| ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
     for n in sorted(args.sizes):
         rows = [measure_in_a_fresh_process(n) for _ in range(args.repeat)]
         print(
             f"| {n:,} | {_spread(rows, 'plan_s')} | {_spread(rows, 'apply_s')} | "
-            f"{statistics.median(r['apply_s'] for r in rows) / n * 1e6:.0f} us | "
+            f"{_spread(rows, 'apply_cpu_s')} | "
+            f"{statistics.median(r['apply_cpu_s'] for r in rows) / n * 1e6:.0f} us | "
             f"{_spread(rows, 'idle_s')} | {max(r['memory_mb'] for r in rows):.0f} MB |"
         )
     return 0
