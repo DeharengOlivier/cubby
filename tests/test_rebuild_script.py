@@ -31,8 +31,9 @@ cat pyproject.toml > "$2/pkg-1.0.tar.gz"
 
 #: What a non-reproducible build would carry: the environment of the build.
 LEAKS = {
-    "umask": 'umask >> "$2/pkg-1.0-py3-none-any.whl"',
+    "source permissions": 'ls -l pyproject.toml | cut -c1-10 >> "$2/pkg-1.0-py3-none-any.whl"',
     "time zone": 'echo "${TZ:-}" >> "$2/pkg-1.0.tar.gz"',
+    "locale": 'echo "${LC_ALL:-}" >> "$2/pkg-1.0.tar.gz"',
     "file dates": 'ls -l pyproject.toml | cut -c30- >> "$2/pkg-1.0.tar.gz"',
 }
 
@@ -98,10 +99,37 @@ def test_a_rebuild_is_checked_against_published_sums(tmp_path):
 
     assert _run(repo, env, "--against", str(published)).returncode == 0
 
-    published.write_text("0" * 64 + "  pkg-1.0.tar.gz\n", encoding="utf-8")
+    sums = published.read_text("utf-8").splitlines()
+    altered = ["0" * 64 + line[64:] if "tar.gz" in line else line for line in sums]
+    published.write_text("".join(line + "\n" for line in altered), encoding="utf-8")
     tampered = _run(repo, env, "--against", str(published))
     assert tampered.returncode == 1
     assert "does not match" in tampered.stderr
+
+
+def test_published_sums_must_cover_every_rebuilt_file(tmp_path):
+    repo, env = _repo(tmp_path)
+    first = _run(repo, env)
+    sdist_only = tmp_path / "SHA256SUMS"
+    sdist_only.write_text(
+        "".join(line + "\n" for line in first.stdout.splitlines() if "tar.gz" in line),
+        encoding="utf-8",
+    )
+
+    result = _run(repo, env, "--against", str(sdist_only))
+
+    assert result.returncode == 1
+    assert "does not list exactly the rebuilt files" in result.stderr
+
+
+@pytest.mark.parametrize("made", ["", 'rm "$2/pkg-1.0.tar.gz"'])
+def test_a_build_missing_an_artifact_fails(tmp_path, made):
+    repo, env = _repo(tmp_path, made or 'rm "$2"/*')
+
+    result = _run(repo, env)
+
+    assert result.returncode == 1
+    assert "did not make exactly one wheel and one sdist" in result.stderr
 
 
 def test_it_refuses_unknown_arguments(tmp_path):
