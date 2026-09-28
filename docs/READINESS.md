@@ -37,7 +37,7 @@ like `FAIL` for a P0), `N/A` (with the reason the surface does not exist).
 | Protected branch enforced by the platform, required checks | PASS | branch protection on `main`: PR required, `enforce_admins: true`, linear history, conversation resolution, the 8 CI checks required (`gh api .../branches/main/protection`, 2026-09-28) | each release |
 | Untrusted CI code isolated from production hosts and credentials | PASS | no production host or secret exists; default workflow token `read`; only the tag-triggered publish job has `contents: write` and runs no project code | each release |
 | Independent review of every merged change | PASS | a recorded independent review and its resolution on #1 to #5 and #7 to #19 (PR comments); #6 (the 0.2.0 version bump) merged without one and was reviewed after the merge (comment on #6) | each PR |
-| Coverage instrumented, changed-code threshold | PASS | `pytest --cov --cov-fail-under=90` on 6 OS/Python combinations; `diff-cover --fail-under=90` on PRs; 97% total at 0.3.0 | each release |
+| Coverage instrumented, changed-code threshold | PASS | `pytest --cov --cov-fail-under=90` on 6 OS/Python combinations; `diff-cover --fail-under=90` on PRs; 97% total at 0.3.0 measured locally, 96.5% to 96.8% in the six CI jobs (0.2.0 was 96.4%) | each release |
 | Integration tests of critical contracts and failure paths | PASS | service boundary with a fake manager (`test_service_boundary.py`), parser child process (`test_review_pr2.py`), journal and undo failure paths (`test_undo_everything.py`, `test_file_safety_edges.py`) | each release |
 | Critical-journey end-to-end tests in CI | PASS | `test_agent_journey.py` (agent as a real process: sort, history, SIGTERM, undo), `test_pause_and_alerts.py::test_the_real_agent_stops_at_a_pause_and_sorts_after_resume` | each release |
 | Property or model-based tests where required | PASS | `test_properties.py` (Hypothesis): durations, names, destinations, journal round trip, dates, config, model-based sort then undo | each release |
@@ -65,7 +65,7 @@ containers, infrastructure, secrets.
 |---|---|---|---|---|
 | SEC-GOV-01 | P0 | PASS | this register, 2026-09-28 | each release |
 | SEC-GOV-02 | P0 | PASS | tests use temp folders and a per-test `CUBBY_STATE_DIR` (`conftest.py`), no network, fake service managers; mutation and property runs local only | each release |
-| SEC-GATE-01 | P0 | PASS | `pip-audit --strict` over the exported lock including the `extract` extras, bandit, gitleaks: CI job "Dependency and code scanning" green on `main` 42c666a | each release |
+| SEC-GATE-01 | P0 | PASS | `pip-audit --strict` over the exported lock including the `extract` extras, bandit, gitleaks: CI job "Dependency and code scanning" green on the release 0.3.0 pull request (#19) | each release |
 | SEC-01-001 to 007 | P0 | PASS | `docs/THREAT-MODEL.md` | release adding an entry point, parser or side effect |
 | SEC-04, 05, 06 (authn, authz, sessions) | P0 | N/A | no accounts, roles or sessions; runs as the local user with OS permissions | - |
 | SEC-05-006 least privilege | P0 | PASS | user agent (launchd `LaunchAgents`, systemd `--user`), no root, no sudo in `install.sh` | each release |
