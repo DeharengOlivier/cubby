@@ -115,6 +115,18 @@ def test_install_without_flags_bakes_no_flags(tmp_path, fake_service):
     assert "--delay" not in baked
 
 
+def test_install_bakes_no_content_into_the_agent(fake_service):
+    assert main(["install", "--no-content"]) == EXIT_OK
+
+    assert "--no-content" in fake_service.spec.program_args
+
+
+def test_install_without_no_content_leaves_content_scanning_on(fake_service):
+    assert main(["install"]) == EXIT_OK
+
+    assert "--no-content" not in fake_service.spec.program_args
+
+
 def test_the_agent_command_points_at_a_real_executable(fake_service):
     main(["install"])
     baked = fake_service.spec.program_args
