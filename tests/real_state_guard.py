@@ -33,6 +33,9 @@ REAL_ENV = {
 
 _SERVICE_LABEL = "com.cubby.agent"
 
+#: When set, each violation is also appended to the file it names.
+REPORT_FILE_VARIABLE = "CUBBY_TEST_GUARD_REPORT"
+
 Snapshot = dict[str, tuple[int, int]]
 
 _BEFORE = pytest.StashKey[Snapshot]()
@@ -117,13 +120,16 @@ def pytest_sessionfinish(session: pytest.Session) -> None:
     found = changes(session.config.stash[_BEFORE], snapshot(_locations()))
     if not found:
         return
-    # Fails closed: a cubby agent writing to the real state during the run
-    # trips it too. Stop the agent, or run the suite with a throwaway HOME.
     report = "\n".join(
         [
             "",
             f"real_state_guard: this session touched cubby state under {REAL_HOME}:",
             *(f"  {line}" for line in found),
+            "A cubby agent running on this machine rewrites its heartbeat every",
+            "30 seconds, which trips this check (it fails closed): stop the agent",
+            "(`cubby uninstall`, or its service manager), or run the suite under a",
+            "throwaway HOME, as `make test` does: env HOME=$(mktemp -d) uv run pytest.",
+            "Otherwise a test or the code under test wrote there: find which.",
         ]
     )
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
@@ -131,9 +137,23 @@ def pytest_sessionfinish(session: pytest.Session) -> None:
         reporter.write_line(report, red=True, bold=True)
     else:
         print(report, file=sys.stderr)
-    session.exitstatus = pytest.ExitCode.TESTS_FAILED
+    # mutmut counts a failed session as a killed mutant, which would hide one
+    # that reached the real home: `make mutation` names this file and fails
+    # when it is not empty.
+    if record := os.environ.get(REPORT_FILE_VARIABLE):
+        with Path(record).open("a", encoding="utf-8") as handle:
+            handle.write(report + "\n")
+    # An interrupted or broken session keeps its own, more telling, status.
+    if session.exitstatus in (pytest.ExitCode.OK, pytest.ExitCode.NO_TESTS_COLLECTED):
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
 
 def pytest_unconfigure(config: pytest.Config) -> None:
     config.stash[_PATCH].undo()
-    shutil.rmtree(config.stash[_SESSION_HOME])
+    home = config.stash[_SESSION_HOME]
+    try:
+        shutil.rmtree(home)
+    except OSError as error:
+        # A leftover temp folder is not worth failing a finished session for;
+        # it is said, not swallowed.
+        print(f"real_state_guard: could not remove {home}: {error}", file=sys.stderr)

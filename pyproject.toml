@@ -151,7 +151,9 @@ forbidden_modules = ["os", "shutil", "subprocess", "cubby.adapters", "cubby.app"
 
 # Mutation testing is run on the modules whose silent breakage would lose or
 # misplace a user's files: the undo journal, path containment and naming.
-# `make mutation`; results are recorded in docs/audits/.
+# `make mutation`; results are recorded in docs/audits/. Only through `make
+# mutation`: mutmut counts a mutant the test guard caught writing to the real
+# home as killed, and the target is what fails on the guard's report.
 [tool.mutmut]
 source_paths = ["src/cubby"]
 only_mutate = [

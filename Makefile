@@ -4,8 +4,16 @@
 install:
 	uv sync --locked --all-extras
 
+# Tests run under a throwaway HOME, with no XDG or cubby variable, so neither a
+# test nor the code under test can reach the real cubby state (it did once), and
+# a cubby agent running on this machine cannot fail the suite's guard
+# (tests/real_state_guard.py). uv keeps its own cache.
+ISOLATED = env -u XDG_STATE_HOME -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u CUBBY_STATE_DIR \
+	-u CUBBY_CONFIG HOME="$$home" UV_CACHE_DIR="$$(uv cache dir)"
+
 test:
-	uv run --locked pytest --cov
+	home=$$(mktemp -d) && trap 'rm -rf "$$home"' EXIT && \
+		$(ISOLATED) uv run --locked pytest --cov
 
 lint:
 	uv run --locked ruff format --check src tests benchmarks scripts
@@ -24,12 +32,17 @@ audit:
 	uv run --locked bandit -c pyproject.toml -r src -q
 
 mutation:
-	@# Under a throwaway HOME, with no XDG or cubby variable: a mutant that
-	@# ignores the test isolation must still not reach the real state folder
-	@# (it did once). uv keeps its own cache.
+	@# mutmut counts a session the guard failed as a killed mutant: the guard
+	@# also appends to CUBBY_TEST_GUARD_REPORT, and a non-empty report fails the
+	@# target. Run mutation through this target, never `mutmut run` directly.
 	home=$$(mktemp -d) && trap 'rm -rf "$$home"' EXIT && \
-		env -u XDG_STATE_HOME -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u CUBBY_STATE_DIR -u CUBBY_CONFIG \
-		HOME="$$home" UV_CACHE_DIR="$$(uv cache dir)" uv run --locked mutmut run
+		$(ISOLATED) CUBBY_TEST_GUARD_REPORT="$$home/guard-violations.txt" \
+		uv run --locked mutmut run && \
+		if [ -s "$$home/guard-violations.txt" ]; then \
+			cat "$$home/guard-violations.txt" >&2; \
+			echo "mutation: a mutant touched the real home's cubby state (above); mutmut counted it as killed" >&2; \
+			exit 1; \
+		fi
 	@# Every mutant must end killed, timed out or survived (then reviewed in
 	@# docs/audits): an interrupted run leaves some "not checked", and "no tests",
 	@# "skipped" or "suspicious" are mutants nothing checked. Fails closed: an

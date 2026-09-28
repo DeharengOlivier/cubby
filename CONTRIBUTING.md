@@ -37,10 +37,20 @@ populate it, rather than reaching into the filesystem from the domain.
 ## Tests
 
 - `make test` runs the suite, including property-based tests (Hypothesis) and an
-  end-to-end journey that starts `cubby watch` as a real process.
+  end-to-end journey that starts `cubby watch` as a real process. It runs under a
+  throwaway `HOME`, with no `XDG_*` or `CUBBY_*` variable.
+- The suite never touches your own cubby: it points `HOME` and the XDG folders at a
+  session folder, and fails the run, listing the files, when anything in your real
+  cubby state, config, log or agent unit changed (`tests/real_state_guard.py`). A
+  cubby agent running on your machine rewrites its heartbeat every 30 seconds and
+  trips that check when you run `pytest` directly: use `make test`, run
+  `env HOME=$(mktemp -d) uv run pytest`, or stop the agent (`cubby uninstall`).
 - `make mutation` runs mutation testing on the modules where a silent bug would
   lose or misplace files (journal, containment, undo; see `[tool.mutmut]` in
   `pyproject.toml`). Record the score in `docs/audits/` when those modules change.
+  Always run it through `make mutation`, never `mutmut run` directly: mutmut counts
+  a mutant that wrote to your real cubby state as killed, and only the target,
+  which runs under a throwaway `HOME` and reads the guard's report, fails on it.
 
 ## Releasing
 

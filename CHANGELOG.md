@@ -18,16 +18,18 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 - The test suite could write to the real state folder of whoever ran it: a
-  mutated `log_path()` that ignored the per-test `CUBBY_STATE_DIR` put two
-  "a line from the test suite" lines in the maintainer's
-  `~/.local/state/cubby/cubby.log`, and the check meant to catch it only
-  looked for temp paths in those files. The suite now points `HOME` and the
+  run of the suite put two "a line from the test suite" lines in the
+  maintainer's `~/.local/state/cubby/cubby.log` (most likely a mutated
+  `log_path()` ignoring the per-test `CUBBY_STATE_DIR`, which reproduces them;
+  the attribution is inferred), and the check meant to catch it only looked
+  for temp paths in those files. The suite now points `HOME` and the
   XDG folders at a session folder before any test runs, and fails the whole
   run, naming the files, when anything under the real home's cubby state,
-  config, log or agent unit appeared, changed or disappeared. `make mutation`
-  also runs under a throwaway `HOME`. Tests only: the installed cubby is
-  unchanged.
-
+  config, log or agent unit appeared, changed or disappeared, and says how to
+  get past a cubby agent running on the same machine. `make test` and `make
+  mutation` run under a throwaway `HOME`, and `make mutation` fails when a
+  mutant touched the real state (mutmut alone counts it as killed). Tests
+  only: the installed cubby is unchanged.
 
 ## [0.4.0] - 2026-09-28
 
