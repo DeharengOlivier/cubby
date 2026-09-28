@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 import tomllib
+from typing import TypeAlias
 
 from .. import __version__
 from ..adapters.service import (
@@ -21,8 +22,11 @@ from .common import (
     palette,
     positive_duration,
 )
-from .inspect import cmd_explain, cmd_history, cmd_init
+from .inspect import cmd_explain, cmd_history, cmd_init, cmd_log
 from .sorting import cmd_pause, cmd_plan, cmd_resume, cmd_run, cmd_undo, cmd_watch
+
+#: What ``add_subparsers`` returns; argparse does not name the type publicly.
+Subcommands: TypeAlias = "argparse._SubParsersAction[argparse.ArgumentParser]"
 
 
 def _add_common_flags(parser: argparse.ArgumentParser) -> None:
@@ -50,6 +54,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.set_defaults(func=None)
     sub = parser.add_subparsers(dest="command")
 
+    _add_sorting_commands(sub)
+    _add_agent_commands(sub)
+    _add_inspection_commands(sub)
+    _add_control_commands(sub)
+
+    return parser
+
+
+def _add_sorting_commands(sub: Subcommands) -> None:
+    """Subcommands to sort, watch and take back."""
     p_plan = sub.add_parser("plan", help="show where files would go (moves nothing)")
     _add_common_flags(p_plan)
     p_plan.add_argument("--json", action="store_true", help="output the plan as JSON")
@@ -72,6 +86,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_undo.add_argument("--run", help="the run to revert, as listed by 'cubby history'")
     p_undo.set_defaults(func=cmd_undo)
 
+
+def _add_agent_commands(sub: Subcommands) -> None:
+    """Subcommands to the background agent."""
     p_status = sub.add_parser(
         "status", help="is the agent running, and what did it do last (exit 1 if unhealthy)"
     )
@@ -85,6 +102,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_uninstall = sub.add_parser("uninstall", help="remove the background agent")
     p_uninstall.set_defaults(func=cmd_uninstall)
 
+
+def _add_inspection_commands(sub: Subcommands) -> None:
+    """Subcommands to explain, look back and set up."""
     p_explain = sub.add_parser(
         "explain", help="say where files would go and which rule decides (moves nothing)"
     )
@@ -100,11 +120,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_history.add_argument("--json", action="store_true", help="output as JSON")
     p_history.set_defaults(func=cmd_history)
 
+    p_log = sub.add_parser("log", help="show what the agent logged (--run, --warnings)")
+    p_log.add_argument("-n", "--lines", type=at_least_one, default=20, help="how many lines (20)")
+    p_log.add_argument("--run", help="only the lines of this run, as listed by 'cubby history'")
+    p_log.add_argument("--warnings", action="store_true", help="only warnings and errors")
+    p_log.add_argument("--json", action="store_true", help="output the records as JSON lines")
+    p_log.set_defaults(func=cmd_log)
+
     p_init = sub.add_parser("init", help="write a starter config file")
     p_init.add_argument("--path", help="where to write it (default: ~/.config/cubby/config.toml)")
     p_init.add_argument("--force", action="store_true", help="replace an existing file")
     p_init.set_defaults(func=cmd_init)
 
+
+def _add_control_commands(sub: Subcommands) -> None:
+    """Subcommands to check and hold the agent."""
     p_doctor = sub.add_parser("doctor", help="report environment and extraction support")
     _add_common_flags(p_doctor)
     p_doctor.add_argument(
@@ -123,8 +153,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_resume = sub.add_parser("resume", help="let a paused agent sort again")
     p_resume.set_defaults(func=cmd_resume)
-
-    return parser
 
 
 def _tolerate_undecodable_names() -> None:

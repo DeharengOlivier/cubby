@@ -62,6 +62,7 @@ cubby plan        # preview where everything would go (moves nothing)
 cubby explain F   # where would file F go, and which rule decides? (moves nothing)
 cubby run         # sort the folder once
 cubby history     # recent runs, their counts, which were undone
+cubby log --warnings   # what the agent logged; --run ID for one pass
 cubby undo        # revert the last run (or --run ID from history)
 cubby watch       # keep sorting in the foreground (Ctrl-C to stop)
 cubby install     # register the background agent (sorts every minute)
