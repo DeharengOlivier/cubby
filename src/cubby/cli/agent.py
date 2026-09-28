@@ -7,7 +7,7 @@ import os
 import shutil
 import sys
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -19,7 +19,7 @@ from ..adapters import state
 from ..adapters.config import (
     find_user_config,
 )
-from ..adapters.extraction import PARSABLE
+from ..adapters.extraction import PARSABLE, converters_present
 from ..adapters.ledger import KEEP_LINES, Heartbeat, Ledger, RunRecord
 from ..adapters.logging import human_line, read_tail
 from ..adapters.notify import notifier
@@ -34,6 +34,7 @@ from ..adapters.service import (
 from ..adapters.ui import Palette, Shown, dumps_for_terminal
 from ..adapters.ui import escape_for_terminal as shown
 from ..app.activity import Activity, summarize
+from ..app.readiness import Readiness, check_readiness
 from ..domain.duration import format_duration
 from .common import (
     EXIT_FAILED,
@@ -155,6 +156,7 @@ def _agent_state() -> dict[str, Any]:
         "live_pid": live_pid,
         "never_passed": never_passed,
         "watching": beat.source if beat else None,
+        "interval": beat.interval if beat else None,
         "last_pass": asdict(beat.last_pass) if beat and beat.last_pass else None,
     }
 
@@ -196,31 +198,111 @@ def cmd_status(args: argparse.Namespace) -> int:
         since=datetime.now() - timedelta(hours=ACTIVITY_HOURS),
         trimmed=len(runs) >= KEEP_LINES,
     )
-    healthy = not agent["installed"] or (
-        agent["running"] and not agent["stale"] and not agent["never_passed"]
-    )
+    passing = agent["running"] and not agent["stale"] and not agent["never_passed"]
+    live = bool(agent["live_pid"]) or passing
+    readiness = _readiness(args, agent["watching"], paused=pause is not None)
+    # Not ready is a fault (exit 1) only for an agent that should be sorting,
+    # installed or alive. A pause is the user's own decision, which ends by
+    # itself or on `cubby resume`: not ready, but not a fault. Without an
+    # agent, readiness is advice for the next install.
+    expected = agent["installed"] or bool(agent["live_pid"])
+    healthy = (not agent["installed"] or passing) and not (expected and readiness.problems)
+    saturation = _saturation(day, agent)
 
     if getattr(args, "json", False):
         payload = {
             "version": 1,
             "healthy": healthy,
+            "live": live,
+            "readiness": readiness.to_json(),
             "agent": agent,
             "paused": pause.to_json() if pause else None,
             "last_run": last.to_json() if last else None,
-            "activity": {"hours": ACTIVITY_HOURS, **asdict(day)},
+            "activity": {"hours": ACTIVITY_HOURS, **asdict(day), "saturation": saturation},
             "log": str(state.log_path()),
         }
         print(dumps_for_terminal(payload))
         return EXIT_OK if healthy else EXIT_FAILED
 
-    _print_status(agent, pause, last, day)
+    pal = palette()
+    _print_status(pal, agent, pause)
+    kv(pal, "live", "yes" if live else pal.yellow("no"))
+    kv(pal, "ready", _readiness_text(pal, readiness, pause))
+    _print_runs(pal, last, day)
+    _print_latency(pal, day, saturation, agent)
+    _print_log(pal)
     return EXIT_OK if healthy else EXIT_FAILED
 
 
-def _print_status(
-    agent: dict[str, Any], pause: Pause | None, last: RunRecord | None, day: Activity
+def _readiness(args: argparse.Namespace, watching: str | None, *, paused: bool) -> Readiness:
+    """Readiness of the folder the agent last watched, or else of the configured one."""
+    try:
+        config = load_from_args(args)
+    except (ValueError, OSError) as exc:  # TOMLDecodeError included
+        return Readiness(problems=(f"config error: {exc}",), paused=paused)
+    settings = config.settings
+    if watching:
+        settings = replace(settings, source=Path(watching))
+    return check_readiness(
+        settings,
+        config.managed_dirs,
+        state_folder=state.state_dir(),
+        paused=paused,
+        converters=converters_present() if settings.content_scan else {},
+    )
+
+
+def _readiness_text(pal: Palette, readiness: Readiness, pause: Pause | None) -> str:
+    if readiness.ready:
+        text = "yes"
+    else:
+        reasons = [*readiness.problems, *([pause.describe()] if pause else [])]
+        text = pal.yellow(f"no ({shown('; '.join(reasons))})")
+    if readiness.degraded:
+        formats = ", ".join(f".{ext}" for ext in readiness.degraded)
+        text += pal.dim(f"; degraded: no converter reads {formats} (see cubby doctor)")
+    return text
+
+
+def _saturation(day: Activity, agent: dict[str, Any]) -> float | None:
+    """The p95 run duration as a share of the interval between passes."""
+    interval: float | None = agent["interval"]
+    if day.pass_ms is None or not interval:
+        return None
+    return round(day.pass_ms.p95 / (interval * 1000), 4)
+
+
+def _print_latency(
+    pal: Palette, day: Activity, saturation: float | None, agent: dict[str, Any]
 ) -> None:
-    pal = palette()
+    if day.pass_ms is not None:
+        latency = day.pass_ms
+        text = (
+            f"p50 {_seconds(latency.p50)} s, p95 {_seconds(latency.p95)} s, "
+            f"max {_seconds(latency.max)} s over {latency.count} "
+            f"run{'s' if latency.count != 1 else ''}"
+        )
+        if saturation is not None:
+            share = f"p95 is {saturation:.0%} of the {format_duration(agent['interval'])} interval"
+            text += "; " + (pal.yellow(share) if saturation >= 0.5 else share)
+        kv(pal, "run time", text)
+    if day.backlog is not None:
+        backlog = day.backlog
+        trend = {1: "rising", -1: "falling", 0: "steady"}[
+            (backlog.last > backlog.first) - (backlog.last < backlog.first)
+        ]
+        kv(
+            pal,
+            "backlog",
+            f"{backlog.first} -> {backlog.last} waiting to settle ({trend}), peak {backlog.peak}",
+        )
+
+
+def _seconds(ms: int) -> str:
+    return f"{ms / 1000:.3f}".rstrip("0").rstrip(".")
+
+
+def _print_status(pal: Palette, agent: dict[str, Any], pause: Pause | None) -> None:
     kv(pal, "agent", _agent_text(pal, agent))
     if agent["unit"]:
         kv(pal, "agent file", shown(agent["unit"]))
@@ -231,6 +313,9 @@ def _print_status(
     if pause:
         kv(pal, "paused", Shown(pal.yellow(shown(pause.describe()) + ": no file is moved")))
     kv(pal, "last pass", _last_pass_text(pal, agent))
+
+
+def _print_runs(pal: Palette, last: RunRecord | None, day: Activity) -> None:
     if last is None:
         kv(pal, "last run", pal.dim(Shown("none recorded")))
     else:
@@ -241,6 +326,9 @@ def _print_status(
         for failure in last.failures[:5]:
             print(f"  {shown(failure.file)}  {pal.dim(shown(failure.error))}")
     _print_activity(pal, day)
+
+
+def _print_log(pal: Palette) -> None:
     log_path = state.log_path()
     tail = read_tail(log_path, limit=5)
     kv(pal, "recent log", pal.dim(shown(str(log_path)) if tail else Shown("(none yet)")))
@@ -325,16 +413,9 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     kv(pal, "source", shown(str(config.settings.source)))
     kv(pal, "state", shown(str(state.state_dir())))
     kv(pal, "log", shown(str(state.log_path())))
-    tools = {
-        name: bool(shutil.which(name)) for name in ("pdftotext", "textutil", "antiword", "catdoc")
-    }
-    libs = {}
-    for lib in ("pypdf", "docx", "openpyxl"):
-        try:
-            __import__(lib)
-            libs[lib] = True
-        except (ImportError, OSError):  # absent, or a broken native wheel
-            libs[lib] = False
+    present = converters_present()
+    tools = {name: present[name] for name in ("pdftotext", "textutil", "antiword", "catdoc")}
+    libs = {name: present[name] for name in ("pypdf", "docx", "openpyxl")}
     kv(pal, "extract tools", format_features(pal, tools))
     kv(pal, "extract libs", format_features(pal, libs))
     kv(pal, "parsable", pal.dim(shown(", ".join(sorted(PARSABLE)))))

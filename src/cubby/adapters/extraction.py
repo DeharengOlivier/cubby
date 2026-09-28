@@ -57,6 +57,38 @@ PARSABLE: frozenset[str] = frozenset(
 #: The optional library behind each child-process parser.
 _LIBRARIES = {"pdf": "pypdf", "docx": "docx", "xlsx": "openpyxl"}
 
+#: The formats that need a converter, and the tools or libraries (any one of
+#: them) that read each, as the functions below try them. The other parsable
+#: formats are read directly.
+_READERS = {
+    "pdf": ("pdftotext", "pypdf"),
+    "docx": ("docx", "textutil"),
+    "doc": ("textutil", "antiword", "catdoc"),
+    "rtf": ("textutil", "antiword", "catdoc"),
+    "xlsx": ("openpyxl",),
+}
+_TOOLS = ("pdftotext", "textutil", "antiword", "catdoc")
+#: Every converter cubby can use: system tools first, then Python libraries.
+CONVERTERS = (*_TOOLS, *_LIBRARIES.values())
+
+
+def converters_present() -> dict[str, bool]:
+    """Which of :data:`CONVERTERS` this machine has (``cubby doctor`` and ``status``)."""
+    present = {name: bool(shutil.which(name)) for name in _TOOLS}
+    for lib in _LIBRARIES.values():
+        try:
+            __import__(lib)
+            present[lib] = True
+        except (ImportError, OSError):  # absent, or a broken native wheel
+            present[lib] = False
+    return present
+
+
+def formats_without_converter(present: dict[str, bool]) -> list[str]:
+    """The formats none of the ``present`` converters reads: sorted by name and type only."""
+    return sorted(ext for ext, readers in _READERS.items() if not any(present[r] for r in readers))
+
+
 #: Address-space ceiling for every converter child, where the platform enforces it.
 _CHILD_MEMORY_BYTES = 1_000_000_000
 

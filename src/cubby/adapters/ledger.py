@@ -55,6 +55,10 @@ class RunRecord:
     #: and type: not failed moves.
     extraction_failures: int = 0
     version: str = __version__  # the cubby that made the run
+    #: How long the run took, and how many files it left because they had not
+    #: settled yet. None in a record from before 0.5, which had neither.
+    duration_ms: int | None = None
+    waiting: int | None = None
 
     @property
     def status(self) -> str:
@@ -79,7 +83,14 @@ class RunRecord:
         """
         moved, failed = data["moved"], data["failed"]
         extraction_failures = data.get("extraction_failures", 0)  # older records: 0
-        if not all(_is_count(v) for v in (moved, failed, extraction_failures)):
+        duration_ms, waiting = data.get("duration_ms"), data.get("waiting")  # older: None
+        counts = (
+            moved,
+            failed,
+            extraction_failures,
+            *(v for v in (duration_ms, waiting) if v is not None),
+        )
+        if not all(_is_count(v) for v in counts):
             raise ValueError(f"a count is not a non-negative integer in run {data.get('run')!r}")
         return cls(
             run=str(data["run"]),
@@ -94,6 +105,8 @@ class RunRecord:
             ),
             extraction_failures=extraction_failures,
             version=str(data.get("version", "unknown")),  # records from before 0.3
+            duration_ms=duration_ms,
+            waiting=waiting,
         )
 
 

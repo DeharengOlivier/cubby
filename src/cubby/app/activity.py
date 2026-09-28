@@ -6,11 +6,13 @@ converter
 (sorted anyway, so counted apart from the failures). Forty files refused with
 the same permission error are one problem to fix, not forty, so they read as
 one line, with the files it hit, when it was last seen and which cubby versions
-saw it.
+saw it. The runs that recorded their duration and the files they left to settle
+give the day's run time (p50, p95, longest) and backlog.
 """
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -40,6 +42,27 @@ class Activity:
     errors: tuple[ErrorGroup, ...]  # the most frequent first
     complete: bool  # False when the ledger was trimmed of runs inside the window
     extraction_failures: int  # files sorted without their content: converters broke
+    pass_ms: PassLatency | None = None  # None when no run of the window was timed
+    backlog: Backlog | None = None  # None when no run of the window counted its waiting files
+
+
+@dataclass(frozen=True)
+class PassLatency:
+    """How long the timed runs of the window took, in milliseconds (nearest rank)."""
+
+    count: int
+    p50: int
+    p95: int
+    max: int
+
+
+@dataclass(frozen=True)
+class Backlog:
+    """Files left to settle by the runs of the window: the oldest, the newest, the most."""
+
+    first: int
+    last: int
+    peak: int
 
 
 def error_kind(error: str) -> str:
@@ -109,7 +132,25 @@ def summarize(
         errors=tuple(_frozen(kind, group) for kind, group in ranked[:top]),
         complete=complete,
         extraction_failures=sum(record.extraction_failures for record in recent),
+        pass_ms=_latency([r.duration_ms for r in recent if r.duration_ms is not None]),
+        backlog=_backlog([r.waiting for r in reversed(recent) if r.waiting is not None]),
     )
+
+
+def _latency(durations: list[int]) -> PassLatency | None:
+    if not durations:
+        return None
+    durations.sort()
+
+    def rank(share: float) -> int:
+        return durations[math.ceil(share * len(durations)) - 1]
+
+    return PassLatency(count=len(durations), p50=rank(0.5), p95=rank(0.95), max=durations[-1])
+
+
+def _backlog(waiting: list[int]) -> Backlog | None:
+    """``waiting`` is oldest first."""
+    return Backlog(first=waiting[0], last=waiting[-1], peak=max(waiting)) if waiting else None
 
 
 def _frozen(kind: str, group: _Group) -> ErrorGroup:

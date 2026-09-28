@@ -84,6 +84,22 @@
               "undone",
               "unknown"
             ]
+          },
+          "duration_ms": {
+            "description": "How long the run took, in milliseconds. Null in a record written before 0.5.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "waiting": {
+            "description": "Files the run left because they had not settled yet. Null in a record written before 0.5.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
           }
         },
         "required": [

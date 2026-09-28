@@ -13,6 +13,23 @@ All notable changes to this project are documented here. The format is based on
   fresh against a full ledger and journal, each against a stated budget.
   Results in `docs/PERFORMANCE.md`, "Latency percentiles";
   `benchmarks/run_journal_cost.py` shows what a large journal adds to `cubby run`.
+- `cubby status` tells liveness from readiness. `live` says an agent process
+  is alive and passing; `ready` says it can sort now: its folder exists and
+  can be read and written, the state folder can be written, no file stands
+  where a category folder goes, the config loads, and nothing paused it. A
+  missing content converter shows as `degraded` (those formats are sorted by
+  name and type). An installed or live agent that is not ready, for any
+  reason but a pause, makes `status` exit 1. `status --config FILE` checks
+  the config an agent was installed with.
+- `cubby status` shows the run time of the last 24 hours (p50, p95 and
+  longest), the p95 as a share of the interval between passes, and the
+  backlog of files left to settle, from the oldest run of the day to the
+  newest. Each ledger record now carries `duration_ms` and `waiting`; records
+  from older versions have neither and are left out.
+- `status --json` adds `live`, `readiness`, `agent.interval`,
+  `activity.pass_ms`, `activity.backlog`, `activity.saturation` and
+  `last_run.duration_ms`/`waiting`; `history --json` adds `runs[].duration_ms`
+  and `runs[].waiting`. The schemas name them without requiring them.
 
 ### Changed
 - The required `review record` check passes only when the review record names
