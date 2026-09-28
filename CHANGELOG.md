@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-28
+
 ### Added
 - `cubby status` measures the agent's last pass: how long it took, what it
   moved or failed, and how many files still wait to settle. It also sums up
@@ -319,6 +321,7 @@ after upgrading, then `cubby install` again to refresh the agent unit.
 - Portable `install.sh` / `uninstall.sh`.
 - Test suite covering the engine, adapters, use cases and CLI, plus a fuzz test.
 
-[Unreleased]: https://github.com/DeharengOlivier/cubby/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/DeharengOlivier/cubby/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/DeharengOlivier/cubby/releases/tag/v0.3.0
 [0.2.0]: https://github.com/DeharengOlivier/cubby/releases/tag/v0.2.0
 [0.1.0]: https://github.com/DeharengOlivier/cubby/releases/tag/v0.1.0

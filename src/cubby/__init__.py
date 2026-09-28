@@ -15,4 +15,4 @@ Architecture (dependencies point inward):
 * ``cli`` is the entry point that wires everything together.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

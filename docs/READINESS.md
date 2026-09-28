@@ -1,7 +1,7 @@
 # Readiness register: cubby
 
 Standards version: 2026-09-25.1 (`CODING-RULES.md`, `SECURITY-CHECKLIST.md`).
-Last reviewed: 2026-09-28 by the maintainer (Olivier Dehareng), at release 0.2.0.
+Last reviewed: 2026-09-28 by the maintainer (Olivier Dehareng), at release 0.3.0.
 
 This file is the project's single record of its level, its baseline and the status of every
 applicable control (CODING-RULES section 14, SECURITY-CHECKLIST SEC-GOV-01). Update the rows a
@@ -37,11 +37,11 @@ like `FAIL` for a P0), `N/A` (with the reason the surface does not exist).
 | Protected branch enforced by the platform, required checks | PASS | branch protection on `main`: PR required, `enforce_admins: true`, linear history, conversation resolution, the 8 CI checks required (`gh api .../branches/main/protection`, 2026-09-28) | each release |
 | Untrusted CI code isolated from production hosts and credentials | PASS | no production host or secret exists; default workflow token `read`; only the tag-triggered publish job has `contents: write` and runs no project code | each release |
 | Independent review of every merged change | PASS | a recorded independent review and its resolution on every PR since the audit: #1 to #5 (PR comments) | each PR |
-| Coverage instrumented, changed-code threshold | PASS | `pytest --cov --cov-fail-under=90` on 6 OS/Python combinations; `diff-cover --fail-under=90` on PRs; 97% total at 0.2.0 | each release |
+| Coverage instrumented, changed-code threshold | PASS | `pytest --cov --cov-fail-under=90` on 6 OS/Python combinations; `diff-cover --fail-under=90` on PRs; 97% total at 0.3.0 | each release |
 | Integration tests of critical contracts and failure paths | PASS | service boundary with a fake manager (`test_service_boundary.py`), parser child process (`test_review_pr2.py`), journal and undo failure paths (`test_undo_everything.py`, `test_file_safety_edges.py`) | each release |
 | Critical-journey end-to-end tests in CI | PASS | `test_agent_journey.py` (agent as a real process: sort, history, SIGTERM, undo), `test_pause_and_alerts.py::test_the_real_agent_stops_at_a_pause_and_sorts_after_resume` | each release |
 | Property or model-based tests where required | PASS | `test_properties.py` (Hypothesis): durations, names, destinations, journal round trip, dates, config, model-based sort then undo | each release |
-| Mutation testing, targeted | PASS | `docs/audits/2026-09-28-mutation.md`: journal, filesystem, undo, naming at 97.7% (round 10, after PRs 13 to 17), survivors reviewed | when those modules change |
+| Mutation testing, targeted | PASS | `docs/audits/2026-09-28-mutation.md`: journal, filesystem, undo, naming at 97.7% (round 10, after PRs 13 to 17; PR 16 changed none of those modules), survivors reviewed | when those modules change |
 | Structured logs, error tracking | PASS | JSON-lines log with levels, the cubby version on every line and the run id on every line of a pass (the id of the ledger and the journal, `test_run_correlation.py`), rotated at 1 MB; per-run ledger with failures and version, grouped by kind of error over 24 hours with the versions that hit them; `cubby status`, `cubby log --run ID` | each release |
 | Metrics for service health | PASS | heartbeat per pass with the pass's duration (latency), moves and failures (errors) and files waiting to settle (saturation); runs, moves and failures over 24 hours (rate); read by `cubby status` (exit 1 when unhealthy), `test_status_metrics.py` | each release |
 | Alert delivered to a named human; heartbeat checked | NOT_VERIFIED | desktop notification on unsortable file, failed pass, missing folder (`adapters/notify.py`, tested with fakes); delivery on the maintainer's Mac not yet observed: run `cubby doctor --notify` | at install on each machine |
@@ -131,4 +131,5 @@ containers, infrastructure, secrets.
 
 | Date | Release tag | Gate status | Open blockers |
 |---|---|---|---|
+| 2026-09-28 | v0.3.0 | BLOCKED | SEC-14-003 NOT_VERIFIED (maintainer to confirm 2FA). Released for the maintainer's own use; every other applicable P0 PASS or N/A |
 | 2026-09-28 | v0.2.0 | BLOCKED | SEC-14-003 NOT_VERIFIED (maintainer to confirm 2FA). Released for the maintainer's own use; every other applicable P0 PASS or N/A |
