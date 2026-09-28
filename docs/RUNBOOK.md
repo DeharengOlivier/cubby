@@ -157,7 +157,9 @@ If `XDG_CONFIG_HOME` is set, 0.3 keeps its config under it, and 0.2 would sort s
 the packaged defaults (their source folder and categories). Before running 0.2, export
 `CUBBY_CONFIG="$XDG_CONFIG_HOME/cubby/config.toml"` (and pass it to the agent's environment), or
 copy the config to `~/.config/cubby/config.toml`. 0.2 also has no `cubby log`: read its
-log file directly (`~/Library/Logs/cubby.log` on macOS, `~/.local/state/cubby/cubby.log` on Linux).
+log file directly. The 0.2 agent logs to its state folder on both platforms
+(`~/.local/state/cubby/cubby.log`, or under `CUBBY_STATE_DIR` / `XDG_STATE_HOME` when set); on
+macOS a manual 0.2 run logs to `~/Library/Logs/cubby.log`.
 
 Compatibility, measured in the rollback rehearsal of 2026-09-28 (0.3 to 0.2 and back, in a
 throwaway home, `docs/audits/2026-09-28-rollback-0.3.md`): 0.2 lists and undoes runs made by 0.3,
