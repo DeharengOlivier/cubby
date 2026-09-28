@@ -85,6 +85,9 @@ ignore = [
 "json.load".msg = "use cubby.adapters.state.parse_json"
 "json.JSONDecoder".msg = "use cubby.adapters.state.parse_json"
 "json.decoder".msg = "use cubby.adapters.state.parse_json"
+# A cast to Shown would skip the escaping check (tests/test_output_escaping.py).
+"typing.cast".msg = "no cast in cubby: build a Shown through adapters.ui's escapers"
+"typing_extensions.cast".msg = "no cast in cubby: build a Shown through adapters.ui's escapers"
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10

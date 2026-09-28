@@ -24,10 +24,6 @@ All notable changes to this project are documented here. The format is based on
   default branch's copy of its workflow, so editing that workflow in a pull
   request no longer changes how the pull request is judged.
 
-- Output escaping is enforced, not just tested: a new message that would
-  print a file name unescaped fails the type check or
-  `tests/test_output_escaping.py` in CI. What cubby prints is unchanged.
-
 ### Fixed
 - The test suite could write to the real state folder of whoever ran it: a
   run of the suite put two "a line from the test suite" lines in the
@@ -42,6 +38,17 @@ All notable changes to this project are documented here. The format is based on
   mutation` run under a throwaway `HOME`, and `make mutation` fails when a
   mutant touched the real state (mutmut alone counts it as killed). Tests
   only: the installed cubby is unchanged.
+
+### Security
+- `cubby init`, `pause`, `resume` and the "cannot write the log" warning
+  escape the paths and error texts they print, as every other message does;
+  they printed them raw, so a control character in a config or state path
+  reached the terminal. A backslash in such a path now reads doubled
+  (`odd\\home`), and a file name inside an error is escaped once.
+- Output escaping is enforced, not just tested: a new message that would
+  print a file name unescaped fails the type check or
+  `tests/test_output_escaping.py` in CI, and `# type: ignore` and
+  `typing.cast` are refused in the source. Other outputs are unchanged.
 
 ## [0.4.0] - 2026-09-28
 

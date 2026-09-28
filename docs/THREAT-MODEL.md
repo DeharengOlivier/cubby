@@ -81,6 +81,8 @@ publish a release.
   `notify-send` body, and every `--json` output writes those characters as `\uXXXX` escapes
   (`tests/test_terminal_escape.py`). A new output cannot skip the escaping: the escapers
   return a `Shown` type that `kv` and the renderers require (mypy strict), and an AST check
-  fails CI on any `print`, stream write or `Shown(...)` whose text it cannot trace to an
-  escaper, a literal or a number (`tests/test_output_escaping.py`).
+  fails CI on any `print`, stream write, exit message, `Shown(...)` or argument to a
+  `Shown` parameter whose text it cannot trace to an escaper, a literal or a number
+  (`tests/test_output_escaping.py`); `# type: ignore` and `typing.cast` are refused in the
+  source, so mypy cannot be told to look away.
 - No network access: the test suite runs with sockets disabled (`tests/conftest.py`).
