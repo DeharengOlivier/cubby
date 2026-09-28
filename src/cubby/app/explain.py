@@ -5,10 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..adapters.filesystem import build_ref, candidate_skip_reason, not_yet_reason
+from ..adapters.filesystem import (
+    build_ref,
+    candidate_skip_reason,
+    file_in_the_way,
+    in_the_way,
+    not_yet_reason,
+)
 from ..domain.category import Config
 from ..domain.engine import Engine
 from ..domain.file_ref import Stage
+from .report import SortOutcome
 from .sorter import Sorter
 
 
@@ -28,10 +35,32 @@ class Explanation:
     # False when no run ever sorts it (hidden, ignored, a folder cubby files
     # into): then ``destination`` is only what the rules would say.
     sortable: bool = True
+    error: str | None = None  # why a run would fail on it (a file where its folder goes)
 
 
-def explain(path: Path, config: Config) -> Explanation:
+class PlannedPass:
+    """One plan pass over the watched folder, made on first use and kept.
+
+    ``explain`` needs it to see a duplicate made within the pass; explaining
+    many files shares it, so a command makes one pass, not one per file.
+    """
+
+    def __init__(self, config: Config, engine: Engine | None = None) -> None:
+        self._sorter = Sorter(config, engine)
+        self._outcomes: dict[Path, SortOutcome] | None = None
+
+    def outcome(self, entry: Path) -> SortOutcome | None:
+        """What the pass does with ``entry`` (a path in the watched folder), if it sees it."""
+        if self._outcomes is None:
+            self._outcomes = {o.source: o for o in self._sorter.sort_once(apply=False)}
+        return self._outcomes.get(entry)
+
+
+def explain(path: Path, config: Config, planned: PlannedPass | None = None) -> Explanation:
     """Classify ``path`` exactly as a run would, and say whether a run would move it.
+
+    ``planned`` is the plan pass to look duplicates up in; pass the same one
+    when explaining several files.
 
     Raises:
         FileNotFoundError: ``path`` does not exist.
@@ -52,9 +81,14 @@ def explain(path: Path, config: Config) -> Explanation:
     skipped = never or not_yet_reason(path, settings)
     name = placement.new_name or path.name
     folder = settings.source / decision.category / placement.subdir
-    duplicate = None
-    if settings.dedupe and not (skipped or outside):
-        duplicate = _duplicate_in_pass(path, config, engine)
+    duplicate = error = None
+    if not (skipped or outside):
+        if (blocker := file_in_the_way(folder, settings.source)) is not None:
+            error = in_the_way(blocker, settings.source)
+        elif settings.dedupe:
+            planned = planned or PlannedPass(config, engine)
+            found = planned.outcome(settings.source / path.name)
+            duplicate = found.duplicate_of if found else None
     return Explanation(
         path=path,
         category=decision.category,
@@ -66,13 +100,5 @@ def explain(path: Path, config: Config) -> Explanation:
         outside=outside,
         duplicate_of=duplicate,
         sortable=never is None,
+        error=error,
     )
-
-
-def _duplicate_in_pass(path: Path, config: Config, engine: Engine) -> Path | None:
-    """The copy a run would delete ``path`` for: filed already, or filed earlier in the pass."""
-    target = config.settings.source / path.name
-    for outcome in Sorter(config, engine).sort_once(apply=False):
-        if outcome.source == target:
-            return outcome.duplicate_of
-    return None
