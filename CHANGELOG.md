@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- `cubby log`: the agent's log, oldest first and including the rotated file,
+  with `--run ID` (one pass), `--warnings`, `-n N` and `--json`.
+- Every log line names the cubby `version` that wrote it, and each line written
+  during a pass names its `run` id, the id `cubby history`, `cubby undo --run`
+  and the ledger use. Ledger records carry the version too; older records read
+  as `unknown`.
+
+### Changed
+- `cli.py` became the `cubby.cli` package (sorting, inspection, agent commands),
+  and cyclomatic complexity is now capped at 10 by the linter.
+- The benchmark measures each size several times in fresh processes, with the
+  journal and ledger the agent really writes, and reports the median, the
+  slowest run and the idle pass; results in `docs/PERFORMANCE.md`.
+- A test fails when a subprocess call has no timeout.
+
 ## [0.2.0] - 2026-09-28
 
 Upgrading: the config is now read strictly (see Changed); run `cubby doctor`
