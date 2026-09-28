@@ -43,6 +43,24 @@ about 3.7 seconds on 27 characters. Patterns are checked for validity when the
 config loads, but their cost is not bounded, and a shared or copied config
 should be read before it is used, exactly like a shell script.
 
+## Checking a release
+
+Each GitHub release carries a `SHA256SUMS` file, and the wheel and sdist rebuild
+byte for byte from the tagged source. To check that a release was built from
+that source and nothing else (needs git and [uv](https://docs.astral.sh/uv/)):
+
+```sh
+git clone https://github.com/DeharengOlivier/cubby.git && cd cubby
+git checkout v0.3.0
+gh release download v0.3.0 -p SHA256SUMS    # or download it from the release page
+scripts/rebuild.sh --against SHA256SUMS     # from main's scripts/ for releases before 0.3.0
+```
+
+CI runs the same script on every pull request (two builds in different
+environments must be identical), and the release workflow runs it against the
+artifacts it publishes. The rebuild of v0.2.0 is recorded in
+`docs/audits/2026-09-28-reproducible-build.md`.
+
 ## Reporting a vulnerability
 
 Open a private security advisory at

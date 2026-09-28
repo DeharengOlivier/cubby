@@ -35,7 +35,9 @@ jobs:
       - name: Layering contracts
         run: uv run --locked lint-imports
       - name: Shell scripts
-        run: shellcheck install.sh uninstall.sh
+        run: shellcheck install.sh uninstall.sh scripts/rebuild.sh
+      - name: Reproducible build
+        run: scripts/rebuild.sh
 
   test:
     runs-on: ${{ matrix.os }}

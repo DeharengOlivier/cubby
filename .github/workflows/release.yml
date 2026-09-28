@@ -58,6 +58,8 @@ jobs:
             /tmp/wheel-env/bin/cubby plan --source /tmp/smoke/Downloads --json
       - name: Checksums
         run: cd dist && sha256sum -- * > SHA256SUMS
+      - name: Rebuild matches the artifacts
+        run: scripts/rebuild.sh --against dist/SHA256SUMS
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist
