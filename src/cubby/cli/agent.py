@@ -33,6 +33,7 @@ from ..adapters.service import (
     get_service,
 )
 from ..adapters.ui import Palette
+from ..adapters.ui import escape_for_terminal as shown
 from ..app.activity import Activity, summarize
 from ..domain.duration import format_duration
 from .common import (
@@ -89,10 +90,10 @@ def cmd_install(args: argparse.Namespace) -> int:
         environment["XDG_CONFIG_HOME"] = str(config_home)
     spec = ServiceSpec(program_args=_program_args(args), log_path=log_path, environment=environment)
     path = service.install(spec)
-    print(f"Installed {service.name} agent: {path} (running)")
+    print(f"Installed {service.name} agent: {shown(str(path))} (running)")
     print(
-        f"Cubby will watch {config.settings.source} "
-        f"(delay {format_duration(config.settings.delay)}). Logs: {log_path}"
+        f"Cubby will watch {shown(str(config.settings.source))} "
+        f"(delay {format_duration(config.settings.delay)}). Logs: {shown(str(log_path))}"
     )
     return EXIT_OK
 
@@ -217,11 +218,11 @@ def _print_status(
     pal = palette()
     kv(pal, "agent", _agent_text(pal, agent))
     if agent["unit"]:
-        kv(pal, "agent file", agent["unit"])
+        kv(pal, "agent file", shown(agent["unit"]))
     if agent["watching"]:
         # The heartbeat outlives the process: only a live one is watching now.
         live = agent["live_pid"] or agent["running"]
-        kv(pal, "watching" if live else "last watched", agent["watching"])
+        kv(pal, "watching" if live else "last watched", shown(agent["watching"]))
     if pause:
         kv(pal, "paused", pal.yellow(pause.describe() + ": no file is moved"))
     kv(pal, "last pass", _last_pass_text(pal, agent))
@@ -233,13 +234,14 @@ def _print_status(
             summary += pal.yellow(f", {last.failed} failed")
         kv(pal, "last run", f"{summary}  ({last.mode}, run {last.run})")
         for failure in last.failures[:5]:
-            print(f"  {failure.file}  {pal.dim(failure.error)}")
+            print(f"  {shown(failure.file)}  {pal.dim(shown(failure.error))}")
     _print_activity(pal, day)
     log_path = state.log_path()
     tail = read_tail(log_path, limit=5)
-    kv(pal, "recent log", pal.dim(str(log_path)) if tail else pal.dim("(none yet)"))
+    kv(pal, "recent log", pal.dim(shown(str(log_path))) if tail else pal.dim("(none yet)"))
     for record in tail:
-        print(f"  {pal.dim(human_line(record) if 'ts' in record else record['msg'])}")
+        line = human_line(record) if "ts" in record else shown(record["msg"])
+        print(f"  {pal.dim(line)}")
 
 
 def _print_activity(pal: Palette, day: Activity) -> None:
@@ -255,8 +257,9 @@ def _print_activity(pal: Palette, day: Activity) -> None:
         )
     kv(pal, f"last {ACTIVITY_HOURS} h", summary)
     for group in day.errors:
-        print(f"  {group.count}x {_shortened(group.kind)}")
-        seen = f"last seen {group.last_seen}; files: {', '.join(group.files)}"
+        print(f"  {group.count}x {shown(_shortened(group.kind))}")
+        files = ", ".join(shown(name) for name in group.files)
+        seen = f"last seen {shown(group.last_seen)}; files: {files}"
         print(f"     {pal.dim(seen + '; cubby ' + ', '.join(group.versions))}")
 
 
@@ -303,10 +306,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     print(pal.bold(pal.accent(f"cubby {__version__}")))
     kv(pal, "platform", sys.platform)
     kv(pal, "service", service.name if service else pal.yellow("none (manual watch only)"))
-    kv(pal, "config file", str(find_user_config() or "defaults only"))
-    kv(pal, "source", str(config.settings.source))
-    kv(pal, "state", str(state.state_dir()))
-    kv(pal, "log", str(state.log_path()))
+    kv(pal, "config file", shown(str(find_user_config() or "defaults only")))
+    kv(pal, "source", shown(str(config.settings.source)))
+    kv(pal, "state", shown(str(state.state_dir())))
+    kv(pal, "log", shown(str(state.log_path())))
     tools = {name: bool(shutil.which(name)) for name in ("pdftotext", "textutil", "antiword")}
     libs = {}
     for lib in ("pypdf", "docx", "openpyxl"):
@@ -329,7 +332,7 @@ def _test_notification(pal: Palette) -> int:
     problems: list[str] = []
     notifier(True, warn=problems.append)("Test notification: cubby can reach you.")
     if problems:
-        print(pal.yellow(f"notification test failed: {problems[0]}"), file=sys.stderr)
+        print(pal.yellow(f"notification test failed: {shown(problems[0])}"), file=sys.stderr)
         return EXIT_FAILED
     print("Sent a test notification. If it did not appear, allow notifications for")
     print("Script Editor (macOS) or your notification daemon (Linux).")

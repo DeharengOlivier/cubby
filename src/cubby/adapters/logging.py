@@ -24,6 +24,7 @@ from typing import Literal, Protocol, get_args
 
 from .. import __version__
 from . import state
+from .ui import escape_for_terminal as shown
 
 #: How much a log line matters. Typed, so a level cubby would later read back
 #: as foreign text (see :func:`_parse`) cannot be written in the first place.
@@ -60,9 +61,13 @@ class LevelLogger(Protocol):
 
 
 def human_line(record: dict[str, str]) -> str:
-    """A log record as a person reads it."""
-    ts, level, msg = (record.get(key) for key in ("ts", "level", "msg"))
-    return f"{ts or '?'}  {level or '?'!s:<7} {'' if msg is None else msg}"
+    """A log record as a person reads it, its terminal controls escaped.
+
+    The message names files, and a line the service manager appended can hold
+    anything: neither reaches the terminal raw.
+    """
+    ts, level, msg = (shown(str(record.get(key) or "")) for key in ("ts", "level", "msg"))
+    return f"{ts or '?'}  {level or '?':<7} {msg}"
 
 
 def _rotate(path: Path) -> None:

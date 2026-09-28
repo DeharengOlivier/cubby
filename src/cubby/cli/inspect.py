@@ -17,6 +17,7 @@ from ..adapters.journal import Journal
 from ..adapters.ledger import Ledger
 from ..adapters.logging import human_line, read_all
 from ..adapters.ui import Palette
+from ..adapters.ui import escape_for_terminal as shown
 from ..app.explain import Explanation, PlannedPass, explain
 from ..app.history import recent_runs
 from .common import (
@@ -45,22 +46,22 @@ def _explanation_json(item: Explanation) -> dict[str, Any]:
 
 
 def _print_explanation(pal: Palette, item: Explanation, source: Path) -> None:
-    print(pal.bold(str(item.path)))
+    print(pal.bold(shown(str(item.path))))
     # What a run does comes first; where the file would go otherwise, after.
     stays = "not in the watched folder: a run would not see it" if item.outside else item.skipped
     if stays:
-        kv(pal, "  stays where it is", pal.yellow(stays), _WIDTH)
-    shown = _near(item.destination, source)
+        kv(pal, "  stays where it is", pal.yellow(shown(stays)), _WIDTH)
+    destination = shown(_near(item.destination, source))
     if item.error is not None and not stays:
-        kv(pal, "  would fail", pal.yellow(item.error), _WIDTH)
+        kv(pal, "  would fail", pal.yellow(shown(item.error)), _WIDTH)
     elif item.duplicate_of is not None and not stays:
-        where = f"as a duplicate of {_near(item.duplicate_of, source)}"
+        where = f"as a duplicate of {shown(_near(item.duplicate_of, source))}"
         kv(pal, "  deleted", pal.accent(where), _WIDTH)
     elif not stays:
-        kv(pal, "  goes to", pal.accent(shown), _WIDTH)
+        kv(pal, "  goes to", pal.accent(destination), _WIDTH)
     elif item.sortable or item.outside:  # never sorted: no destination to announce
-        kv(pal, "  would go to", pal.accent(shown), _WIDTH)
-    rule = f"{item.rule}  ({item.stage.value} stage)" if item.rule else "no rule matched"
+        kv(pal, "  would go to", pal.accent(destination), _WIDTH)
+    rule = f"{shown(item.rule)}  ({item.stage.value} stage)" if item.rule else "no rule matched"
     kv(pal, "  decided by", rule, _WIDTH)
     if item.content_chars is not None:
         read = (
@@ -70,7 +71,7 @@ def _print_explanation(pal: Palette, item: Explanation, source: Path) -> None:
         )
         kv(pal, "  content", pal.dim(read), _WIDTH)
     if item.renamed_to:
-        kv(pal, "  renamed", item.renamed_to, _WIDTH)
+        kv(pal, "  renamed", shown(item.renamed_to), _WIDTH)
 
 
 #: The key column of ``explain``: its longest key and two spaces.
@@ -93,7 +94,7 @@ def cmd_explain(args: argparse.Namespace) -> int:
         try:
             items.append(explain(Path(raw).expanduser(), config, planned))
         except FileNotFoundError:
-            print(f"cubby: no such file: {raw}", file=sys.stderr)
+            print(f"cubby: no such file: {shown(raw)}", file=sys.stderr)
             missing = True
     if getattr(args, "json", False):
         payload = {"version": 1, "items": [_explanation_json(i) for i in items]}

@@ -14,6 +14,7 @@ from ..adapters.config import (
 from ..adapters.logging import Level, LevelLogger
 from ..adapters.pause import MAX_DURATION as MAX_PAUSE
 from ..adapters.ui import Palette, supports_color
+from ..adapters.ui import escape_for_terminal as shown
 from ..domain.category import Config
 from ..domain.duration import format_duration, parse_duration
 
@@ -148,7 +149,7 @@ def require_source(config: Config, args: argparse.Namespace | None = None) -> st
 def source_error(config: Config, args: argparse.Namespace | None = None) -> bool:
     """Print why the source folder is unusable, if it is. True means stop."""
     if error := require_source(config, args):
-        print(f"cubby: {error}", file=sys.stderr)
+        print(f"cubby: {shown(error)}", file=sys.stderr)
         return True
     return False
 
@@ -159,7 +160,7 @@ def make_loud(log: LevelLogger) -> LevelLogger:
     def log_and_tell(message: str, *, level: Level = "INFO") -> None:
         log(message, level=level)
         if level != "INFO":
-            print(f"cubby: {level.lower()}: {message}", file=sys.stderr)
+            print(f"cubby: {level.lower()}: {shown(message)}", file=sys.stderr)
 
     return log_and_tell
 
