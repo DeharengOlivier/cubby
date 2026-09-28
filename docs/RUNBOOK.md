@@ -97,7 +97,8 @@ What undo does with each file of the run:
   three levels down) is still in it, unchanged: files added, renamed or removed around it,
   and Finder opening it, do not stop undo; a folder deleted and made again does, and so does
   an edit of that one file. A folder with no file in its first three levels counts as the
-  same only while nothing was added to it or removed from it. A copy of the very same folder
+  same only while nothing was added to it or removed from it, and Finder opening it (which
+  writes a `.DS_Store`) is enough to stop undo. A copy of the very same folder
   put back in its place (the same archive extracted again) can pass for it. Runs made by cubby 0.2.0
   and older did not record this, and undo moves what it finds there.
 - **Duplicate not recreated**: for a duplicate that `dedupe` deleted, the kept copy changed or

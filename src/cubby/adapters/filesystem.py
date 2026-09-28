@@ -212,20 +212,26 @@ _WITNESS_SCAN = 10_000
 def _files_near_top(folder: Path) -> Iterator[os.stat_result]:
     """The files of ``folder``, level by level and by name within a folder,
     down to ``_WITNESS_DEPTH`` levels and ``_WITNESS_SCAN`` entries. Hidden
-    entries (``.DS_Store``, which Finder rewrites) are left out.
+    entries (``.DS_Store``, which Finder rewrites) are left out, and so is a
+    subfolder that cannot be listed.
 
     Raises:
-        OSError: A folder could not be listed.
+        OSError: ``folder`` itself could not be listed.
     """
     level, scanned = [folder], 0
     for _ in range(_WITNESS_DEPTH):
         below: list[Path] = []
         for current in level:
-            with os.scandir(current) as found:
-                entries = sorted(
-                    (entry for entry in found if not entry.name.startswith(".")),
-                    key=lambda entry: entry.name,
-                )
+            try:
+                with os.scandir(current) as found:
+                    entries = sorted(
+                        (entry for entry in found if not entry.name.startswith(".")),
+                        key=lambda entry: entry.name,
+                    )
+            except OSError:
+                if current == folder:
+                    raise
+                continue  # an unreadable subfolder: the files elsewhere still count
             for entry in entries:
                 scanned += 1
                 if scanned > _WITNESS_SCAN:
