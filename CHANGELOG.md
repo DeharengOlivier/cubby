@@ -80,6 +80,10 @@ All notable changes to this project are documented here. The format is based on
 - `docs/THREAT-MODEL.md`.
 
 ### Changed
+- The config file is read strictly: an unknown key (a typo such as `ignor`) is
+  a config error naming the closest known key, and a switch must be `true` or
+  `false` (`dedupe = "false"` used to turn deduplication on). Run `cubby doctor`
+  after upgrading to check an existing config.
 - The undo journal is append-only and one line per move (format version 2).
   Journals written by 0.1 are still read and undone.
 - The log is JSON lines, rotated at 1 MB.
