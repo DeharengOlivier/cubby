@@ -93,9 +93,12 @@ and stops at the first stage that names a category:
 - Patterns are Python regular expressions, matched case-insensitively.
 - **What cubby looks at**: only the top level of the folder. Hidden entries, the
   folders cubby files into and names matching an `ignore` pattern are never
-  touched. A folder is sorted as one item, by its name (a saved web page's
-  `page_files` folder goes to `Documents`); one no rule matches goes whole to
-  `_Unsorted`, its content unsorted.
+  touched. A folder is sorted as one item, by its name, and keeps that name:
+  a saved web page's `page_files` folder goes to `Documents`, and an
+  `invoice-archive` folder goes to `Invoices/invoice-archive`, never renamed
+  like an invoice nor filed by month (a folder named like a month folder,
+  such as `2026-09`, becomes `2026-09 (folder)`). A folder no rule matches
+  goes whole to `_Unsorted`. Its content is never sorted.
 
 The shipped categories, in order: `Invoices`, `Bank-Statements`, `Legal`,
 `Resumes` (name and content rules, in French and English), `Images`, `Video`,
