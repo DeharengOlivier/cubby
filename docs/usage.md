@@ -7,7 +7,7 @@
 | `cubby plan`      | Preview the full mapping of the folder. Moves nothing and ignores the age delay, so you see every file. |
 | `cubby run`       | Sort the folder once. Only files older than `--delay` are moved. |
 | `cubby watch`     | Run the sort loop in the foreground. Ctrl-C to stop.     |
-| `cubby undo`      | Reverse the most recent run, manual or agent, restoring files to where they were. `--run ID` picks an older run. |
+| `cubby undo`      | Reverse the most recent run, manual or agent, restoring files to where they were. `--run ID` picks an older run. A file moved or deleted since the run, or replaced or changed since, is left alone and named; undo then exits 1. |
 | `cubby explain FILE...` | Say where each file would go, which rule decides (`name matches 'invoice'`, `extension .dmg`...), the rename, and why a run would leave it alone (ignored, in progress, too recent). Moves nothing. `--json`. |
 | `cubby history`   | Recent runs, newest first: when, agent or manual, moved and failed counts, and how much was undone (`undoable`, `partly undone`, `undone`, or `unknown` once the journal no longer holds the run). Runs from cubby 0.1 are not listed; plain `cubby undo` still reverts them. `-n N`, `--json`. |
 | `cubby log`       | The last lines the agent logged, oldest first, including the rotated file. `--run ID` keeps one pass (ids from `cubby history`), `--warnings` only what went wrong, `-n N` (20), `--json` the records as JSON lines. |

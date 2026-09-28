@@ -48,6 +48,17 @@ All notable changes to this project are documented here. The format is based on
   into inside the watched folder is refused (exit 2), also when a part of
   its path differs only by case on a case-insensitive disk (not verified on
   macOS by a test).
+- `cubby undo` moved whatever file stood where the run had put one: a file the
+  user put under the same name afterwards was taken out of its folder, and a
+  duplicate was recreated from whatever replaced the kept copy. Each move now
+  records the file's device, inode, size and modification time, and undo
+  leaves a file that differs in place and says where it would have gone. A
+  file edited since the run is left in place too. Found by an exploratory
+  session.
+- `cubby undo` exited 0 when some files could not be put back because they
+  had been moved or deleted since the run; it now counts them and exits 1,
+  as the exit codes say. A file restored under another name because its name
+  was taken says so (`restored notes.txt as notes (1).txt`).
 - A regular file named like a folder cubby sorts into (`_Unsorted`, a
   category, or a month folder inside one) made every move into that folder
   fail with `[Errno 17] File exists`. The file is still left alone, and the

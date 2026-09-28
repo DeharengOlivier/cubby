@@ -7,7 +7,7 @@ import shutil
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from ..adapters.filesystem import move_no_clobber, unique_destination
+from ..adapters.filesystem import identity, move_no_clobber, unique_destination
 from ..adapters.journal import Entry, Journal, Run
 
 Logger = Callable[[str], None]
@@ -23,7 +23,8 @@ class UndoResult:
 
     run_id: str | None = None
     restored: int = 0
-    gone: int = 0
+    gone: int = 0  # no longer where the run put them
+    replaced: int = 0  # another file stands there now: left alone
     failed: list[str] = field(default_factory=list)
 
 
@@ -76,6 +77,18 @@ def undo_run(journal: Journal, run_id: str | None = None, *, log: Logger = _noop
             journal.settle(entry, "gone")
             result.gone += 1
             continue
+        if entry.ident is not None and identity(entry.destination) != entry.ident:
+            # Another file took the name, or the file was changed since: moving
+            # it could take a file cubby never moved, so it stays, and the user
+            # decides (the file is named, and where it would have gone).
+            log(
+                f"skip (changed or replaced since the run: {entry.destination} is left "
+                f"in place; move it back to {entry.source} by hand if it is yours): "
+                f"{entry.source.name}"
+            )
+            journal.settle(entry, "gone")
+            result.replaced += 1
+            continue
         try:
             name = _restore(entry)
         except OSError as exc:
@@ -86,7 +99,12 @@ def undo_run(journal: Journal, run_id: str | None = None, *, log: Logger = _noop
             result.failed.append(entry.destination.name)
             continue
         journal.settle(entry, "restored")
-        log(f"restored {name}")
+        wanted = entry.source.name
+        log(
+            f"restored {wanted}"
+            if name == wanted
+            else f"restored {wanted} as {name} ({wanted} is taken)"
+        )
         result.restored += 1
     return result
 

@@ -81,6 +81,10 @@ def cmd_undo(args: argparse.Namespace) -> int:
             )
             return EXIT_FAILED
     print(f"Restored {result.restored} file(s).")
+    if result.gone:
+        print(f"  {result.gone} no longer where the run put it (moved or deleted since).")
+    if result.replaced:
+        print(f"  {result.replaced} changed or replaced since the run, left in place.")
     if result.failed:
         print(
             f"cubby: {len(result.failed)} file(s) could not be restored and stay pending; "
@@ -88,7 +92,8 @@ def cmd_undo(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return EXIT_FAILED
-    return EXIT_OK
+    # Not every file is back: say so to scripts too (see docs/usage.md, exit codes).
+    return EXIT_FAILED if result.gone or result.replaced else EXIT_OK
 
 
 def cmd_watch(args: argparse.Namespace) -> int:

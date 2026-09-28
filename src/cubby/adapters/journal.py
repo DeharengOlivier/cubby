@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from . import state
+from .filesystem import Identity
 
 VERSION = 2
 MAX_BYTES = 5_000_000
@@ -71,6 +72,9 @@ class Entry:
     op: MoveOp
     source: Path  # where the file was before the run
     destination: Path  # where the run put it (or the kept copy, for dedupe)
+    # The destination's identity right after the move; None before 0.3. Undo
+    # compares it, so it never moves a different file found under that name.
+    ident: Identity | None = None
 
 
 @dataclass
@@ -117,6 +121,7 @@ class Journal:
                 "op": entry.op,
                 "from": str(entry.source),
                 "to": str(entry.destination),
+                **({"id": list(entry.ident)} if entry.ident else {}),
             }
         )
 
@@ -215,17 +220,17 @@ def _group(lines: list[str], wanted: str | None = None) -> dict[str, list[_Field
 
 def _count(fields: list[_Fields]) -> tuple[int, int]:
     """A run's moves, and those not settled yet (see ``Run.pending``)."""
-    moves = [seq for _, seq, op, _, _ in fields if op in ("move", "dedupe")]
-    settled = {seq for _, seq, op, _, _ in fields if op not in ("move", "dedupe")}
+    moves = [seq for _, seq, op, *_ in fields if op in ("move", "dedupe")]
+    settled = {seq for _, seq, op, *_ in fields if op not in ("move", "dedupe")}
     return len(moves), sum(1 for seq in moves if seq not in settled)
 
 
 def _run_from(run_id: str, fields: list[_Fields]) -> Run | None:
     """The run the fields describe, or None if it has no move."""
     run = Run(run_id)
-    for _, seq, op, source, destination in fields:
+    for _, seq, op, source, destination, ident in fields:
         if op == "move" or op == "dedupe":  # noqa: PLR1714 - `in` does not narrow for mypy
-            run.entries.append(Entry(run_id, seq, op, Path(source), Path(destination)))
+            run.entries.append(Entry(run_id, seq, op, Path(source), Path(destination), ident))
         else:
             run.settled[seq] = op
     return run if run.entries else None
@@ -271,7 +276,7 @@ def _seq(value: object) -> int:
 
 #: One line's worth of journal, validated but not yet turned into objects:
 #: ``(run, seq, op, source, destination)``, the two paths empty for a settlement.
-_Fields = tuple[str, int, "MoveOp | Resolution", str, str]
+_Fields = tuple[str, int, "MoveOp | Resolution", str, str, "Identity | None"]
 
 
 def _fields(line: str) -> Iterator[_Fields]:
@@ -291,7 +296,7 @@ def _fields(line: str) -> Iterator[_Fields]:
         if "moves" in record and "v" not in record:  # version 1: one line per run
             run_id = _v1_run_id(line)
             for seq, move in enumerate(record["moves"]):
-                yield run_id, seq, "move", _path(move["from"]), _path(move["to"])
+                yield run_id, seq, "move", _path(move["from"]), _path(move["to"]), None
             return
         if record.get("v") != VERSION:
             return
@@ -303,11 +308,27 @@ def _fields(line: str) -> Iterator[_Fields]:
                 op,
                 _path(record["from"]),
                 _path(record["to"]),
+                _identity(record.get("id")),
             )
         elif op in ("restored", "gone"):
-            yield str(record["run"]), _seq(record["seq"]), op, "", ""
+            yield str(record["run"]), _seq(record["seq"]), op, "", "", None
     except (KeyError, TypeError, ValueError):
         return
+
+
+def _identity(value: object) -> Identity | None:
+    """A recorded identity, or None when absent or not what cubby writes."""
+    if (
+        isinstance(value, list)
+        and len(value) == _IDENTITY_PARTS
+        and all(type(part) is int and part >= 0 for part in value)
+    ):
+        return value[0], value[1], value[2], value[3]
+    return None
+
+
+#: Device, inode, size and modification time (see ``filesystem.Identity``).
+_IDENTITY_PARTS = 4
 
 
 def _path(value: object) -> str:
