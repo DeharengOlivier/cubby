@@ -374,6 +374,7 @@ def _sorted_tree(tmp_path, *files: str) -> tuple[Journal, Path]:
 def test_a_folder_of_folders_opened_in_finder_still_comes_back(tmp_path):
     # Found by re-review: the witness was a subfolder, whose time Finder changes.
     journal, filed = _sorted_tree(tmp_path, "2024/p.jpg", "2025/q.jpg")
+    (filed / ".DS_Store").write_bytes(b"finder")  # the folder's own time changes too
     (filed / "2024" / ".DS_Store").write_bytes(b"finder")
 
     assert undo_run(journal).restored == 1
@@ -426,3 +427,57 @@ def test_a_file_dated_before_1970_is_still_checked(tmp_path):
 
     assert journal.runs()[0].entries[0].ident is not None
     assert undo_run(journal).replaced == 1
+
+
+@pytest.mark.parametrize(("depth", "found"), [(3, True), (4, False)])
+def test_the_witness_is_looked_for_three_levels_down(tmp_path, depth, found):
+    folder = tmp_path / "top"
+    deep = folder.joinpath(*[f"l{i}" for i in range(1, depth)])
+    deep.mkdir(parents=True)
+    (deep / "f.txt").write_text("x", encoding="utf-8")
+
+    recorded = identity(folder)
+
+    assert (recorded[2] == (deep / "f.txt").stat().st_ino) is found
+
+
+def test_a_symlinked_folder_never_supplies_the_witness(tmp_path):
+    (tmp_path / "outside").mkdir()
+    (tmp_path / "outside" / "f.txt").write_text("x", encoding="utf-8")
+    (tmp_path / "top").mkdir()
+    (tmp_path / "top" / "a-link").symlink_to(tmp_path / "outside")
+
+    assert identity(tmp_path / "top")[2] == 0
+
+
+def test_the_witness_is_the_first_file_by_name(tmp_path):
+    (tmp_path / "top").mkdir()
+    for name in ("b.txt", "a.txt", "c.txt"):
+        (tmp_path / "top" / name).write_text(name, encoding="utf-8")
+
+    assert identity(tmp_path / "top")[2] == (tmp_path / "top" / "a.txt").stat().st_ino
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads through any permission")
+def test_an_unreadable_subfolder_does_not_hide_the_other_files(tmp_path):
+    (tmp_path / "top" / "a-locked").mkdir(parents=True)
+    (tmp_path / "top" / "b").mkdir()
+    (tmp_path / "top" / "b" / "f.txt").write_text("x", encoding="utf-8")
+    (tmp_path / "top" / "a-locked").chmod(0)
+    try:
+        recorded = identity(tmp_path / "top")
+    finally:
+        (tmp_path / "top" / "a-locked").chmod(0o755)
+
+    assert recorded is not None
+    assert recorded[2] == (tmp_path / "top" / "b" / "f.txt").stat().st_ino
+
+
+@pytest.mark.parametrize(("limit", "found"), [(2, False), (3, True)])
+def test_the_scan_stops_at_its_limit(tmp_path, monkeypatch, limit, found):
+    monkeypatch.setattr("cubby.adapters.filesystem._WITNESS_SCAN", limit)
+    (tmp_path / "top" / "a").mkdir(parents=True)
+    (tmp_path / "top" / "b").mkdir()
+    (tmp_path / "top" / "c.txt").write_text("x", encoding="utf-8")  # the third entry
+
+    assert (identity(tmp_path / "top")[2] != 0) is found
