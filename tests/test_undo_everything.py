@@ -8,6 +8,7 @@ the copy that had been kept.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -124,3 +125,29 @@ def test_a_name_with_a_unicode_line_break_can_be_undone(downloads, odd):
 
     assert undo_last_run(journal) == 1
     assert _files(downloads) == [name]
+
+
+def _non_utf8_name(folder: Path) -> Path:
+    """A file whose name is not valid UTF-8, as Linux allows (``café`` in Latin-1)."""
+    path = folder / os.fsdecode(b"caf\xe9.txt")  # held as a surrogate character
+    try:
+        path.write_bytes(b"x")
+    except OSError:
+        pytest.skip("this filesystem only accepts UTF-8 names (APFS)")
+    return path
+
+
+def test_a_name_that_is_not_utf8_can_be_sorted_and_undone(downloads, capsys):
+    # Review of PR 4: the journal refused the name after the file had moved,
+    # the CLI called it a config error, and the file could not be undone.
+    path = _non_utf8_name(downloads)
+
+    assert main(["run", "--source", str(downloads), "--delay", "0"]) == EXIT_OK
+    assert not path.exists()
+    assert main(["history", "--json"]) == EXIT_OK
+    assert main(["status"]) in (EXIT_OK, 1)
+
+    assert main(["undo"]) == EXIT_OK
+
+    assert path.read_bytes() == b"x"
+    capsys.readouterr()

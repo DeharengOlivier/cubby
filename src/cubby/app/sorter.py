@@ -41,6 +41,10 @@ def describe_error(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {detail}"
 
 
+def _never() -> bool:
+    return False
+
+
 class Sorter:
     """Wires the engine to the filesystem. Holds no mutable state itself."""
 
@@ -141,14 +145,18 @@ class Sorter:
             return False
         return True
 
-    def sort_once(self, *, apply: bool, respect_age: bool = True) -> list[SortOutcome]:
+    def sort_once(
+        self, *, apply: bool, respect_age: bool = True, stop: Callable[[], bool] = _never
+    ) -> list[SortOutcome]:
         """Classify every candidate once.
 
         When ``apply`` is true, eligible files are moved, each move is journaled
         as it happens, and a file that cannot be moved is reported in its
         outcome's ``error`` without stopping the others. When ``respect_age`` is
         false (used by ``plan``), age and in-progress checks are ignored so the
-        caller sees the full picture of the folder as it stands.
+        caller sees the full picture of the folder as it stands. ``stop`` is
+        checked before each file, so a stop request ends the pass between two
+        files, never in the middle of one.
         """
         settings = self._config.settings
         run_id = new_run_id()
@@ -156,6 +164,8 @@ class Sorter:
         outcomes: list[SortOutcome] = []
 
         for path in iter_candidates(settings, self._config.managed_dirs):
+            if stop():
+                break
             if respect_age and not is_eligible(path, settings):
                 continue
             try:

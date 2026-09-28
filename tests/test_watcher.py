@@ -40,15 +40,10 @@ def test_watcher_stop_predicate_breaks_loop(tmp_path):
 def test_watcher_picks_up_files_appearing_between_cycles(tmp_path):
     config = _config(tmp_path)
     sorter = Sorter(config)
-    state = {"cycle": 0}
 
     def sleep(_: float) -> None:
         # A new file lands while the watcher is "sleeping".
         (tmp_path / "late.txt").write_text("x")
 
-    def stop() -> bool:
-        state["cycle"] += 1
-        return state["cycle"] >= 2
-
-    Watcher(sorter, interval=0, sleep=sleep).run(stop=stop)
+    Watcher(sorter, interval=0, sleep=sleep).run(max_cycles=2)
     assert (tmp_path / "Documents" / "late.txt").exists()

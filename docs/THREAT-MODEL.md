@@ -63,8 +63,8 @@ publish a release.
 
 ## Security invariants (tested)
 
-- Cubby never writes outside the watched folder (`tests/test_containment.py`, property tests
-  in `tests/test_properties.py`).
+- Cubby never writes outside the watched folder, apart from its own state folder and log
+  (`tests/test_containment.py`, property tests in `tests/test_properties.py`).
 - Every move of every run, manual or agent, can be undone (`tests/test_undo_everything.py`,
   `tests/test_agent_journey.py`).
 - A path from the config reaches the service manager as one argument, whatever it contains
@@ -73,6 +73,7 @@ publish a release.
   memory ceiling and a timeout, files past a size ceiling are not read
   (`tests/test_extraction_bounds.py`, `tests/test_review_pr2.py`).
 - A downloaded `.py` file is never imported by a parser child (`tests/test_review_pr2.py`).
-- A file name with any character the filesystem allows, including Unicode line separators,
-  keeps an undoable journal entry (`tests/test_properties.py`, `tests/test_undo_everything.py`).
+- A file name with any character the filesystem allows, including Unicode line separators and
+  (on Linux) bytes that are not valid UTF-8, keeps an undoable journal entry and is reported
+  without crashing (`tests/test_properties.py`, `tests/test_undo_everything.py`).
 - No network access: the test suite runs with sockets disabled (`tests/conftest.py`).

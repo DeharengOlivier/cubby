@@ -17,8 +17,10 @@ that case stop it by hand:
 - macOS: `launchctl unload -w ~/Library/LaunchAgents/com.cubby.agent.plist`
 - Linux: `systemctl --user disable --now cubby.service`
 
-Stopping sends SIGTERM: the pass in progress finishes and the agent exits, so no move is left
-without its journal line. Nothing else runs cubby in the background.
+Stopping sends SIGTERM: the agent finishes the file in progress, stops the pass between two
+files and exits, so no move is left without its journal line. The launchd and systemd units
+give it 60 seconds for that (`ExitTimeOut`, `TimeoutStopSec`) before killing it. Nothing else
+runs cubby in the background.
 
 ## 2. Keep the evidence
 
@@ -75,7 +77,7 @@ later. Nothing is lost either way.
 ```sh
 cubby uninstall
 pipx uninstall cubby-sort        # or: ./uninstall.sh from a checkout
-rm -rf "${XDG_STATE_HOME:-$HOME/.local/state}/cubby" ~/.config/cubby ~/Library/Logs/cubby.log*
+rm -rf "${CUBBY_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/cubby}" ~/.config/cubby ~/Library/Logs/cubby.log*
 ```
 
 Sorted files stay where they are; cubby never deletes a file except an opt-in, byte-identical

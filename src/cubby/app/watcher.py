@@ -38,6 +38,35 @@ def _quiet(message: str, *, level: str = "INFO") -> None:
     return None
 
 
+class StopRequest:
+    """A stop asked for by a signal, and a sleep that notices it.
+
+    The handler only sets an attribute. It takes no lock, so it cannot deadlock
+    against the code it interrupts (``threading.Event.set`` from a handler can,
+    when the signal lands while the main thread holds the event's lock). The
+    sleep wakes every ``tick`` seconds to look at the flag.
+    """
+
+    def __init__(self, *, tick: float = 0.5, nap: Sleep = time.sleep) -> None:
+        self.requested = False
+        self._tick = tick
+        self._nap = nap
+
+    def request(self, *_: object) -> None:
+        self.requested = True
+
+    def __call__(self) -> bool:
+        return self.requested
+
+    def sleep(self, seconds: float, *, clock: Callable[[], float] = time.monotonic) -> None:
+        end = clock() + seconds
+        while not self.requested:
+            left = end - clock()
+            if left <= 0:
+                return
+            self._nap(min(self._tick, left))
+
+
 class Watcher:
     def __init__(
         self,
@@ -56,6 +85,7 @@ class Watcher:
         self._ledger = ledger
         self._lock_timeout = lock_timeout
         self._source_missing = False
+        self._stop: Stop = _never
 
     def run(self, *, stop: Stop = _never, max_cycles: int | None = None) -> int:
         """Run the poll loop. Returns the number of items sorted in total.
@@ -63,6 +93,7 @@ class Watcher:
         ``max_cycles`` bounds the loop for tests; ``stop`` lets a caller break
         out cleanly between cycles (e.g. on a signal).
         """
+        self._stop = stop
         total = 0
         cycles = 0
         while True:
@@ -81,7 +112,7 @@ class Watcher:
             return 0
         try:
             with exclusive(timeout=self._lock_timeout):
-                outcomes = self._sorter.sort_once(apply=True)
+                outcomes = self._sorter.sort_once(apply=True, stop=self._stop)
         except Busy as exc:
             self._log(f"pass skipped: {exc}", level="WARNING")
             return 0

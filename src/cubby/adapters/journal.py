@@ -100,7 +100,7 @@ class Journal:
     # --- writing -------------------------------------------------------------
 
     def _append(self, record: dict[str, Any]) -> None:
-        state.append_line(self.path, json.dumps({"v": VERSION, **record}, ensure_ascii=False))
+        state.append_line(self.path, json.dumps({"v": VERSION, **record}))
 
     def record(self, entry: Entry) -> None:
         """Append one move, right after it happened.

@@ -19,7 +19,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from hypothesis import HealthCheck, given, settings
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from cubby.adapters.config import load_config
@@ -32,13 +32,9 @@ from cubby.domain.duration import format_duration, parse_duration
 from cubby.domain.invoices import parse_invoice_date
 from cubby.domain.naming import safe_component
 
-# Per-test temporary folders are reused across Hypothesis examples, so each
-# example cleans up after itself; the health check would otherwise object.
-FS = settings(
-    max_examples=60,
-    deadline=None,
-    suppress_health_check=[HealthCheck.function_scoped_fixture],
-)
+# Filesystem properties make real files: fewer examples, no per-example deadline.
+# Each example asks the session-wide tmp_path_factory for a fresh folder.
+FS = settings(max_examples=60, deadline=None)
 
 # Names a filesystem accepts: no separator, no NUL, not '.' or '..', short.
 _NAME_ALPHABET = string.ascii_letters + string.digits + " -_.()éàç#@+,'"
@@ -110,7 +106,9 @@ def test_a_free_destination_is_free_and_stays_in_its_folder(tmp_path_factory, na
 # --- journal ------------------------------------------------------------------
 
 paths = st.text(
-    st.characters(blacklist_categories=("Cs",), blacklist_characters="\0\n\r"),
+    # Every character a POSIX name may hold except the separator and NUL;
+    # surrogates stand for the undecodable bytes Linux allows.
+    st.characters(blacklist_characters="\0/"),
     min_size=1,
     max_size=60,
 ).map(lambda s: Path("/d") / s.replace("/", "_"))

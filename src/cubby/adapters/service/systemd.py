@@ -7,6 +7,7 @@ from pathlib import Path
 from .. import state
 from .base import (
     DEFAULT_LABEL,
+    STOP_TIMEOUT,
     Service,
     ServiceError,
     ServiceSpec,
@@ -30,6 +31,7 @@ Type=simple
 {environment}ExecStart={exec_start}
 Restart=on-failure
 RestartSec=5
+TimeoutStopSec={stop_timeout}
 StandardOutput=append:{log}
 StandardError=append:{log}
 
@@ -105,6 +107,7 @@ class SystemdService(Service):
                 ),
                 exec_start=exec_start,
                 log=_unit_path_value(spec.log_path),
+                stop_timeout=STOP_TIMEOUT,
             ),
             encoding="utf-8",
         )
