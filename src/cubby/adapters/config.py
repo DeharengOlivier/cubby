@@ -90,7 +90,12 @@ def find_user_config() -> Path | None:
 
 def _load_toml(path: Path) -> dict[str, Any]:
     with path.open("rb") as handle:
-        return tomllib.load(handle)
+        try:
+            return tomllib.load(handle)
+        except RecursionError:
+            # The parser recurses per level of nesting: too deep is invalid TOML,
+            # reported as such, not a traceback.
+            raise tomllib.TOMLDecodeError("nested too deep to read") from None
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

@@ -41,6 +41,8 @@ All notable changes to this project are documented here. The format is based on
   nested a few thousand levels deep raised `RecursionError` and stopped every
   read of that file, undo and compaction included. It now counts as a damaged
   line, like any other.
+- A config file nested a few thousand levels deep ended in a `RecursionError`
+  traceback; it is now reported as invalid TOML (exit 2).
 - Journal compaction dropped a run whose id was not a string (a hand-edited
   or foreign line such as `"run": 7`) while `cubby undo` could still revert
   it: the reads took such an id as `"7"`, compaction ignored it.
