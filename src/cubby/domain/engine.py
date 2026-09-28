@@ -44,6 +44,11 @@ class Engine:
             for c in config.categories
             if c.content_patterns
         ]
+        self._late_content: _CompiledRules = [
+            (c.name, [re.compile(p, re.IGNORECASE) for p in c.late_content_patterns])
+            for c in config.categories
+            if c.late_content_patterns
+        ]
         self._strong_ext: dict[str, str] = {}
         self._ext: list[tuple[str, frozenset[str]]] = []
         for category in config.categories:
@@ -75,8 +80,9 @@ class Engine:
                 return Decision(match[0], Stage.NAME, f"name matches {match[1]!r}")
 
         # Stage 2: content.
-        if self._config.settings.content_scan and self._content and ref.is_file:
-            match = self._first_match(ref.text(), self._content)
+        if self._config.settings.content_scan and ref.is_file:
+            rules = (self._content, self._late_content)
+            match = next((m for r in rules if r and (m := self._first_match(ref.text(), r))), None)
             if match:
                 return Decision(match[0], Stage.CONTENT, f"content matches {match[1]!r}")
 

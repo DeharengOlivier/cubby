@@ -132,13 +132,14 @@ def test_a_broken_pattern_is_reported_with_its_category(tmp_path):
         load_config(user_path=path)
 
 
-def test_a_broken_content_pattern_is_reported_too(tmp_path):
+@pytest.mark.parametrize("key", ["content_patterns", "late_content_patterns"])
+def test_a_broken_content_pattern_is_reported_too(tmp_path, key):
     path = tmp_path / "config.toml"
     path.write_text(
-        textwrap.dedent("""
+        textwrap.dedent(f"""
             [[category]]
             name = "Legal"
-            content_patterns = ["[unterminated"]
+            {key} = ["[unterminated"]
         """),
         encoding="utf-8",
     )

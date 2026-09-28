@@ -70,6 +70,7 @@ name what you downloaded.
 name = "Invoices"                       # destination folder name
 name_patterns = ["invoice", "facture"]  # stage 1: regex on the filename
 content_patterns = ["amount due"]       # stage 2: regex on extracted text
+late_content_patterns = []              # stage 2, only if no category matched above
 extensions = ["pdf"]                    # stage 3: fallback by extension
 strong_ext = false                      # stage 0: make extensions decisive
 date_folders = false                    # file into a month/year subfolder
@@ -103,7 +104,11 @@ For each file, the first stage to match wins:
 - **stage 1 - filename**: `name_patterns` are matched against the whole name.
   Skipped for cryptic UUID / long-digit names that carry no signal.
 - **stage 2 - content**: for parsable files, `content_patterns` are matched
-  against extracted text. Only runs when stages 0-1 found nothing.
+  against extracted text. Only runs when stages 0-1 found nothing. Then, if no
+  category matched, `late_content_patterns` are tried the same way: use them
+  for broad patterns that should lose to any more specific category (the
+  default Invoices title pattern is one, so a bank statement that mentions a
+  "facture carte" stays a statement).
 - **stage 3 - type**: the file's extension is matched against `extensions`.
 - otherwise the file goes to `unsorted_dir`.
 

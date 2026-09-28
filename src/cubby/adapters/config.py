@@ -142,7 +142,8 @@ SETTINGS_KEYS = frozenset(
 )  # fmt: skip
 CATEGORY_KEYS = frozenset(
     {
-        "name", "name_patterns", "content_patterns", "extensions", "strong_ext",
+        "name", "name_patterns", "content_patterns", "late_content_patterns", "extensions",
+        "strong_ext",
         "date_folders", "vendor_rename",
     }
 )  # fmt: skip
@@ -227,6 +228,9 @@ def _build_category(raw: dict[str, Any]) -> Category:
         name_patterns=_check_patterns(name, "name_patterns", tuple(raw.get("name_patterns", ()))),
         content_patterns=_check_patterns(
             name, "content_patterns", tuple(raw.get("content_patterns", ()))
+        ),
+        late_content_patterns=_check_patterns(
+            name, "late_content_patterns", tuple(raw.get("late_content_patterns", ()))
         ),
         extensions=frozenset(e.lower().lstrip(".") for e in raw.get("extensions", ())),
         strong_ext=_switch(raw, "strong_ext", False, where),
