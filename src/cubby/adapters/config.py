@@ -118,6 +118,7 @@ def _build_settings(raw: dict[str, Any]) -> Settings:
         month_lang=str(raw.get("month_lang", defaults.month_lang)),
         vendors=tuple(raw.get("vendors", defaults.vendors)),
         ignore=raw.get("ignore", defaults.ignore),
+        notify=bool(raw.get("notify", defaults.notify)),
     )
 
 

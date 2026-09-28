@@ -12,6 +12,7 @@ content_scan = true      # peek inside files when the name is uninformative
 content_max_bytes = 4000
 unsorted_dir = "_Unsorted"
 dedupe = false           # set true to drop byte-identical duplicate downloads
+notify = true            # desktop notification when the agent cannot sort a file
 
 # Invoices (and any category with date_folders) are filed into a month/year
 # subfolder. "numeric" gives 2026-07; "letters" gives "juillet 2026" (month_lang

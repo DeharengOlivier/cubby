@@ -29,6 +29,8 @@ from .adapters.journal import Journal
 from .adapters.ledger import Ledger
 from .adapters.lock import exclusive
 from .adapters.logging import LevelLogger, file_logger, human_line, read_tail
+from .adapters.notify import notifier
+from .adapters.pause import clear_pause, current_pause, set_pause
 from .adapters.service import (
     DEFAULT_LABEL,
     Service,
@@ -45,7 +47,7 @@ from .app.sorter import Sorter
 from .app.undo import undo_run
 from .app.watcher import StopRequest, Watcher
 from .domain.category import Config
-from .domain.duration import format_duration
+from .domain.duration import format_duration, parse_duration
 
 #: Exit codes, named so callers and tests do not repeat the integers.
 EXIT_OK = 0
@@ -144,6 +146,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     def warn(message: str) -> None:
         loud(message, level="WARNING")
 
+    if (pause := current_pause()) is not None:
+        print(
+            f"cubby: note: the agent is {pause.describe()}; this manual run proceeds.",
+            file=sys.stderr,
+        )
     sorter = Sorter(config, log=log, warn=warn, journal=Journal(), ledger=Ledger())
     with exclusive():
         outcomes = sorter.sort_once(apply=True)
@@ -194,7 +201,13 @@ def cmd_watch(args: argparse.Namespace) -> int:
     on_main_thread = threading.current_thread() is threading.main_thread()
     previous = signal.signal(signal.SIGTERM, stopping.request) if on_main_thread else None
     watcher = Watcher(
-        sorter, config.settings.interval, log=loud, ledger=ledger, sleep=stopping.sleep
+        sorter,
+        config.settings.interval,
+        log=loud,
+        ledger=ledger,
+        sleep=stopping.sleep,
+        paused=_pause_reason,
+        alert=notifier(config.settings.notify, warn=warn),
     )
     log(
         f"cubby watching {config.settings.source} "
@@ -266,6 +279,42 @@ def _at_least_one(value: str) -> int:
     if number < 1:
         raise argparse.ArgumentTypeError(f"must be at least 1, got {number}")
     return number
+
+
+def _positive_duration(value: str) -> float:
+    try:
+        seconds = parse_duration(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(str(error)) from None
+    if seconds <= 0:
+        raise argparse.ArgumentTypeError(f"must be a positive duration such as 2h, got {value!r}")
+    return seconds
+
+
+def _pause_reason() -> str | None:
+    pause = current_pause()
+    return pause.describe() if pause else None
+
+
+def cmd_pause(args: argparse.Namespace) -> int:
+    try:
+        pause = set_pause(args.duration)
+    except OSError as error:
+        print(f"cubby: could not pause: {error}", file=sys.stderr)
+        return EXIT_FAILED
+    print(f"The agent is {pause.describe()}. It stops moving files at its next pass.")
+    print("Resume with: cubby resume")
+    return EXIT_OK
+
+
+def cmd_resume(args: argparse.Namespace) -> int:
+    try:
+        lifted = clear_pause()
+    except OSError as error:
+        print(f"cubby: could not resume: {error}", file=sys.stderr)
+        return EXIT_FAILED
+    print("Resumed: the agent sorts again at its next pass." if lifted else "Not paused.")
+    return EXIT_OK
 
 
 def cmd_history(args: argparse.Namespace) -> int:
@@ -424,6 +473,7 @@ def _agent_text(pal: Palette, agent: dict[str, Any]) -> str:
 
 def cmd_status(args: argparse.Namespace) -> int:
     agent = _agent_state()
+    pause = current_pause()
     runs = Ledger().runs(limit=1)
     last = runs[0] if runs else None
     healthy = not agent["installed"] or (
@@ -435,6 +485,7 @@ def cmd_status(args: argparse.Namespace) -> int:
             "version": 1,
             "healthy": healthy,
             "agent": agent,
+            "paused": pause.to_json() if pause else None,
             "last_run": last.to_json() if last else None,
             "log": str(state.log_path()),
         }
@@ -447,6 +498,8 @@ def cmd_status(args: argparse.Namespace) -> int:
         _kv(pal, "agent file", agent["unit"])
     if agent["watching"]:
         _kv(pal, "watching", agent["watching"])
+    if pause:
+        _kv(pal, "paused", pal.yellow(pause.describe() + ": no file is moved"))
     if agent["never_passed"]:
         _kv(pal, "last pass", pal.yellow("no pass completed since install: see the log"))
     elif agent["last_pass_age"] is None:
@@ -493,7 +546,22 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     _kv(pal, "extract tools", _features(pal, tools))
     _kv(pal, "extract libs", _features(pal, libs))
     _kv(pal, "parsable", pal.dim(", ".join(sorted(PARSABLE))))
+    _kv(pal, "notifications", "on" if config.settings.notify else pal.dim("off (notify = false)"))
+    if getattr(args, "notify", False):
+        return _test_notification(pal)
     return 0
+
+
+def _test_notification(pal: Palette) -> int:
+    """Send one notification, so the person can see the alert channel works."""
+    problems: list[str] = []
+    notifier(True, warn=problems.append)("Test notification: cubby can reach you.")
+    if problems:
+        print(pal.yellow(f"notification test failed: {problems[0]}"), file=sys.stderr)
+        return EXIT_FAILED
+    print("Sent a test notification. If it did not appear, allow notifications for")
+    print("Script Editor (macOS) or your notification daemon (Linux).")
+    return EXIT_OK
 
 
 def _add_common_flags(parser: argparse.ArgumentParser) -> None:
@@ -578,7 +646,22 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_doctor = sub.add_parser("doctor", help="report environment and extraction support")
     _add_common_flags(p_doctor)
+    p_doctor.add_argument(
+        "--notify", action="store_true", help="send a test notification and report the result"
+    )
     p_doctor.set_defaults(func=cmd_doctor)
+
+    p_pause = sub.add_parser("pause", help="stop the agent moving files, without uninstalling it")
+    p_pause.add_argument(
+        "--for",
+        dest="duration",
+        type=_positive_duration,
+        help="resume by itself after this long, e.g. 2h (default: until 'cubby resume')",
+    )
+    p_pause.set_defaults(func=cmd_pause)
+
+    p_resume = sub.add_parser("resume", help="let a paused agent sort again")
+    p_resume.set_defaults(func=cmd_resume)
 
     return parser
 

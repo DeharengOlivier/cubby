@@ -26,7 +26,13 @@ month_style = "numeric"    # invoice subfolder style: "numeric" (2026-07) or "le
 month_lang = "fr"          # letters language: "fr" (juillet 2026) or "en" (July 2026)
 vendors = ["spotify", "ovh"]  # known vendors, matched first when renaming invoices
 ignore = ["*.torrent", "keep-*"]  # file names cubby never touches (globs, any case)
+notify = true              # desktop notification when the agent cannot sort
 ```
+
+`notify` alerts you once per file the agent cannot sort, once when a pass fails,
+and once when the watched folder goes missing (an unplugged drive). On macOS
+the first notification may need permission for Script Editor in System
+Settings > Notifications. `cubby doctor --notify` sends a test.
 
 `ignore` patterns match the file name, not a path, and are case-insensitive.
 `cubby explain FILE` tells you when a pattern is what keeps a file in place.

@@ -6,6 +6,16 @@ cubby; none needs root.
 
 ## 1. Stop the agent now
 
+The fastest switch, with no service manager involved:
+
+```sh
+cubby pause              # the agent moves nothing from its next pass on
+cubby status             # "paused ... no file is moved"
+```
+
+The agent stays running (its heartbeat shows it alive) but skips every pass until
+`cubby resume`. To take it off the machine instead:
+
 ```sh
 cubby uninstall          # stops the agent and removes its launchd/systemd unit
 cubby status             # "not installed" confirms it is stopped

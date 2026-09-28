@@ -18,6 +18,15 @@ All notable changes to this project are documented here. The format is based on
 - `ignore` setting: glob patterns (case-insensitive) of file names cubby never
   touches.
 - `cubby plan --json` items carry the deciding rule.
+- `cubby pause [--for 2h]` and `cubby resume`: stop the agent moving files at its
+  next pass without uninstalling it. A damaged pause file counts as a pause
+  (fail closed). `cubby status` shows the pause; a manual `cubby run` still
+  works and says the agent is paused.
+- Desktop notifications when the agent cannot sort a file, a pass fails, or the
+  watched folder goes missing: once per file or per problem, not at every pass.
+  `osascript` on macOS, `notify-send` on Linux, the message passed as an
+  argument (never inside a script). `notify = false` turns them off;
+  `cubby doctor --notify` sends a test.
 
 ### Fixed (found by property tests)
 - A file whose name contains a Unicode line separator (U+2028, U+2029, U+0085)
