@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from ..adapters.ui import Palette
+from ..adapters.ui import Palette, dumps_for_terminal
 from ..adapters.ui import escape_for_terminal as shown
 from ..domain.file_ref import Stage
 
@@ -200,4 +199,4 @@ def render_json(
             for o in outcomes
         ],
     }
-    return json.dumps(payload, ensure_ascii=False, indent=2)
+    return dumps_for_terminal(payload)

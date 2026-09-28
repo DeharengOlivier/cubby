@@ -16,7 +16,7 @@ from ..adapters.config import (
 from ..adapters.journal import Journal
 from ..adapters.ledger import Ledger
 from ..adapters.logging import human_line, read_all
-from ..adapters.ui import Palette
+from ..adapters.ui import Palette, dumps_for_terminal
 from ..adapters.ui import escape_for_terminal as shown
 from ..app.explain import Explanation, PlannedPass, explain
 from ..app.history import recent_runs
@@ -98,7 +98,7 @@ def cmd_explain(args: argparse.Namespace) -> int:
             missing = True
     if getattr(args, "json", False):
         payload = {"version": 1, "items": [_explanation_json(i) for i in items]}
-        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        print(dumps_for_terminal(payload))
     else:
         pal = palette()
         for item in items:
@@ -113,7 +113,7 @@ def cmd_history(args: argparse.Namespace) -> int:
             "version": 1,
             "runs": [{**r.record.to_json(), "undone": r.undone, "undo": r.undo} for r in runs],
         }
-        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        print(dumps_for_terminal(payload))
         return EXIT_OK
     pal = palette()
     if not runs:
