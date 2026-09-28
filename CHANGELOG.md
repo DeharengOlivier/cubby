@@ -19,13 +19,19 @@ All notable changes to this project are documented here. The format is based on
   where a category folder goes, the config loads, and nothing paused it. A
   missing content converter shows as `degraded` (those formats are sorted by
   name and type). An installed or live agent that is not ready, for any
-  reason but a pause, makes `status` exit 1. `status --config FILE` checks
-  the config an agent was installed with.
-- `cubby status` shows the run time of the last 24 hours (p50, p95 and
-  longest), the p95 as a share of the interval between passes, and the
-  backlog of files left to settle, from the oldest run of the day to the
-  newest. Each ledger record now carries `duration_ms` and `waiting`; records
-  from older versions have neither and are left out.
+  reason but a pause, makes `status` exit 1: that includes an agent waiting
+  for its folder, for example on a volume that is not mounted. Readiness is
+  checked with the agent's own settings: the agent now reports its config
+  file, category folders and content flag in its heartbeat; without that
+  report, `status` reads the installed agent's command line, then the default
+  config, and says which it used. `status --config FILE` checks with that
+  file instead, and exits 2 when it is missing or invalid.
+- `cubby status` shows the run time of the agent's runs of the last 24 hours
+  (p50, p95 and longest), the p95 as a share of the interval between passes,
+  and the backlog of files left to settle, from the oldest run of the day to
+  the newest. Manual `cubby run` runs are left out. Each ledger record now
+  carries `duration_ms` and `waiting`; records from older versions have
+  neither and are left out.
 - `status --json` adds `live`, `readiness`, `agent.interval`,
   `activity.pass_ms`, `activity.backlog`, `activity.saturation` and
   `last_run.duration_ms`/`waiting`; `history --json` adds `runs[].duration_ms`
@@ -66,6 +72,12 @@ All notable changes to this project are documented here. The format is based on
   print a file name unescaped fails the type check or
   `tests/test_output_escaping.py` in CI, and `# type: ignore` and
   `typing.cast` are refused in the source. Other outputs are unchanged.
+- `cubby doctor` (since 0.1.0) and `cubby status` no longer import the content
+  converter libraries in their own process. Run as `python -m cubby` from a
+  folder holding a downloaded `docx.py`, `pypdf.py` or `openpyxl.py`, they
+  ran that file. The libraries are now checked in a child process started
+  from the filesystem root with `-P`, as the parsers already were.
+
 
 ## [0.4.0] - 2026-09-28
 

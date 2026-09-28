@@ -26,6 +26,10 @@ class Readiness:
     problems: tuple[str, ...]  # what stops the sorting, apart from a pause
     paused: bool
     degraded: tuple[str, ...] = ()  # formats sorted without their content: no converter
+    #: Whose settings it was checked with: "agent" (its heartbeat), "unit" (the
+    #: installed command line), "flag" (--config) or "default"; and their file.
+    basis: str = "default"
+    config: str | None = None
 
     @property
     def ready(self) -> bool:
@@ -36,6 +40,8 @@ class Readiness:
             "ready": self.ready,
             "problems": list(self.problems),
             "degraded": list(self.degraded),
+            "basis": self.basis,
+            "config": self.config,
         }
 
 

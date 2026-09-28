@@ -111,3 +111,7 @@ class Service(ABC):
 
     def is_installed(self, label: str = DEFAULT_LABEL) -> bool:
         return self.unit_path(label).exists()
+
+    def program_args(self, label: str = DEFAULT_LABEL) -> list[str] | None:
+        """The command line the installed unit runs, or None when it cannot be read."""
+        return None

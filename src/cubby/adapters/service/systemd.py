@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from .. import state
@@ -60,6 +61,27 @@ def quote_argument(arg: str) -> str:
     return f'"{escaped}"'
 
 
+#: One argument as :func:`quote_argument` writes it, and what follows it.
+_QUOTED_ARGUMENT = re.compile(r'"((?:[^"\\]|\\.)*)"(?:\s+|$)', re.DOTALL)
+
+
+def unit_program_args(unit: str) -> list[str] | None:
+    """The ``ExecStart=`` of a unit cubby wrote, read back; None if it is not one."""
+    line = next((ln for ln in unit.splitlines() if ln.startswith("ExecStart=")), None)
+    if line is None:
+        return None
+    rest = line.removeprefix("ExecStart=")
+    args: list[str] = []
+    while rest:
+        match = _QUOTED_ARGUMENT.match(rest)
+        if match is None:
+            return None
+        escaped = match.group(1).replace("%%", "%").replace("$$", "$")
+        args.append(re.sub(r"\\(.)", lambda m: "\n" if m[1] == "n" else m[1], escaped))
+        rest = rest[match.end() :]
+    return args or None
+
+
 def environment_line(key: str, value: str) -> str:
     """``Environment="KEY=value"``, read back by systemd as exactly that.
 
@@ -95,6 +117,12 @@ class SystemdService(Service):
         except ServiceError:
             return False
         return result.returncode == 0 and result.stdout.strip() == "active"
+
+    def program_args(self, label: str = DEFAULT_LABEL) -> list[str] | None:
+        try:
+            return unit_program_args(self.unit_path(label).read_text("utf-8"))
+        except (OSError, UnicodeError):
+            return None
 
     def install(self, spec: ServiceSpec) -> Path:
         _UNIT_DIR.mkdir(parents=True, exist_ok=True)

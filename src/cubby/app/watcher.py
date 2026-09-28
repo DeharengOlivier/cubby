@@ -18,7 +18,7 @@ from collections.abc import Callable
 from typing import Protocol
 
 from ..adapters.journal import new_run_id
-from ..adapters.ledger import Ledger, PassMetrics
+from ..adapters.ledger import Ledger, PassMetrics, RunsWith
 from ..adapters.lock import Busy, exclusive
 from ..adapters.logging import Level, run_context
 from .report import PassTally, SortOutcome
@@ -99,6 +99,7 @@ class Watcher:
         paused: Paused = _not_paused,
         alert: Alert = _no_alert,
         clock: Callable[[], float] = time.monotonic,
+        runs_with: RunsWith | None = None,
     ):
         self._sorter = sorter
         self._interval = interval
@@ -114,6 +115,7 @@ class Watcher:
         self._failing = False
         self._alerted: set[str] = set()
         self._clock = clock
+        self._runs_with = runs_with  # reported on every beat, for `cubby status`
 
     def run(self, *, stop: Stop = _never, max_cycles: int | None = None) -> int:
         """Run the poll loop. Returns the number of items sorted in total.
@@ -227,7 +229,9 @@ class Watcher:
         if self._ledger is None:
             return
         try:
-            self._ledger.beat(self._sorter.source, self._interval, last_pass)
+            self._ledger.beat(
+                self._sorter.source, self._interval, last_pass, runs_with=self._runs_with
+            )
         except OSError as exc:
             self._log(f"could not write the heartbeat ({exc})", level="WARNING")
 

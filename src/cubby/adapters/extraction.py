@@ -36,6 +36,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from . import state
+
 # Formats we know how to read as text. Anything else skips the content stage.
 PARSABLE: frozenset[str] = frozenset(
     {
@@ -72,16 +74,44 @@ _TOOLS = ("pdftotext", "textutil", "antiword", "catdoc")
 CONVERTERS = (*_TOOLS, *_LIBRARIES.values())
 
 
+#: Imports each library named in its arguments; prints which ones imported.
+_IMPORT_PROBE = """
+import importlib, json, sys
+found = {}
+for name in sys.argv[1:]:
+    try:
+        importlib.import_module(name)
+        found[name] = True
+    except Exception:  # absent, or a broken native wheel
+        found[name] = False
+print(json.dumps(found))
+"""
+
+
 def converters_present() -> dict[str, bool]:
-    """Which of :data:`CONVERTERS` this machine has (``cubby doctor`` and ``status``)."""
+    """Which of :data:`CONVERTERS` this machine has (``cubby doctor`` and ``status``).
+
+    The libraries are imported in a child, from the filesystem root and with
+    ``-P``, as the parsers are: run as ``python -m cubby`` from the Downloads
+    folder, an import here would run a downloaded ``docx.py`` instead. A
+    child that fails or times out reports every library absent.
+    """
     present = {name: bool(shutil.which(name)) for name in _TOOLS}
-    for lib in _LIBRARIES.values():
-        try:
-            __import__(lib)
-            present[lib] = True
-        except (ImportError, OSError):  # absent, or a broken native wheel
-            present[lib] = False
-    return present
+    libraries = list(_LIBRARIES.values())
+    try:
+        result = subprocess.run(  # nosec B603 - this interpreter, fixed arguments
+            [sys.executable, "-P", "-c", _IMPORT_PROBE, *libraries],
+            cwd="/",
+            capture_output=True,
+            text=True,
+            timeout=_TIMEOUT,
+            check=False,
+        )
+        lines = result.stdout.strip().splitlines()
+        found = state.parse_json(lines[-1]) if lines else {}
+    except (OSError, subprocess.SubprocessError, ValueError):
+        found = {}
+    return present | {lib: isinstance(found, dict) and found.get(lib) is True for lib in libraries}
 
 
 def formats_without_converter(present: dict[str, bool]) -> list[str]:

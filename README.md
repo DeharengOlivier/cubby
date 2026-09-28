@@ -305,17 +305,17 @@ heartbeat and the run ledger, and sums up the last 24 hours:
 
 ```
 $ cubby status
-agent           not installed, but cubby (pid 139816) is still sorting
+agent           not installed, but cubby (pid 346365) is still sorting
 watching        ~/Downloads
-last pass       1s ago, took 0 s, moved 0, 1 waiting to settle
+last pass       2s ago, took 0.021 s, moved 0
 live            yes
-ready           no (a file named Documents is in the way of the Documents/ folder cubby sorts into); degraded: no converter reads .doc, .rtf (see cubby doctor)
-last run        2026-09-28T19:21:07  moved 6  (watch, run 20260928T192105-39f3c5ca216ff6aa)
-last 24 h       1 run, moved 6, content unreadable for 3 (see cubby log --warnings)
-run time        p50 2 s, p95 2 s, max 2 s over 1 run; p95 is 40% of the 5s interval
+ready           no (a file named Scans is in the way of the Scans/ folder cubby sorts into); checked with the settings the agent reported (~/agent.toml)
+last run        2026-09-28T20:04:45  moved 2  (watch, run 20260928T200445-4569a820a6bc11e3)
+last 24 h       1 run, moved 2
+run time        p50 0.002 s, p95 0.002 s, max 0.002 s over 1 agent run; p95 is 0% of the 5s interval
 backlog         0 -> 0 waiting to settle (steady), peak 0
 recent log      ~/.local/state/cubby/cubby.log
-  2026-09-28T19:21:07  INFO    sorted 6 item(s)
+  2026-09-28T20:04:45  INFO    sorted 2 item(s)
 ```
 
 It shows the agent state and its pid, a pause, the last pass (duration, moves,
@@ -327,26 +327,34 @@ every converter broke on them.
 `live` and `ready` answer two questions. Live: an agent process is alive and
 passing (the service manager says it runs and its heartbeat is fresh, or a
 process that beat recently still exists). Ready: it can sort now. The watched
-folder (the one in the heartbeat, else the configured one) exists and can be
-read and written, the state folder can be written, no file stands where a
-category folder goes, the config loads, and nothing paused it. A missing content
-converter only degrades it: those formats are sorted by name and type. Give
-`status --config FILE` when the agent was installed with `--config`.
+folder exists and can be read and written, the state folder can be written, no
+file stands where one of the agent's category folders goes, its config loads,
+and nothing paused it. A missing content converter only degrades it: those
+formats are sorted by name and type (with `--no-content`, nothing is missed).
 
-`run time` is the p50, p95 and longest duration of the runs of the last 24 hours
-(nearest rank), and the p95 as a share of the interval between passes, in yellow
-from 50%: a run that takes as long as the interval leaves no idle time. Only runs
-that moved or failed a file are recorded, so idle passes are not counted. `backlog`
-is the number of files those runs left to settle, from the oldest to the newest
-run of the day, and the largest. Runs recorded by a cubby before 0.5 have no
-duration or backlog and are left out of both.
+Readiness is checked with the agent's own settings, and the line says whose:
+the settings the agent reports in its heartbeat (its folder, config file,
+category folders and content flag), else the command line of the installed
+agent (`--config`, `--source`, `--no-content`), else the default config.
+`status --config FILE` checks with that file instead, and exits 2 when it is
+missing or invalid.
+
+`run time` is the p50, p95 and longest duration of the agent's runs of the last
+24 hours (nearest rank), and the p95 as a share of the interval between passes,
+in yellow from 50%: a run that takes as long as the interval leaves no idle
+time. Manual `cubby run` runs are left out, and so are idle passes, which the
+ledger does not record. `backlog` is the number of files those runs left to
+settle, from the oldest to the newest run of the day, and the largest. Runs
+recorded by a cubby before 0.5 have no duration or backlog and are left out of
+both.
 
 `status` exits 1 when an installed agent is not running, when its last pass is
 older than three intervals or two minutes, whichever is longer, when it has
 completed no pass two minutes after install, or when an installed or live agent
-is not ready for a reason other than a pause. A pause is your decision and ends
-on `cubby resume` or by itself, so it shows as not ready and still exits 0.
-Without an agent, readiness is shown and the exit stays 0.
+is not ready for a reason other than a pause. That includes an agent waiting
+for its folder, for example on a volume that is not mounted. A pause is your
+decision and ends on `cubby resume` or by itself, so it shows as not ready and
+still exits 0. Without an agent, readiness is shown and the exit stays 0.
 
 `cubby history` lists recent runs, newest first (`-n`, default 20): time, id,
 agent (`watch`) or manual (`run`), counts, and the undo state (`undoable`,

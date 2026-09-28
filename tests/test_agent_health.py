@@ -288,6 +288,9 @@ class Agent:
     def __init__(self, *, installed: bool, running: bool) -> None:
         self.installed, self.running = installed, running
 
+    def program_args(self, label: str = "com.cubby.agent") -> list[str] | None:
+        return None  # no unit to read: readiness uses the default config
+
     def is_installed(self, label: str = "com.cubby.agent") -> bool:
         return self.installed
 

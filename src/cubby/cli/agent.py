@@ -35,6 +35,7 @@ from ..adapters.ui import Palette, Shown, dumps_for_terminal
 from ..adapters.ui import escape_for_terminal as shown
 from ..app.activity import Activity, summarize
 from ..app.readiness import Readiness, check_readiness
+from ..domain.category import Config, Settings
 from ..domain.duration import format_duration
 from .common import (
     EXIT_FAILED,
@@ -235,21 +236,96 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 
 def _readiness(args: argparse.Namespace, watching: str | None, *, paused: bool) -> Readiness:
-    """Readiness of the folder the agent last watched, or else of the configured one."""
+    """Readiness, checked with the settings the agent runs with, as far as they are known.
+
+    In order: ``--config`` (the person asked; a config it cannot read is exit
+    2), the settings the agent reports in its heartbeat, the command line of
+    the installed unit, then the default config. The folder is the one the
+    agent last watched, when it said.
+
+    Raises:
+        ValueError: The ``--config`` file is missing or invalid.
+    """
+    if getattr(args, "config", None):
+        path = Path(args.config).expanduser()
+        if not path.is_file():
+            raise ValueError(f"config file not found: {path}")
+        return _checked(load_from_args(args), watching, paused, "flag", str(path))
+    beat = Ledger().heartbeat()
+    if beat is not None and beat.runs_with is not None:
+        runs_with = beat.runs_with
+        try:
+            settings = replace(
+                Settings(),
+                source=Path(watching or beat.source),
+                unsorted_dir=runs_with.unsorted_dir,
+                content_scan=runs_with.content_scan,
+            )
+        except ValueError:
+            pass  # a damaged report: fall back to the unit
+        else:
+            managed = frozenset(runs_with.folders)
+            return _check(settings, managed, paused, "agent", runs_with.config)
+    service = detect_service()
+    unit = service.program_args() if service and service.is_installed() else None
+    flags = _agent_flags(unit) if unit else None
+    basis = "unit" if flags is not None else "default"
+    flags = flags if flags is not None else argparse.Namespace()
+    config_file = getattr(flags, "config", None) or config_module.find_user_config()
     try:
-        config = load_from_args(args)
+        config = load_from_args(flags)
     except (ValueError, OSError) as exc:  # TOMLDecodeError included
-        return Readiness(problems=(f"config error: {exc}",), paused=paused)
+        problem = f"config error: {exc}"
+        return Readiness((problem,), paused, basis=basis, config=_text(config_file))
+    return _checked(config, watching, paused, basis, _text(config_file))
+
+
+def _text(path: str | Path | None) -> str | None:
+    return None if path is None else str(path)
+
+
+def _agent_flags(program_args: list[str]) -> argparse.Namespace | None:
+    """The readiness settings of an installed ``cubby watch`` command line."""
+    if "watch" not in program_args:
+        return None
+    flags = argparse.Namespace(config=None, source=None, no_content=False)
+    rest = program_args[program_args.index("watch") + 1 :]
+    for flag, value in zip(rest, [*rest[1:], None], strict=True):
+        if flag in ("--config", "--source") and value is not None:
+            setattr(flags, flag.removeprefix("--"), value)
+        elif flag == "--no-content":
+            flags.no_content = True
+    return flags
+
+
+def _checked(
+    config: Config, watching: str | None, paused: bool, basis: str, config_file: str | None
+) -> Readiness:
     settings = config.settings
     if watching:
         settings = replace(settings, source=Path(watching))
-    return check_readiness(
+    return _check(settings, config.managed_dirs, paused, basis, config_file)
+
+
+def _check(
+    settings: Settings, managed: frozenset[str], paused: bool, basis: str, config: str | None
+) -> Readiness:
+    readiness = check_readiness(
         settings,
-        config.managed_dirs,
+        managed,
         state_folder=state.state_dir(),
         paused=paused,
         converters=converters_present() if settings.content_scan else {},
     )
+    return replace(readiness, basis=basis, config=config)
+
+
+_BASIS_TEXT = {
+    "agent": "the settings the agent reported",
+    "unit": "the installed agent's command line",
+    "flag": "--config",
+    "default": "the default config",
+}
 
 
 def _readiness_text(pal: Palette, readiness: Readiness, pause: Pause | None) -> str:
@@ -261,7 +337,10 @@ def _readiness_text(pal: Palette, readiness: Readiness, pause: Pause | None) -> 
     if readiness.degraded:
         formats = ", ".join(f".{ext}" for ext in readiness.degraded)
         text += pal.dim(f"; degraded: no converter reads {formats} (see cubby doctor)")
-    return text
+    basis = _BASIS_TEXT[readiness.basis]
+    if readiness.config:
+        basis += f" ({shown(readiness.config)})"
+    return text + pal.dim(f"; checked with {basis}")
 
 
 def _saturation(day: Activity, agent: dict[str, Any]) -> float | None:
@@ -280,7 +359,7 @@ def _print_latency(
         text = (
             f"p50 {_seconds(latency.p50)} s, p95 {_seconds(latency.p95)} s, "
             f"max {_seconds(latency.max)} s over {latency.count} "
-            f"run{'s' if latency.count != 1 else ''}"
+            f"agent run{'s' if latency.count != 1 else ''}"
         )
         if saturation is not None:
             share = f"p95 is {saturation:.0%} of the {format_duration(agent['interval'])} interval"

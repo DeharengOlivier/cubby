@@ -177,6 +177,9 @@ class Running:
     def unit_path(self, label: str) -> Path:
         return Path("/tmp/fake.agent")
 
+    def program_args(self, label: str = "com.cubby.agent") -> list[str] | None:
+        return None
+
 
 def _status(monkeypatch, capsys, source: Path, *, installed: bool, extra=()) -> tuple[int, str]:
     monkeypatch.setattr(cli_agent, "detect_service", lambda: Running() if installed else None)
@@ -220,14 +223,20 @@ def test_a_paused_agent_is_not_ready_and_keeps_exit_0(tmp_path, monkeypatch, cap
     assert "ready           no (paused" in out
 
 
-def test_a_broken_config_is_reported_as_not_ready(tmp_path, monkeypatch, capsys):
+def test_a_broken_agent_config_is_reported_as_not_ready(tmp_path, monkeypatch, capsys):
+    # The agent's own config, read from its unit: `status --config BAD` is exit 2.
     (tmp_path / "Downloads").mkdir()
     bad = tmp_path / "config.toml"
     bad.write_text("[settings\n", "utf-8")
 
-    code, out = _status(
-        monkeypatch, capsys, tmp_path / "Downloads", installed=True, extra=["--config", str(bad)]
-    )
+    class WithBadConfig(Running):
+        def program_args(self, label: str = "com.cubby.agent") -> list[str] | None:
+            return ["/bin/cubby", "watch", "--config", str(bad)]
+
+    monkeypatch.setattr(cli_agent, "detect_service", WithBadConfig)
+    Ledger().beat(tmp_path / "Downloads", 30)
+    code = main(["status"])
+    out = capsys.readouterr().out
 
     assert code == EXIT_FAILED
     assert "ready           no (config error:" in out
@@ -361,6 +370,6 @@ def test_status_shows_pass_times_and_saturation(tmp_path, monkeypatch, capsys):
     code, out = _status(monkeypatch, capsys, tmp_path / "Downloads", installed=True)
 
     assert code == EXIT_OK
-    assert "p50 0.4 s, p95 3 s, max 3 s over 3 runs" in out
+    assert "p50 0.4 s, p95 3 s, max 3 s over 3 agent runs" in out
     assert "p95 is 10% of the 30s interval" in out
     assert "0 -> 4 waiting to settle (rising), peak 4" in out

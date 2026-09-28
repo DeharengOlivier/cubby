@@ -7,10 +7,12 @@ import contextlib
 import signal
 import sys
 import threading
+from pathlib import Path
 
+from ..adapters import config as config_module
 from ..adapters.filesystem import blocked_folders
 from ..adapters.journal import Journal
-from ..adapters.ledger import Ledger
+from ..adapters.ledger import Ledger, RunsWith
 from ..adapters.lock import exclusive
 from ..adapters.logging import file_logger
 from ..adapters.notify import notifier
@@ -153,6 +155,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
         sleep=stopping.sleep,
         paused=_pause_reason,
         alert=notifier(config.settings.notify, warn=warn),
+        runs_with=RunsWith.of(config, _config_file(args)),
     )
     log(
         f"cubby watching {config.settings.source} "
@@ -167,6 +170,13 @@ def cmd_watch(args: argparse.Namespace) -> int:
             signal.signal(signal.SIGTERM, previous)
     log("cubby stopped")
     return EXIT_OK
+
+
+def _config_file(args: argparse.Namespace) -> Path | None:
+    """The config file this command read, or None for the packaged defaults."""
+    if getattr(args, "config", None):
+        return Path(args.config).expanduser().resolve()
+    return config_module.find_user_config()
 
 
 def _pause_reason() -> str | None:

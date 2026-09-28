@@ -37,6 +37,16 @@ class LaunchdService(Service):
             return False
         return result.returncode == 0 and '"PID"' in result.stdout
 
+    def program_args(self, label: str = DEFAULT_LABEL) -> list[str] | None:
+        try:
+            with self.unit_path(label).open("rb") as handle:
+                args = plistlib.load(handle).get("ProgramArguments")
+        except (OSError, plistlib.InvalidFileException, ValueError, AttributeError):
+            return None
+        if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
+            return None
+        return args
+
     def install(self, spec: ServiceSpec) -> Path:
         _AGENTS_DIR.mkdir(parents=True, exist_ok=True)
         state.ensure_parent(spec.log_path)

@@ -6,8 +6,8 @@ converter
 (sorted anyway, so counted apart from the failures). Forty files refused with
 the same permission error are one problem to fix, not forty, so they read as
 one line, with the files it hit, when it was last seen and which cubby versions
-saw it. The runs that recorded their duration and the files they left to settle
-give the day's run time (p50, p95, longest) and backlog.
+saw it. The agent's runs that recorded their duration and the files they left
+to settle give its run time of the day (p50, p95, longest) and backlog.
 """
 
 from __future__ import annotations
@@ -42,13 +42,13 @@ class Activity:
     errors: tuple[ErrorGroup, ...]  # the most frequent first
     complete: bool  # False when the ledger was trimmed of runs inside the window
     extraction_failures: int  # files sorted without their content: converters broke
-    pass_ms: PassLatency | None = None  # None when no run of the window was timed
-    backlog: Backlog | None = None  # None when no run of the window counted its waiting files
+    pass_ms: PassLatency | None = None  # None when no agent run of the window was timed
+    backlog: Backlog | None = None  # None when no agent run of the window counted its waiting
 
 
 @dataclass(frozen=True)
 class PassLatency:
-    """How long the timed runs of the window took, in milliseconds (nearest rank)."""
+    """How long the agent's timed runs of the window took, in milliseconds (nearest rank)."""
 
     count: int
     p50: int
@@ -58,7 +58,7 @@ class PassLatency:
 
 @dataclass(frozen=True)
 class Backlog:
-    """Files left to settle by the runs of the window: the oldest, the newest, the most."""
+    """Files the agent's runs of the window left to settle: the oldest, the newest, the most."""
 
     first: int
     last: int
@@ -112,6 +112,7 @@ def summarize(
         if since <= when <= now
     ]
     complete = not trimmed or any(when < since for when, _ in dated)
+    agent = [record for record in recent if record.mode == "watch"]
     groups: dict[str, _Group] = {}
     for record in recent:
         for kind in dict.fromkeys(error_kind(f.error) for f in record.failures):
@@ -132,8 +133,10 @@ def summarize(
         errors=tuple(_frozen(kind, group) for kind, group in ranked[:top]),
         complete=complete,
         extraction_failures=sum(record.extraction_failures for record in recent),
-        pass_ms=_latency([r.duration_ms for r in recent if r.duration_ms is not None]),
-        backlog=_backlog([r.waiting for r in reversed(recent) if r.waiting is not None]),
+        # The agent's runs only: a manual `cubby run`, maybe on another folder,
+        # says nothing about how close the agent's passes come to its interval.
+        pass_ms=_latency([r.duration_ms for r in agent if r.duration_ms is not None]),
+        backlog=_backlog([r.waiting for r in reversed(agent) if r.waiting is not None]),
     )
 
 

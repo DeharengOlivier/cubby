@@ -20,6 +20,7 @@ import fastjsonschema
 import pytest
 
 from cubby.adapters import extraction, state
+from cubby.adapters.config import load_config
 from cubby.adapters.ledger import Ledger, PassMetrics, RunRecord
 from cubby.adapters.logging import LEVELS, file_logger, run_context
 from cubby.adapters.pause import pause_path, set_pause
@@ -314,8 +315,12 @@ def test_status_with_run_times_a_backlog_and_a_degraded_readiness(downloads, cap
         cli_agent, "converters_present", lambda: dict.fromkeys(extraction.CONVERTERS, False)
     )
     aged_file(downloads, "Documents")  # in the way: a readiness problem
-    main(["run", "--source", str(downloads), "--delay", "0"])
-    capsys.readouterr()
+    sorter = sorter_module.Sorter(
+        load_config(overrides={"settings": {"source": str(downloads), "delay": 0}}),
+        ledger=Ledger(),
+        mode="watch",  # only the agent's runs make its run time
+    )
+    sorter.sort_once(apply=True)
     with process_named_cubby_watch() as pid:
         monkeypatch.setattr("os.getpid", lambda: pid)
         Ledger().beat(downloads, 30.0)

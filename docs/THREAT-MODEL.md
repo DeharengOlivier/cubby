@@ -72,7 +72,7 @@ publish a release.
 - A crafted document cannot stall or exhaust the agent: parsers run in a child process with a
   memory ceiling and a timeout, files past a size ceiling are not read
   (`tests/test_extraction_bounds.py`, `tests/test_review_pr2.py`).
-- A downloaded `.py` file is never imported by a parser child (`tests/test_review_pr2.py`).
+- A downloaded `.py` file is never imported by a parser child (`tests/test_review_pr2.py`), nor by the converter check of `doctor` and `status` run as `python -m cubby` from that folder (`tests/test_review_pr33.py`).
 - A file name with any character the filesystem allows, including Unicode line separators and
   (on Linux) bytes that are not valid UTF-8, keeps an undoable journal entry and is reported
   without crashing (`tests/test_properties.py`, `tests/test_undo_everything.py`).
