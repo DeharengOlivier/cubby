@@ -268,10 +268,12 @@ def test_compaction_keeps_the_most_recent_runs_whole(tmp_path, monkeypatch):
 
 def test_a_crash_while_compacting_leaves_the_journal_intact(tmp_path, monkeypatch):
     journal = _journal(tmp_path)
-    _recorded_move(journal, tmp_path, "one.txt", run="r1")
+    source, destination = _recorded_move(journal, tmp_path, "one.txt", run="r1")
+    journal.settle(Entry("r1", 0, "move", source, destination), "restored")
     _recorded_move(journal, tmp_path, "two.txt", run="r2")
     before = journal.path.read_text(encoding="utf-8")
     monkeypatch.setattr(journal_module, "MAX_BYTES", 1)
+    monkeypatch.setattr(journal_module, "KEEP_RUNS", 1)  # r1 is undone and old: it goes
 
     def failing_replace(self, target):
         raise OSError("disk full")
@@ -289,3 +291,34 @@ def test_the_journal_is_readable_by_its_owner_only(tmp_path):
     journal = _journal(tmp_path)
     _recorded_move(journal, tmp_path, "a.txt")
     assert journal.path.stat().st_mode & 0o777 == 0o600
+
+
+def test_a_journal_that_cannot_shrink_is_not_reread_every_pass(tmp_path, monkeypatch):
+    # Measured in docs/PERFORMANCE.md: after sorting 60 000 files the journal held
+    # 24 MB of undoable moves, and every idle pass of the agent spent 6.8 s
+    # re-reading it to find nothing it could drop.
+    journal = _journal(tmp_path)
+    for index in range(3):
+        journal.record(Entry(f"r{index}", 0, "move", Path(f"/a/{index}"), Path(f"/b/{index}")))
+    monkeypatch.setattr(journal_module, "MAX_BYTES", 1)
+    reads = {"n": 0}
+    real_runs = Journal.runs
+
+    def counting_runs(self):
+        reads["n"] += 1
+        return real_runs(self)
+
+    monkeypatch.setattr(Journal, "runs", counting_runs)
+    size = journal.path.stat().st_size
+
+    journal.compact()  # everything is pending: nothing can go
+    journal.compact()
+    journal.compact()
+    assert reads["n"] == 1
+    assert journal.path.stat().st_size == size
+
+    # Once the file has doubled, it is worth trying again.
+    for index in range(3, 7):
+        journal.record(Entry(f"r{index}", 0, "move", Path(f"/a/{index}"), Path(f"/b/{index}")))
+    journal.compact()
+    assert reads["n"] == 2
