@@ -105,6 +105,8 @@ def test_a_damaged_identity_reads_as_unknown(tmp_path):
     recorded = [
         [1, 2, 3, 4],
         [0, 2, 0, 0],
+        [1, 2, 3, -5],
+        [1, 2, -3, 4],
         [1, 2],
         "x",
         [1, 2, 3, "4"],
@@ -117,7 +119,18 @@ def test_a_damaged_identity_reads_as_unknown(tmp_path):
 
     idents = [entry.ident for entry in journal.runs()[0].entries]
 
-    assert idents == [(1, 2, 3, 4), (0, 2, 0, 0), None, None, None, None, None, None]
+    assert idents == [
+        (1, 2, 3, 4),
+        (0, 2, 0, 0),
+        (1, 2, 3, -5),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    ]
 
 
 def test_a_duplicate_is_not_recreated_from_a_replaced_copy(tmp_path):
@@ -341,3 +354,75 @@ def test_a_destination_under_a_file_now_is_gone(tmp_path):
     result = undo_run(journal)
 
     assert (result.gone, result.failed) == (1, [])
+
+
+# --- from the second re-review ---------------------------------------------------
+
+
+def _sorted_tree(tmp_path, *files: str) -> tuple[Journal, Path]:
+    for name in files:
+        path = tmp_path / "holiday" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(name, encoding="utf-8")
+    past = time.time() - 10_000
+    os.utime(tmp_path / "holiday", (past, past))
+    journal = Journal(tmp_path.parent / f"{tmp_path.name}.jsonl")
+    Sorter(config_for(tmp_path), journal=journal).sort_once(apply=True)
+    return journal, tmp_path / "_Unsorted" / "holiday"
+
+
+def test_a_folder_of_folders_opened_in_finder_still_comes_back(tmp_path):
+    # Found by re-review: the witness was a subfolder, whose time Finder changes.
+    journal, filed = _sorted_tree(tmp_path, "2024/p.jpg", "2025/q.jpg")
+    (filed / "2024" / ".DS_Store").write_bytes(b"finder")
+
+    assert undo_run(journal).restored == 1
+
+
+def test_a_folder_of_folders_made_again_is_left_in_place(tmp_path):
+    journal, filed = _sorted_tree(tmp_path, "2024/p.jpg")
+    shutil.rmtree(filed)
+    (filed / "2024").mkdir(parents=True)
+    (filed / "2024" / "p.jpg").write_text("another", encoding="utf-8")
+
+    assert undo_run(journal).replaced == 1
+
+
+def test_the_witness_is_a_file_before_a_folder(tmp_path):
+    journal, filed = _sorted_tree(tmp_path, "a/x.txt", "z.txt")
+    (filed / "a" / ".DS_Store").write_bytes(b"finder")
+
+    assert undo_run(journal).restored == 1
+
+
+def test_a_hidden_file_is_never_the_witness(tmp_path):
+    journal, filed = _sorted_tree(tmp_path, ".DS_Store", "a.txt")
+    (filed / ".DS_Store").write_bytes(b"rewritten by finder")
+
+    assert undo_run(journal).restored == 1
+
+
+@pytest.mark.parametrize("change", ["time", "size"])
+def test_a_file_differing_in_time_or_size_alone_is_another_file(tmp_path, change):
+    journal, _ = _sorted(tmp_path, "a.txt")
+    filed = tmp_path / "Documents" / "a.txt"
+    before = filed.stat()
+    if change == "time":
+        os.utime(filed, ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000))
+    else:
+        filed.write_text("xx", encoding="utf-8")
+        os.utime(filed, ns=(before.st_atime_ns, before.st_mtime_ns))
+
+    assert undo_run(journal).replaced == 1
+
+
+def test_a_file_dated_before_1970_is_still_checked(tmp_path):
+    # Found by re-review: a negative time made the journal drop the identity.
+    aged_file(tmp_path, "old.txt")
+    os.utime(tmp_path / "old.txt", (-86_400, -86_400))
+    journal = Journal(tmp_path.parent / "o.jsonl")
+    Sorter(config_for(tmp_path), journal=journal).sort_once(apply=True)
+    (tmp_path / "Documents" / "old.txt").write_text("replaced", encoding="utf-8")
+
+    assert journal.runs()[0].entries[0].ident is not None
+    assert undo_run(journal).replaced == 1
