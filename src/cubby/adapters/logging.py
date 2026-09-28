@@ -25,6 +25,7 @@ from typing import Literal, Protocol, get_args
 from .. import __version__
 from . import state
 from .ui import escape_for_terminal as shown
+from .ui import os_error_text
 
 #: How much a log line matters. Typed, so a level cubby would later read back
 #: as foreign text (see :func:`_parse`) cannot be written in the first place.
@@ -112,7 +113,9 @@ def file_logger(path: Path | None = None, *, echo: bool = False) -> LevelLogger:
         except OSError as exc:
             if not reported:
                 reported = True
-                problem = f"cannot write the log {shown(str(destination))}: {shown(str(exc))}"
+                problem = (
+                    f"cannot write the log {shown(str(destination))}: {shown(os_error_text(exc))}"
+                )
                 print(f"cubby: warning: {problem}", file=sys.stderr)
 
     return log

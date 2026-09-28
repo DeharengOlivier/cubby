@@ -15,7 +15,7 @@ from ..adapters.lock import exclusive
 from ..adapters.logging import file_logger
 from ..adapters.notify import notifier
 from ..adapters.pause import clear_pause, current_pause, set_pause
-from ..adapters.ui import banner
+from ..adapters.ui import banner, os_error_text
 from ..adapters.ui import escape_for_terminal as shown
 from ..app.report import LeftAlone, SortOutcome, render_json, render_plan
 from ..app.sorter import Sorter
@@ -178,7 +178,7 @@ def cmd_pause(args: argparse.Namespace) -> int:
     try:
         pause = set_pause(args.duration)
     except OSError as error:
-        print(f"cubby: could not pause: {shown(str(error))}", file=sys.stderr)
+        print(f"cubby: could not pause: {shown(os_error_text(error))}", file=sys.stderr)
         return EXIT_FAILED
     print(f"The agent is {shown(pause.describe())}. It stops before the next file it would move.")
     print("Resume with: cubby resume")
@@ -189,7 +189,7 @@ def cmd_resume(args: argparse.Namespace) -> int:
     try:
         lifted = clear_pause()
     except OSError as error:
-        print(f"cubby: could not resume: {shown(str(error))}", file=sys.stderr)
+        print(f"cubby: could not resume: {shown(os_error_text(error))}", file=sys.stderr)
         return EXIT_FAILED
     print("Resumed: the agent sorts again at its next pass." if lifted else "Not paused.")
     return EXIT_OK
