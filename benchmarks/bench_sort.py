@@ -1,11 +1,20 @@
 """Measure what sorting a folder costs, so the README numbers can be re-run.
 
     python benchmarks/bench_sort.py
-    python benchmarks/bench_sort.py 500 5000
+    python benchmarks/bench_sort.py 500 5000 --repeat 7
 
-Each size is measured in a process of its own, because peak resident memory is a
-high-water mark that never comes back down: measuring three sizes in one process
-reports the second and third as free.
+Each size is measured ``--repeat`` times, each time in a process of its own on a
+fresh folder, because peak resident memory is a high-water mark that never
+comes back down and because an applied sort leaves nothing to sort again. The
+table reports the median and the slowest repetition (the p100: with a handful of
+samples a p90 or p99 is the maximum anyway).
+
+Three timings per repetition:
+
+- plan: ``cubby plan`` over the folder, nothing moved;
+- apply: one pass that moves every file, journal and ledger included;
+- idle: the next pass of the agent, once the folder is sorted, which is what the
+  agent pays every interval in the steady state.
 """
 
 from __future__ import annotations
@@ -15,17 +24,24 @@ import json
 import os
 import resource
 import shutil
+import statistics
 import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
 
+from cubby.adapters.journal import Journal
+from cubby.adapters.ledger import Ledger
 from cubby.app.sorter import Sorter
 from cubby.domain.category import Category, Config, Settings
 from cubby.domain.engine import Engine
 
-DEFAULT_SIZES = (1_000, 5_000, 20_000)
+DEFAULT_SIZES = (1_000, 10_000, 20_000)
+DEFAULT_REPEAT = 5
+#: Budget per repetition: generous for 200 000 files on a laptop disk, finite so a
+#: hang fails the benchmark instead of blocking it.
+SECONDS_PER_THOUSAND_FILES = 6.0
 
 
 def peak_rss_mb() -> float:
@@ -56,7 +72,14 @@ def measure(n: int) -> dict[str, float]:
                 Category(name="Documents", extensions=frozenset({"pdf"}), strong_ext=True),
             ),
         )
-        sorter = Sorter(config, Engine(config))
+        # The real agent journals every move and records every pass: both are
+        # part of the cost being measured.
+        sorter = Sorter(
+            config,
+            Engine(config),
+            journal=Journal(root / "state" / "journal.jsonl"),
+            ledger=Ledger(root / "state"),
+        )
 
         before = peak_rss_mb()
         started = time.perf_counter()
@@ -64,15 +87,24 @@ def measure(n: int) -> dict[str, float]:
         plan_s = time.perf_counter() - started
 
         started = time.perf_counter()
-        sorter.sort_once(apply=True)
+        applied = sorter.sort_once(apply=True)
         apply_s = time.perf_counter() - started
 
+        started = time.perf_counter()
+        left = sorter.sort_once(apply=True)
+        idle_s = time.perf_counter() - started
+
+        moved = sum(1 for outcome in applied if outcome.moved_to is not None)
+        if len(planned) != n or moved != n or left:
+            raise RuntimeError(
+                f"expected {n} planned and moved, 0 left; got {len(planned)}, {moved}, {len(left)}"
+            )
         return {
             "n": n,
             "plan_s": plan_s,
             "apply_s": apply_s,
+            "idle_s": idle_s,
             "memory_mb": peak_rss_mb() - before,
-            "planned": len(planned),
         }
     finally:
         shutil.rmtree(root, ignore_errors=True)
@@ -84,6 +116,7 @@ def measure_in_a_fresh_process(n: int) -> dict[str, float]:
         capture_output=True,
         text=True,
         check=True,
+        timeout=30 + n / 1000 * SECONDS_PER_THOUSAND_FILES,
     )
     result: dict[str, float] = json.loads(completed.stdout)
     return result
@@ -92,6 +125,7 @@ def measure_in_a_fresh_process(n: int) -> dict[str, float]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("sizes", nargs="*", type=int, default=list(DEFAULT_SIZES))
+    parser.add_argument("--repeat", type=int, default=DEFAULT_REPEAT)
     parser.add_argument("--single", type=int, default=None, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
@@ -99,15 +133,23 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(measure(args.single)))
         return 0
 
-    print("| Files | Plan | Apply | Memory |")
-    print("| --- | --- | --- | --- |")
+    print(f"Median / slowest of {args.repeat} runs, each in a fresh process on a fresh folder.")
+    print()
+    print("| Files | Plan | Apply | Apply per file | Idle pass | Peak memory |")
+    print("| ---: | ---: | ---: | ---: | ---: | ---: |")
     for n in sorted(args.sizes):
-        row = measure_in_a_fresh_process(n)
+        rows = [measure_in_a_fresh_process(n) for _ in range(args.repeat)]
         print(
-            f"| {int(row['n']):,} | {row['plan_s']:.2f} s | "
-            f"{row['apply_s']:.2f} s | ~{row['memory_mb']:.0f} MB |"
+            f"| {n:,} | {_spread(rows, 'plan_s')} | {_spread(rows, 'apply_s')} | "
+            f"{statistics.median(r['apply_s'] for r in rows) / n * 1e6:.0f} us | "
+            f"{_spread(rows, 'idle_s')} | {max(r['memory_mb'] for r in rows):.0f} MB |"
         )
     return 0
+
+
+def _spread(rows: list[dict[str, float]], key: str) -> str:
+    values = [row[key] for row in rows]
+    return f"{statistics.median(values):.2f} / {max(values):.2f} s"
 
 
 if __name__ == "__main__":  # pragma: no cover - a script, not an import

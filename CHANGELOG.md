@@ -14,6 +14,18 @@ All notable changes to this project are documented here. The format is based on
   and the ledger use. Ledger records carry the version too; older records read
   as `unknown`.
 
+### Fixed
+- A move whose source could not be removed (a read-only folder) left the file
+  under both names. After a failed undo, the retry then restored a second copy,
+  `name (1).ext`, beside `name.ext`. A failed move now changes nothing.
+- `cubby uninstall` on Linux reported success while the agent kept running. Both
+  backends now check that the agent stopped, and keep the unit when it did not.
+- `cubby status` said "not installed" about a cubby that was still sorting; it
+  now names the live process (`live_pid` in `--json`).
+- The runbook, executed by an operator in a throwaway home, had seven false
+  claims (stop checks, fallback commands, evidence copy, what undo leaves
+  pending, rollback order); rewritten, with the drill in `docs/audits/`.
+
 ### Changed
 - `cli.py` became the `cubby.cli` package (sorting, inspection, agent commands),
   and cyclomatic complexity is now capped at 10 by the linter.
