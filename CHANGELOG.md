@@ -24,6 +24,10 @@ All notable changes to this project are documented here. The format is based on
   default branch's copy of its workflow, so editing that workflow in a pull
   request no longer changes how the pull request is judged.
 
+- Output escaping is enforced, not just tested: a new message that would
+  print a file name unescaped fails the type check or
+  `tests/test_output_escaping.py` in CI. What cubby prints is unchanged.
+
 ### Fixed
 - The test suite could write to the real state folder of whoever ran it: a
   run of the suite put two "a line from the test suite" lines in the

@@ -73,7 +73,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     if (pause := current_pause()) is not None:
         print(
-            f"cubby: note: the agent is {pause.describe()}; this manual run proceeds.",
+            f"cubby: note: the agent is {shown(pause.describe())}; this manual run proceeds.",
             file=sys.stderr,
         )
     sorter = Sorter(config, log=log, warn=warn, journal=Journal(), ledger=Ledger())
@@ -101,21 +101,21 @@ def cmd_undo(args: argparse.Namespace) -> int:
                 f"cubby: no run {args.run!r} in the journal; see 'cubby history'", file=sys.stderr
             )
             return EXIT_FAILED
-    print(f"Restored {result.restored} file(s).")
+    print(f"Restored {result.restored:d} file(s).")
     if result.gone:
         print(
-            f"cubby: {result.gone} no longer where the run put it (moved or deleted since).",
+            f"cubby: {result.gone:d} no longer where the run put it (moved or deleted since).",
             file=sys.stderr,
         )
     if result.replaced:
         print(
-            f"cubby: {result.replaced} changed or replaced since the run, left in place.",
+            f"cubby: {result.replaced:d} changed or replaced since the run, left in place.",
             file=sys.stderr,
         )
     if result.failed:
         print(
             f"cubby: {len(result.failed)} file(s) could not be restored and stay pending; "
-            f"run 'cubby undo --run {result.run_id}' again once the cause is fixed.",
+            f"run 'cubby undo --run {shown(str(result.run_id))}' again once the cause is fixed.",
             file=sys.stderr,
         )
         return EXIT_FAILED
@@ -178,9 +178,9 @@ def cmd_pause(args: argparse.Namespace) -> int:
     try:
         pause = set_pause(args.duration)
     except OSError as error:
-        print(f"cubby: could not pause: {error}", file=sys.stderr)
+        print(f"cubby: could not pause: {shown(str(error))}", file=sys.stderr)
         return EXIT_FAILED
-    print(f"The agent is {pause.describe()}. It stops before the next file it would move.")
+    print(f"The agent is {shown(pause.describe())}. It stops before the next file it would move.")
     print("Resume with: cubby resume")
     return EXIT_OK
 
@@ -189,7 +189,7 @@ def cmd_resume(args: argparse.Namespace) -> int:
     try:
         lifted = clear_pause()
     except OSError as error:
-        print(f"cubby: could not resume: {error}", file=sys.stderr)
+        print(f"cubby: could not resume: {shown(str(error))}", file=sys.stderr)
         return EXIT_FAILED
     print("Resumed: the agent sorts again at its next pass." if lifted else "Not paused.")
     return EXIT_OK

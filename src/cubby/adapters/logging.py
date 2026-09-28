@@ -112,7 +112,8 @@ def file_logger(path: Path | None = None, *, echo: bool = False) -> LevelLogger:
         except OSError as exc:
             if not reported:
                 reported = True
-                print(f"cubby: warning: cannot write the log {destination}: {exc}", file=sys.stderr)
+                problem = f"cannot write the log {shown(str(destination))}: {shown(str(exc))}"
+                print(f"cubby: warning: {problem}", file=sys.stderr)
 
     return log
 

@@ -7,6 +7,10 @@ Pure stdlib. Colour is auto-disabled when the stream is not a TTY, when
 A file name is untrusted text (anyone can drop a file into Downloads), so
 every human rendering of a name, a path or a message quoting one goes through
 :func:`escape_for_terminal` before it is coloured or printed.
+
+What the escapers return is typed :data:`Shown`, which mypy tracks through
+the palette, ``kv`` and the renderers; ``tests/test_output_escaping.py``
+checks that nothing else reaches a ``print``.
 """
 
 from __future__ import annotations
@@ -15,9 +19,16 @@ import json
 import os
 import re
 import unicodedata
-from typing import Any, TextIO
+from typing import Any, NewType, TextIO, TypeVar, overload
 
 from .. import __version__
+
+#: Text safe to show on a terminal: escaped, or built only from escaped text
+#: and cubby's own words. Only the escapers below make one from any text;
+#: elsewhere ``Shown(...)`` wraps what the AST check can vouch for.
+Shown = NewType("Shown", str)
+#: Palette styling keeps text ``Shown``: its codes are cubby's own.
+_Text = TypeVar("_Text", Shown, str)
 
 #: Invisible characters kept as they are, since a terminal does not act on
 #: them: the zero-width non-joiner and joiner shape Persian or Indic words and
@@ -40,7 +51,7 @@ def is_harmless(ch: str) -> bool:
     )
 
 
-def escape_for_terminal(text: str) -> str:
+def escape_for_terminal(text: str) -> Shown:
     """``text`` with every character a terminal could act on shown as an escape.
 
     A character that is not :func:`is_harmless` (a control from C0, DEL or C1,
@@ -58,8 +69,8 @@ def escape_for_terminal(text: str) -> str:
     it, the escaped text decodes back to one text only (it is unambiguous).
     """
     if text.isprintable() and "\\" not in text:
-        return text  # the common case: nothing to escape
-    return "".join(_escape_character(ch) for ch in text)
+        return Shown(text)  # the common case: nothing to escape
+    return Shown("".join(_escape_character(ch) for ch in text))
 
 
 def _escape_character(ch: str) -> str:
@@ -95,7 +106,7 @@ def _file_name(name: object) -> str:
     return f"'{os.fsdecode(name) if isinstance(name, str | bytes) else name}'"
 
 
-def dumps_for_terminal(value: Any) -> str:
+def dumps_for_terminal(value: Any) -> Shown:
     """``value`` as the indented JSON of a ``--json`` output, safe to print.
 
     The encoder escapes C0 controls only (``ensure_ascii`` would escape every
@@ -108,7 +119,7 @@ def dumps_for_terminal(value: Any) -> str:
     spell; file names never hold one). Such characters can only be
     inside a JSON string: the rest of the text is ASCII.
     """
-    return _NOT_ASCII.sub(_json_escape, json.dumps(value, ensure_ascii=False, indent=2))
+    return Shown(_NOT_ASCII.sub(_json_escape, json.dumps(value, ensure_ascii=False, indent=2)))
 
 
 def _json_escape(match: re.Match[str]) -> str:
@@ -147,27 +158,31 @@ class Palette:
     def __init__(self, enabled: bool):
         self.enabled = enabled
 
+    @overload
+    def _wrap(self, name: str, text: Shown) -> Shown: ...
+    @overload
+    def _wrap(self, name: str, text: str) -> str: ...
     def _wrap(self, name: str, text: str) -> str:
         if not self.enabled:
             return text
         return f"\033[{_CODES[name]}m{text}{_RESET}"
 
-    def bold(self, text: str) -> str:
+    def bold(self, text: _Text) -> _Text:
         return self._wrap("bold", text)
 
-    def dim(self, text: str) -> str:
+    def dim(self, text: _Text) -> _Text:
         return self._wrap("dim", text)
 
-    def accent(self, text: str) -> str:
+    def accent(self, text: _Text) -> _Text:
         return self._wrap("accent", text)
 
-    def cyan(self, text: str) -> str:
+    def cyan(self, text: _Text) -> _Text:
         return self._wrap("cyan", text)
 
-    def green(self, text: str) -> str:
+    def green(self, text: _Text) -> _Text:
         return self._wrap("green", text)
 
-    def yellow(self, text: str) -> str:
+    def yellow(self, text: _Text) -> _Text:
         return self._wrap("yellow", text)
 
 
@@ -182,17 +197,17 @@ _SHELF = [
 ]
 
 
-def banner(palette: Palette) -> str:
+def banner(palette: Palette) -> Shown:
     side = [
         "",
         palette.bold(palette.accent("cubby")),
         palette.dim("tidy your downloads, automatically"),
         "",
-        palette.dim(f"v{__version__}"),
+        palette.dim(f"v{escape_for_terminal(__version__)}"),
     ]
     lines = [""]
     for art, text in zip(_SHELF, side, strict=True):
         shelf = palette.accent(art)
         lines.append(f"  {shelf}   {text}".rstrip())
     lines.append("")
-    return "\n".join(lines)
+    return Shown("\n".join(lines))
