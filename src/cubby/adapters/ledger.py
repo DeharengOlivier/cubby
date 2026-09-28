@@ -86,6 +86,18 @@ class Heartbeat:
     def age_seconds(self, now: datetime | None = None) -> float:
         return ((now or datetime.now()) - self.at).total_seconds()
 
+    def process_alive(self) -> bool:
+        """Whether the process that beat still exists (signal 0 probes, sends nothing)."""
+        try:
+            os.kill(self.pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True  # it exists, under another user
+        except (OverflowError, OSError):
+            return False  # not a pid this system can have
+        return True
+
 
 def now_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")

@@ -190,7 +190,17 @@ def move_no_clobber(source: Path, destination: Path) -> None:
             if exc.errno not in _NO_LINK:
                 raise
         else:
-            source.unlink()
+            try:
+                source.unlink()
+            except OSError as exc:
+                # Left alone, the new link would be a second name for the file:
+                # a retried undo would restore it again as "name (1)". A move
+                # that fails must change nothing.
+                try:
+                    destination.unlink()
+                except OSError as cleanup:
+                    exc.add_note(f"{destination} could not be removed either ({cleanup})")
+                raise
             return
     if _taken(destination):
         raise FileExistsError(errno.EEXIST, "destination exists", str(destination))

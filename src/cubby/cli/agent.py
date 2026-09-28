@@ -110,6 +110,10 @@ def _agent_state() -> dict[str, Any]:
     beat = Ledger().heartbeat()
     stale_after = max(3 * beat.interval, 120.0) if beat else None
     age = beat.age_seconds() if beat else None
+    stale = bool(beat and age is not None and stale_after and age > stale_after)
+    # A fresh heartbeat from a live process: something is sorting, installed or
+    # not (a foreground `cubby watch`, or an agent that survived its uninstall).
+    live_pid = beat.pid if beat and not stale and beat.process_alive() else None
     never_passed = bool(
         service and installed and running and beat is None and _installed_for(service) > 120.0
     )
@@ -119,7 +123,8 @@ def _agent_state() -> dict[str, Any]:
         "running": running,
         "unit": str(service.unit_path(DEFAULT_LABEL)) if service and installed else None,
         "last_pass_age": age,
-        "stale": bool(beat and age is not None and stale_after and age > stale_after),
+        "stale": stale,
+        "live_pid": live_pid,
         "never_passed": never_passed,
         "watching": beat.source if beat else None,
     }
@@ -127,6 +132,10 @@ def _agent_state() -> dict[str, Any]:
 
 def _agent_text(pal: Palette, agent: dict[str, Any]) -> str:
     if not agent["installed"]:
+        if agent["live_pid"]:
+            return pal.yellow(
+                f"not installed, but cubby (pid {agent['live_pid']}) is still sorting"
+            )
         return pal.yellow("not installed")
     if agent["running"]:
         return pal.green(f"running ({agent['manager']})")
