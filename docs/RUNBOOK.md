@@ -86,8 +86,16 @@ What undo does with each file of the run:
 - **Restored**: put back under its original name. If that name is taken now, it is restored
   next to it with a suffix, for example `notes (1).txt`.
 - **Skipped for good**: the file is no longer where the run put it (moved again, deleted).
-  Undo prints `skip (no longer at ...)`, still exits 0, and the run shows as `undone`. Look
-  for those lines and move such files back by hand, if they still exist somewhere.
+  Undo prints `skip (no longer at ...)`. Look for those lines and move such files back by
+  hand, if they still exist somewhere.
+- **Left in place**: a file is at that place, but not the one the run put there: it was
+  replaced by another file of the same name, or changed since (its size or modification time
+  differs). Moving it could take a file cubby never moved, so undo prints
+  `skip (changed or replaced since the run: PATH is left in place; move it back to ORIGINAL
+  by hand if it is yours)`. Runs made before 0.3.0 did not record this, and undo moves what
+  it finds there.
+- After a skip of either kind, undo counts it under `Restored N file(s).` and exits 1 (0.2.0
+  exited 0). Nothing is left to retry: the run shows as `undone`.
 - **Pending**: restoring failed with an error (a permission, a full disk). Undo prints
   `pending (cannot restore NAME): <error>` (`skip (cannot restore ...)` in 0.2.0), exits 1,
   and the run shows as `partly undone` (or still `undoable` if nothing of it was restored). Fix the cause and run `cubby undo --run ID` again; a

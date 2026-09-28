@@ -160,6 +160,24 @@ class Moved:
 
     destination: Path
     op: Literal["move", "dedupe"]
+    ident: Identity | None = None  # of ``destination`` right after, when it could be read
+
+
+#: What tells the file a run moved from any other: device, inode, size and
+#: modification time (ns). A rename keeps all four. The inode alone is not
+#: enough: ext4 hands a freed inode number to the next file created (measured),
+#: so a file deleted and replaced under the same name can have the same one.
+#: An edit changes the size or the time, and counts as another file too.
+Identity = tuple[int, int, int, int]
+
+
+def identity(path: Path) -> Identity | None:
+    """``path``'s identity (not following a symlink), or None if it cannot be read."""
+    try:
+        info = path.lstat()
+    except OSError:
+        return None
+    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns
 
 
 #: How many times a name may be taken under us before the move gives up.
@@ -300,14 +318,14 @@ def move_into(
     same_name = category_dir / target_name
     if dedupe and same_name.exists() and files_identical(path, same_name):
         path.unlink()
-        return Moved(same_name, "dedupe")
+        return Moved(same_name, "dedupe", identity(same_name))
     for _ in range(_MAX_NAME_RACES):
         destination = unique_destination(category_dir, target_name)
         try:
             move_no_clobber(path, destination)
         except FileExistsError:
             continue  # taken since we looked: pick the next free name
-        return Moved(destination, "move")
+        return Moved(destination, "move", identity(destination))
     raise FileExistsError(
         errno.EEXIST, "every candidate name was taken while moving", str(category_dir)
     )

@@ -135,7 +135,9 @@ class Sorter:
         )
         # Journal first: once the file has moved, nothing (not even a log line
         # to a closed pipe) may come between the move and its way back.
-        journaled = self._journal_move(Entry(run_id, seq, moved.op, path, moved.destination))
+        journaled = self._journal_move(
+            Entry(run_id, seq, moved.op, path, moved.destination, moved.ident)
+        )
         result = outcome.moved(moved.destination, journaled=journaled)
         # The move and its journal entry are done; a lost log line changes neither.
         with contextlib.suppress(OSError):
