@@ -302,13 +302,14 @@ def test_a_journal_that_cannot_shrink_is_not_reread_every_pass(tmp_path, monkeyp
         journal.record(Entry(f"r{index}", 0, "move", Path(f"/a/{index}"), Path(f"/b/{index}")))
     monkeypatch.setattr(journal_module, "MAX_BYTES", 1)
     reads = {"n": 0}
-    real_runs = Journal.runs
+    real_read_lines = journal_module.state.read_lines
 
-    def counting_runs(self):
-        reads["n"] += 1
-        return real_runs(self)
+    def counting_read_lines(path):
+        if path == journal.path:
+            reads["n"] += 1
+        return real_read_lines(path)
 
-    monkeypatch.setattr(Journal, "runs", counting_runs)
+    monkeypatch.setattr(journal_module.state, "read_lines", counting_read_lines)
     size = journal.path.stat().st_size
 
     journal.compact()  # everything is pending: nothing can go

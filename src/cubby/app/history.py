@@ -28,10 +28,14 @@ class RunSummary:
 def undo_state(run: Run | None) -> UndoState:
     if run is None:
         return "unknown"
-    pending = len(run.pending)
+    return undo_state_of(len(run.entries), len(run.pending))
+
+
+def undo_state_of(moves: int, pending: int) -> UndoState:
+    """The state of a run with ``moves`` journaled moves, ``pending`` of them not undone."""
     if pending == 0:
         return "undone"
-    return "undoable" if pending == len(run.entries) else "partly undone"
+    return "undoable" if pending == moves else "partly undone"
 
 
 def recent_runs(ledger: Ledger, journal: Journal, limit: int) -> list[RunSummary]:
@@ -41,5 +45,11 @@ def recent_runs(ledger: Ledger, journal: Journal, limit: int) -> list[RunSummary
         OSError: The ledger or the journal cannot be read.
     """
     records = ledger.runs(limit=limit)
-    journaled = {run.run_id: run for run in journal.runs()}
-    return [RunSummary(record, undo_state(journaled.get(record.run))) for record in records]
+    tallies = journal.tallies()
+    return [
+        RunSummary(
+            record,
+            undo_state_of(*tallies[record.run]) if record.run in tallies else "unknown",
+        )
+        for record in records
+    ]
