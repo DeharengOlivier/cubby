@@ -17,9 +17,11 @@ from .common import (
     EXIT_BAD_CONFIG,
     EXIT_FAILED,
     EXIT_OK,
+    SourceFlagError,
     at_least_one,
     config_path_of,
     duration_text,
+    interval_text,
     palette,
     positive_duration,
 )
@@ -36,7 +38,7 @@ def _add_common_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--delay", type=duration_text, help="min age before moving a file, e.g. 1m, 30s"
     )
-    parser.add_argument("--interval", type=duration_text, help="watch poll interval, e.g. 30s")
+    parser.add_argument("--interval", type=interval_text, help="watch poll interval, e.g. 30s")
     parser.add_argument("--no-content", action="store_true", help="disable content scanning")
     parser.add_argument(
         "--month-style",
@@ -204,8 +206,10 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_FAILED
     except ValueError as exc:
         # A setting cubby cannot act on. The message names it; a traceback
-        # would not tell the user which line of their file to correct.
-        print(f"cubby: config error: {exc}", file=sys.stderr)
+        # would not tell the user which line of their file to correct. A flag
+        # used wrongly names the flag, and is not the config's fault.
+        kind = "" if isinstance(exc, SourceFlagError) else "config error: "
+        print(f"cubby: {kind}{exc}", file=sys.stderr)
         return EXIT_BAD_CONFIG
     except ServiceError as exc:
         print(f"cubby: {exc}", file=sys.stderr)

@@ -22,6 +22,8 @@ def _isolate_user_config():
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr("cubby.adapters.config.find_user_config", lambda: None)
         mp.delenv("CUBBY_CONFIG", raising=False)
+        # Else `cubby init` in a test writes into the developer's real folder.
+        mp.delenv("XDG_CONFIG_HOME", raising=False)
         yield
 
 

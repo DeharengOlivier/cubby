@@ -67,18 +67,49 @@ def load_from_args(args: argparse.Namespace) -> Config:
     overrides = build_overrides(args)
     config = load_config(user_path=user_path, overrides=overrides)
     if getattr(args, "source", None):
-        watched = load_config(user_path=user_path).settings.source.resolve()
-        chosen = config.settings.source.resolve()
-        inside = chosen.relative_to(watched).parts if chosen.is_relative_to(watched) else ()
-        # Another folder inside the watched one (an inbox) is fine; a folder
-        # cubby files into is not.
-        if inside and inside[0] in config.managed_dirs:
-            raise ValueError(
-                f"--source {config.settings.source} is inside the watched folder {watched}, "
-                f"in {inside[0]}/, a folder cubby files into: its files would be sorted into "
-                f"{chosen.name}/{inside[0]}/... Sort {watched} instead."
-            )
+        _refuse_a_managed_source(config, user_path, overrides)
     return config
+
+
+class SourceFlagError(ValueError):
+    """``--source`` names a folder cubby must not sort (a usage error, not a config one)."""
+
+
+def _refuse_a_managed_source(
+    config: Config, user_path: Path | None, overrides: dict[str, Any]
+) -> None:
+    """Refuse a ``--source`` that is a folder cubby files into, in the watched folder.
+
+    Raises:
+        SourceFlagError: It is one.
+    """
+    others = {key: value for key, value in overrides.get("settings", {}).items() if key != "source"}
+    try:
+        watched = load_config(
+            user_path=user_path, overrides={"settings": others} if others else {}
+        ).settings.source.resolve()
+    except ValueError:
+        return  # the configured folder is unusable: --source replaces it, nothing to nest in
+    chosen = config.settings.source.resolve()
+    inside = chosen.relative_to(watched).parts if chosen.is_relative_to(watched) else ()
+    # Another folder inside the watched one (an inbox) is fine; a folder cubby
+    # files into is not, whatever the case of its name on a case-insensitive disk.
+    if inside and _is_managed(watched, inside[0], config.managed_dirs):
+        raise SourceFlagError(
+            f"--source {config.settings.source} is inside the watched folder {watched}, "
+            f"in {inside[0]}/, a folder cubby files into: its files would be sorted into "
+            f"{chosen.name}/{inside[0]}/... Sort {watched} instead."
+        )
+
+
+def _is_managed(watched: Path, name: str, managed: frozenset[str]) -> bool:
+    if name in managed:
+        return True
+    entry = watched / name
+    return any(
+        (watched / folder).exists() and entry.exists() and entry.samefile(watched / folder)
+        for folder in managed
+    )
 
 
 def require_source(config: Config, args: argparse.Namespace | None = None) -> str | None:
@@ -119,6 +150,13 @@ def at_least_one(value: str) -> int:
     if number < 1:
         raise argparse.ArgumentTypeError(f"must be at least 1, got {number}")
     return number
+
+
+def interval_text(value: str) -> str:
+    """``--interval``: a duration above zero, checked here so an error names the flag."""
+    if duration_text(value) and parse_duration(value) <= 0:
+        raise argparse.ArgumentTypeError(f"must be above zero, such as 30s, got {value!r}")
+    return value
 
 
 def duration_text(value: str) -> str:

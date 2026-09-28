@@ -104,14 +104,18 @@ def cmd_history(args: argparse.Namespace) -> int:
 
 def cmd_log(args: argparse.Namespace) -> int:
     records = read_all()
-    if not records:
+    if not records and not args.run:
         if not args.json:  # --json prints no line at all: a script sees an empty list
             print(palette().dim("No log yet: the agent writes one once it runs."))
         return EXIT_OK
     if args.run:
         records = [r for r in records if r.get("run") == args.run]
         if not records:
-            print(f"cubby: no log line for run {args.run!r}; see 'cubby history'", file=sys.stderr)
+            print(
+                f"cubby: no log line for run {args.run!r} (the log keeps the most recent "
+                f"lines only); see 'cubby history'",
+                file=sys.stderr,
+            )
             return EXIT_FAILED
     if args.warnings:
         # A line with no level is not cubby's own (a traceback the service

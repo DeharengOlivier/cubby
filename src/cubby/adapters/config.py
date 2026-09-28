@@ -50,10 +50,17 @@ def default_user_config_path() -> Path:
     return Path(env).expanduser() if env else _config_home() / "cubby" / "config.toml"
 
 
+def config_home_override() -> Path | None:
+    """``$XDG_CONFIG_HOME`` when set to an absolute path (the XDG spec ignores
+    a relative one), else None."""
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    path = Path(xdg).expanduser() if xdg else None
+    return path if path is not None and path.is_absolute() else None
+
+
 def _config_home() -> Path:
     """``$XDG_CONFIG_HOME``, as the state folder honours ``$XDG_STATE_HOME``; else ~/.config."""
-    xdg = os.environ.get("XDG_CONFIG_HOME")
-    return Path(xdg).expanduser() if xdg else Path.home() / ".config"
+    return config_home_override() or Path.home() / ".config"
 
 
 _STARTER_HEADER = """\
