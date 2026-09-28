@@ -157,7 +157,9 @@ def replace_lines(path: Path, lines: Iterable[str]) -> None:
             for line in lines:
                 handle.write(line + "\n")
         staging.replace(path)
-    except OSError:
+    except BaseException:
+        # Also on an interrupt: a half-written copy of the journal must not
+        # linger beside it.
         staging.unlink(missing_ok=True)
         raise
 
