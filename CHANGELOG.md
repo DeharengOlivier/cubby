@@ -19,6 +19,11 @@ All notable changes to this project are documented here. The format is based on
   touches.
 - `cubby plan --json` items carry the deciding rule.
 
+### Fixed (found by property tests)
+- A file whose name contains a Unicode line separator (U+2028, U+2029, U+0085)
+  could not be undone: its journal line was read back as two broken lines.
+  Journal, ledger and log lines are now split on `\n` only.
+
 ### Fixed (audit 1, docs/audits/2026-09-28-audit-1.md)
 - Files sorted by the background agent can be undone. `cubby watch` never
   wrote to the undo journal, so everything the agent moved was out of reach of
@@ -51,6 +56,13 @@ All notable changes to this project are documented here. The format is based on
 - `cubby undo --run ID` undoes a specific run. An entry that fails to restore
   stays pending and is retried by the next `cubby undo`.
 - `CUBBY_STATE_DIR` redirects every file cubby keeps for itself.
+- `cubby watch` stops cleanly on SIGTERM (what launchd and systemd send): the
+  pass in progress finishes, so a move is never cut off from its journal line.
+- Tagged releases are built, checked against the package version, smoke-tested
+  and published on GitHub with SHA-256 sums.
+- Property-based tests (Hypothesis), an end-to-end agent journey in real
+  processes, and targeted mutation testing of the journal, containment and undo.
+- `docs/THREAT-MODEL.md`.
 
 ### Changed
 - The undo journal is append-only and one line per move (format version 2).

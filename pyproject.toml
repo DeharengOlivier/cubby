@@ -131,3 +131,17 @@ name = "The domain never spawns processes or touches files through os or shutil"
 type = "forbidden"
 source_modules = ["cubby.domain"]
 forbidden_modules = ["os", "shutil", "subprocess", "cubby.adapters", "cubby.app", "cubby.cli"]
+
+# Mutation testing is run on the modules whose silent breakage would lose or
+# misplace a user's files: the undo journal, path containment and naming.
+# `make mutation`; results are recorded in docs/audits/.
+[tool.mutmut]
+source_paths = ["src/cubby"]
+only_mutate = [
+    "src/cubby/adapters/journal.py",
+    "src/cubby/domain/naming.py",
+    "src/cubby/adapters/filesystem.py",
+    "src/cubby/app/undo.py",
+]
+# The end-to-end journey runs cubby in a child process, outside the mutants.
+pytest_add_cli_args = ["--deselect", "tests/test_agent_journey.py"]
