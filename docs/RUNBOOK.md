@@ -84,7 +84,8 @@ cubby undo --run ID      # revert a specific run from the history
 What undo does with each file of the run:
 
 - **Restored**: put back under its original name. If that name is taken now, it is restored
-  next to it with a suffix, for example `notes (1).txt`.
+  next to it with a suffix, for example `notes (1).txt`. A category or month folder left
+  empty by the undo is removed (only an empty one: anything put there since keeps it).
 - **Skipped for good**: the file is no longer where the run put it (moved again, deleted).
   Undo prints `skip (no longer at ...)`. Look for those lines and move such files back by
   hand, if they still exist somewhere.

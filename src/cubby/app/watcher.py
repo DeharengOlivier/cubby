@@ -165,7 +165,7 @@ class Watcher:
             self._log(f"pass skipped: {exc}", level="WARNING")
             return 0
         except Exception as exc:  # noqa: BLE001 - logged, and the agent keeps its schedule
-            error = describe_error(exc)
+            error = describe_error(exc, self._sorter.source)
             self._log(f"pass failed: {error}", level="ERROR")
             if not self._failing:
                 self._alert(f"Sorting failed: {error}. See 'cubby status'.")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import errno
 import os
 from collections.abc import Callable
 from dataclasses import replace
@@ -47,10 +48,35 @@ def _mtime_date(path: Path) -> date:
         return date.today()
 
 
-def describe_error(exc: BaseException) -> str:
-    """One line naming what went wrong, for the ledger and the terminal."""
-    detail = str(exc) or "no detail"
-    return f"{type(exc).__name__}: {detail}"
+#: What to do about an error, by errno, when there is something to do.
+_HINTS = {
+    errno.EACCES: "check that cubby may write there",
+    errno.EPERM: "check that cubby may write there",
+    errno.EROFS: "the disk is read-only",
+    errno.ENOSPC: "the disk is full",
+}
+
+
+def describe_error(exc: BaseException, root: Path | None = None) -> str:
+    """One line naming what went wrong, for the ledger and the terminal.
+
+    An error on a file reads ``Type: what happened: file -> destination (what
+    to do)``, with paths relative to ``root`` (the sorted folder); the part
+    before the second colon names the kind of error, which ``cubby status``
+    groups on.
+    """
+    kind = type(exc).__name__
+    if isinstance(exc, OSError) and exc.strerror and exc.filename is not None:
+        paths = " -> ".join(
+            _shown(Path(os.fsdecode(name)), root) if root else os.fsdecode(name)
+            for name in (exc.filename, exc.filename2)
+            if name is not None
+        )
+        hint = _HINTS.get(exc.errno or 0)
+        # cubby's own messages already name the file, with the remedy.
+        where = "" if Path(os.fsdecode(exc.filename)).name in exc.strerror else f": {paths}"
+        return f"{kind}: {exc.strerror}{where}" + (f" ({hint})" if hint else "")
+    return f"{kind}: {str(exc) or 'no detail'}"
 
 
 def _never() -> bool:
@@ -277,7 +303,7 @@ class Sorter:
                 # agent would otherwise fail on the same file every minute and
                 # never reach the files after it. The failure is not hidden: it
                 # goes to stderr or the log, the ledger, and the exit code.
-                error = describe_error(exc)
+                error = describe_error(exc, self.source)
                 self._warn(f"could not sort {path.name}: {error}")
                 outcomes.append(SortOutcome.failed(path, error))
 
