@@ -15,6 +15,7 @@ from __future__ import annotations
 import difflib
 import os
 import re
+import sys
 import tomllib
 from importlib.resources import files
 from pathlib import Path
@@ -95,7 +96,14 @@ def _load_toml(path: Path) -> dict[str, Any]:
         except RecursionError:
             # The parser recurses per level of nesting: too deep is invalid TOML,
             # reported as such, not a traceback.
-            raise tomllib.TOMLDecodeError("nested too deep to read") from None
+            raise _too_deep() from None
+
+
+def _too_deep() -> tomllib.TOMLDecodeError:
+    message = "nested too deep to read"
+    if sys.version_info >= (3, 14):  # the one-argument form is deprecated there
+        return tomllib.TOMLDecodeError(message, "", 0)
+    return tomllib.TOMLDecodeError(message)
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
