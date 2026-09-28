@@ -44,19 +44,31 @@ def parse_json(text: str) -> Any:
         raise json.JSONDecodeError("nested too deep to read", text[:100], 0) from None
 
 
-def state_dir() -> Path:
-    """The folder holding the journal, ledger, heartbeat and lock."""
-    explicit = os.environ.get("CUBBY_STATE_DIR")
-    if explicit:
-        return Path(explicit).expanduser()
+def _default_state_dir() -> Path:
     xdg = os.environ.get("XDG_STATE_HOME")
     base = Path(xdg).expanduser() if xdg else Path.home() / ".local" / "state"
     return base / "cubby"
 
 
+def state_dir() -> Path:
+    """The folder holding the journal, ledger, heartbeat and lock."""
+    explicit = os.environ.get("CUBBY_STATE_DIR")
+    if explicit:
+        return Path(explicit).expanduser()
+    return _default_state_dir()
+
+
 def log_path() -> Path:
-    """The activity log: Console.app's folder on macOS, the state folder elsewhere."""
-    if sys.platform == "darwin" and not os.environ.get("CUBBY_STATE_DIR"):
+    """The activity log: Console.app's folder on macOS, the state folder elsewhere.
+
+    On macOS the log leaves the state folder only while that folder is the
+    default one. ``cubby install`` names the state folder to the agent
+    (``CUBBY_STATE_DIR``), launchd starting it without the shell's variables,
+    so the test is the folder, not whether the variable is set: otherwise the
+    agent would log to the state folder while ``cubby log`` and ``cubby
+    status``, run from a shell, read ``~/Library/Logs``.
+    """
+    if sys.platform == "darwin" and state_dir() == _default_state_dir():
         return Path.home() / "Library" / "Logs" / "cubby.log"
     return state_dir() / "cubby.log"
 

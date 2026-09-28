@@ -38,6 +38,13 @@ All notable changes to this project are documented here. The format is based on
   memory of a pass goes.
 
 ### Fixed
+- On macOS the background agent wrote its log to `~/.local/state/cubby/cubby.log`
+  while `cubby log` and `cubby status`, run from a shell, read
+  `~/Library/Logs/cubby.log`, where launchd only puts the agent's own output:
+  `install` names the state folder to the agent, and naming it was taken to
+  mean a state folder chosen elsewhere. The log now follows the folder: the
+  default one logs to `~/Library/Logs` whether or not it is named. The log of
+  an agent from 0.2 or 0.3 stays in `~/.local/state/cubby/cubby.log`.
 - A folder whose name matches an invoice rule was renamed and filed like an
   invoice: `invoice-archive` became `Invoices/2026-09/archive facture`. A
   folder matched by its name is now moved whole under its own name, at the
