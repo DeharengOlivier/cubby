@@ -9,9 +9,12 @@ All notable changes to this project are documented here. The format is based on
 ### Changed
 - The required `review record` check passes only when the review record names
   the pull request's current head commit, on a line
-  `Reviewed head: <full 40-digit SHA>`. A push after the review turns it back
-  to failure until a re-review record names the new head; a record posted for
-  an older commit no longer counts.
+  `Reviewed head: <full 40-digit SHA>` as plain text (not in a code block or
+  an HTML comment). A push after the review, from a branch or a fork, turns
+  it back to failure until a re-review record names the new head; a record
+  posted for an older commit no longer counts. The check now runs the
+  default branch's copy of its workflow, so editing that workflow in a pull
+  request no longer changes how the pull request is judged.
 
 ## [0.4.0] - 2026-09-28
 

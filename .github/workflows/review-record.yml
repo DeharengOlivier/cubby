@@ -3,31 +3,39 @@
 # this sets on the head commit.
 #
 # A record is a comment that starts with "## Independent review record" and
-# has a line "Reviewed head: <full 40-digit SHA>" (the rules are in
-# scripts/review_record.py, tested in tests/test_review_record.py). A push
-# after the review sets the new head's status to failure until a record names
-# it: a short re-review record is enough. Editing or deleting a comment
-# re-evaluates the status.
+# has a line "Reviewed head: <full 40-digit SHA>" as plain text (the rules are
+# in scripts/review_record.py, tested in tests/test_review_record.py). A push
+# after the review, from a branch or a fork, sets the new head's status to
+# failure until a record names it: a short re-review record is enough.
+# Editing or deleting a comment re-evaluates the status.
 #
 # Only a comment from the owner, a member or a collaborator counts: the
 # repository is public and anyone may comment. It checks that the record
 # exists, not who wrote its text: with one maintainer the record is posted from
 # the same account (docs/READINESS.md section 2).
 #
-# What runs with `statuses: write`: the decision is a standard-library Python
-# script run by the runner's python3, checked out from the default branch
-# only, never from the pull request's head, without persisting the token, and
-# nothing else from the repository runs. An issue_comment run uses the
-# default branch's workflow file, so a pull request cannot change what judges
-# its comments. A pull_request run uses the pull request's own workflow file,
-# which a same-repository branch could edit; that edit is itself reviewed
-# before merge, and a fork's pull_request run gets a read-only token that
-# cannot set the status (the next comment's run does). The job reads only the
-# pull request's head SHA and its comments.
+# What runs with `statuses: write`: both triggers, pull_request_target and
+# issue_comment, run this file as it is on the default branch, never a pull
+# request's copy of it, and give fork pull requests the same token. That is
+# safe here because the job runs no code from the pull request: it checks out
+# the default branch only (one standard-library script, run by the runner's
+# python3, token not persisted) and reads only the pull request's head SHA and
+# its comments. Never add a checkout of the pull request's head to this job.
+#
+# What it does not prevent: any workflow in a same-repository pull request
+# (an edited ci.yml, say) can declare `statuses: write` and post its own
+# "review record" status, since every Actions status comes from the same app.
+# The control catches a missing or stale record, not a maintainer who means
+# to bypass it.
+#
+# If the run fails before deciding (the API or the checkout fails), it posts
+# `error` on the head when it knows the head, so an earlier success does not
+# stand. A comment event whose head lookup fails knows no head: that run
+# fails and the status is left as it was.
 name: Review record
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened]
   issue_comment:
     types: [created, edited, deleted]
@@ -45,7 +53,7 @@ concurrency:
 
 jobs:
   record:
-    if: github.event_name == 'pull_request' || github.event.issue.pull_request
+    if: github.event_name == 'pull_request_target' || github.event.issue.pull_request
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -56,19 +64,32 @@ jobs:
           sparse-checkout: scripts/review_record.py
           sparse-checkout-cone-mode: false
       - name: Set the review record status on the head commit
+        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number || github.event.issue.number }}
+          # Empty on a comment event, whose payload names no head.
+          EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          sha=$(gh api "repos/$REPO/pulls/$PR" -q .head.sha)
+          sha=$EVENT_HEAD
+          posted=
+          post() {
+            gh api "repos/$REPO/statuses/$sha" -f state="$1" \
+              -f context="review record" -f description="$2" > /dev/null
+            posted=1
+            echo "review record: $1 ($2)"
+          }
+          # A run that fails before posting must not leave an earlier success.
+          trap '[ -n "$posted" ] || [ -z "$sha" ] ||
+            post error "the review record check failed: see the workflow log" || true' EXIT
+          head=$(gh api "repos/$REPO/pulls/$PR" -q .head.sha)
+          sha=$head
           gh api --paginate "repos/$REPO/issues/$PR/comments" > "$RUNNER_TEMP/comments.json"
           if decision=$(python3 scripts/review_record.py "$sha" < "$RUNNER_TEMP/comments.json"); then
             IFS=$'\t' read -r state text <<< "$decision"
           else
             state=error; text="the review record check failed: see the workflow log"
           fi
-          gh api "repos/$REPO/statuses/$sha" -f state="$state" \
-            -f context="review record" -f description="$text" > /dev/null
-          echo "review record: $state ($text)"
+          post "$state" "$text"
