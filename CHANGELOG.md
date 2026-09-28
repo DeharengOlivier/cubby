@@ -41,7 +41,12 @@ All notable changes to this project are documented here. The format is based on
   `log --run` with an unknown id says so and exits 1; a bad `--delay` or
   `--interval` names the flag (exit 2); two categories with one name are
   refused. The config file is also looked for in
-  `$XDG_CONFIG_HOME/cubby/config.toml`, where `cubby init` then writes it.
+  `$XDG_CONFIG_HOME/cubby/config.toml`, where `cubby init` then writes it;
+  `cubby install` passes that variable to the agent, which launchd and
+  systemd would not, so the agent reads the same file. A relative value is
+  ignored, as the XDG spec says. A `--source` that is a folder cubby files
+  into inside the watched folder is refused (exit 2), also on a
+  case-insensitive disk.
 - A regular file named like a folder cubby sorts into (`_Unsorted`, a
   category, or a month folder inside one) made every move into that folder
   fail with `[Errno 17] File exists`. The file is still left alone, and the

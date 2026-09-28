@@ -43,4 +43,4 @@ if [ -d "$VENV_DIR" ]; then
     rm -rf "$VENV_DIR"
 fi
 
-echo "cubby removed. Your sorted folders and config (~/.config/cubby) are untouched."
+echo "cubby removed. Your sorted folders and config (${XDG_CONFIG_HOME:-$HOME/.config}/cubby) are untouched."

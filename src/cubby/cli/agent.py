@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import __version__
+from ..adapters import config as config_module
 from ..adapters import notify as notify_module
 from ..adapters import state
 from ..adapters.config import (
@@ -82,6 +83,10 @@ def cmd_install(args: argparse.Namespace) -> int:
     environment = {"CUBBY_STATE_DIR": str(state.state_dir())}
     if config_env := os.environ.get("CUBBY_CONFIG"):
         environment["CUBBY_CONFIG"] = str(Path(config_env).expanduser().resolve())
+    # launchd and systemd start the agent without the login shell's variables:
+    # without this, it would read another config than the one install read.
+    if config_home := config_module.config_home_override():
+        environment["XDG_CONFIG_HOME"] = str(config_home)
     spec = ServiceSpec(program_args=_program_args(args), log_path=log_path, environment=environment)
     path = service.install(spec)
     print(f"Installed {service.name} agent: {path} (running)")

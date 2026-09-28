@@ -179,7 +179,7 @@ Only then:
 ```sh
 pipx uninstall cubby-sort    # pipx install; otherwise: rm -rf ~/.local/share/cubby/venv ~/.local/bin/cubby
 rm -rf "${CUBBY_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/cubby}" ~/.local/state/cubby \
-       ~/.config/cubby ~/.cubby.toml ${CUBBY_CONFIG:+"$CUBBY_CONFIG"} ~/Library/Logs/cubby.log*
+       "${XDG_CONFIG_HOME:-$HOME/.config}/cubby" ~/.config/cubby ~/.cubby.toml ${CUBBY_CONFIG:+"$CUBBY_CONFIG"} ~/Library/Logs/cubby.log*
 rm -rf ~/cubby-evidence-*    # once the incident is closed: section 2's copies list your downloads
 ```
 

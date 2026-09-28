@@ -154,3 +154,89 @@ def test_another_folder_inside_the_watched_one_can_be_sorted(tmp_path, capsys, m
 
     assert code == 0
     assert (tmp_path / "Downloads" / "inbox" / "Documents" / "q.txt").exists()
+
+
+# --- from the review of this change ---------------------------------------------
+
+
+def test_the_agent_reads_the_config_the_cli_read(tmp_path, capsys, monkeypatch):
+    # Found by review: launchd and systemd do not pass XDG_CONFIG_HOME, so the
+    # agent read the defaults while install announced the user's folder.
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    specs = []
+
+    class Recording:
+        name = "fake"
+
+        def install(self, spec):
+            specs.append(spec)
+            return tmp_path / "unit"
+
+    monkeypatch.setattr(cli_agent, "get_service", Recording)
+    (tmp_path / "src").mkdir()
+
+    main(["install", "--source", str(tmp_path / "src")])
+
+    assert specs[0].environment["XDG_CONFIG_HOME"] == str(tmp_path / "xdg")
+
+
+def test_a_relative_xdg_config_home_is_ignored(monkeypatch, tmp_path):
+    # The XDG spec: a relative path is invalid and must be ignored.
+    monkeypatch.setenv("XDG_CONFIG_HOME", "relative/xdg")
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    assert (
+        config_module.default_user_config_path() == tmp_path / ".config" / "cubby" / "config.toml"
+    )
+
+
+def _bad_config(tmp_path, body: str) -> str:
+    path = tmp_path / "bad.toml"
+    path.write_text(f"[settings]\n{body}\n", encoding="utf-8")
+    return str(path)
+
+
+@pytest.mark.parametrize(
+    ("body", "flags"),
+    [('delay = "abc"', ["--delay", "1m"]), ('source = "~"', [])],
+)
+def test_a_flag_still_overrides_a_bad_value_in_the_config(tmp_path, capsys, body, flags):
+    # Found by review: the nesting check loaded the config again without the flags.
+    (tmp_path / "inbox").mkdir()
+    config = _bad_config(tmp_path, body)
+
+    code, _, err = _cli(capsys, "plan", "--config", config, "--source", str(tmp_path / "inbox"),
+                        *flags)  # fmt: skip
+
+    assert code == 0, err
+
+
+def test_a_zero_interval_names_the_flag(tmp_path, capsys):
+    with pytest.raises(SystemExit) as caught:
+        main(["watch", "--source", str(tmp_path), "--interval", "0"])
+
+    assert caught.value.code == 2
+    assert "argument --interval" in capsys.readouterr().err
+
+
+def test_log_with_an_unknown_run_says_so_even_with_no_log(capsys):
+    code, _, err = _cli(capsys, "log", "--run", "nope")
+
+    assert code == 1
+    assert "no log line for run 'nope'" in err
+
+
+def test_the_nesting_refusal_is_about_the_flag_not_the_config(tmp_path, capsys, monkeypatch):
+    aged_file(tmp_path / "Downloads" / "Documents", "q.txt")
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    _, _, err = _cli(capsys, "run", "--source", str(tmp_path / "Downloads" / "Documents"))
+
+    assert "config error" not in err
+    assert err.startswith("cubby: --source ")
+
+
+def test_the_suite_never_sees_the_developers_xdg_config_home():
+    import os
+
+    assert "XDG_CONFIG_HOME" not in os.environ
