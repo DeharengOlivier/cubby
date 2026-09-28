@@ -13,6 +13,8 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from cubby.adapters.ledger import Failure, Ledger, PassMetrics, RunRecord
 from cubby.app.activity import error_kind, summarize
 from cubby.app.report import SortOutcome
@@ -49,7 +51,27 @@ def test_errors_on_different_files_are_one_kind():
     second = 'PermissionError: [Errno 13] Permission denied: "/home/a/Downloads/y z.pdf"'
 
     assert error_kind(first) == error_kind(second)
-    assert error_kind(first) == "PermissionError: [Errno 13] Permission denied: '...'"
+    assert error_kind(first) == "PermissionError: [Errno 13] Permission denied"
+
+
+@pytest.mark.parametrize(
+    ("one", "other"),
+    [
+        # Found by review: each of these kept the file name in the kind.
+        ("ValueError: can't sort 'x.pdf'", "ValueError: can't sort 'y.pdf'"),
+        (
+            "PermissionError: [Errno 13] Permission denied: '/d/it\\'s \"x\".pdf'",
+            "PermissionError: [Errno 13] Permission denied: '/d/y.pdf'",
+        ),
+        (
+            "ValueError: refusing to write outside the watched folder: /a/x is not inside /d.",
+            "ValueError: refusing to write outside the watched folder: /b/y is not inside /d.",
+        ),
+    ],
+)
+def test_the_file_never_stays_in_the_kind(one, other):
+    assert error_kind(one) == error_kind(other)
+    assert "x" not in error_kind(one).replace("ValueError", "").replace("Errno", "")
 
 
 def test_errors_of_different_kinds_stay_apart():
@@ -72,11 +94,11 @@ def test_the_day_counts_runs_moves_and_failures_and_groups_the_errors():
         ),
     ]
 
-    day = summarize(records, since=NOW - timedelta(hours=24))
+    day = summarize(records, since=NOW - timedelta(hours=24), now=NOW)
 
     assert (day.runs, day.moved, day.failed) == (2, 4, 3)
     top, other = day.errors
-    assert top.kind == error_kind(denied.format("x"))
+    assert top.kind == "PermissionError: [Errno 13] Permission denied"
     assert (top.count, top.runs) == (2, 2)
     assert top.files == ("b.pdf", "a.pdf")  # most recent first
     assert top.versions == ("0.2.0", "0.3.0")
@@ -84,11 +106,50 @@ def test_the_day_counts_runs_moves_and_failures_and_groups_the_errors():
     assert (other.kind, other.count) == ("OSError: [Errno 28] No space left on device", 1)
 
 
+@pytest.mark.parametrize("stamp", ["2026-09-28T10:00:00+00:00", "2026-09-28T10:00:00Z"])
+def test_a_date_with_a_time_zone_is_read_in_local_time(stamp):
+    # Found by review: an aware date raised TypeError against the naive window,
+    # and `cubby status` crashed on one such ledger line.
+    record = RunRecord(**{**_record("r1", NOW).__dict__, "finished": stamp})
+    local = datetime.fromisoformat(stamp).astimezone().replace(tzinfo=None)
+
+    day = summarize([record], since=local - timedelta(hours=1), now=local + timedelta(hours=1))
+
+    assert day.runs == 1
+
+
+def test_a_record_dated_after_now_is_not_in_the_window():
+    later = _record("r1", NOW + timedelta(days=400))
+
+    assert summarize([later], since=NOW - timedelta(hours=24), now=NOW).runs == 0
+
+
+def test_a_file_that_fails_every_pass_is_listed_once():
+    denied = "PermissionError: [Errno 13] Permission denied: 'a'"
+    records = [_record(f"r{i}", NOW - timedelta(minutes=i), ("a.pdf", denied)) for i in range(5)]
+
+    (group,) = summarize(records, since=NOW - timedelta(hours=24), now=NOW).errors
+
+    assert (group.count, group.files) == (5, ("a.pdf",))
+
+
+def test_a_window_the_trimmed_ledger_no_longer_covers_says_so():
+    records = [_record(f"r{i}", NOW - timedelta(hours=i)) for i in range(3)]
+
+    assert (
+        summarize(records, since=NOW - timedelta(hours=24), now=NOW, trimmed=True).complete is False
+    )
+    assert (
+        summarize(records, since=NOW - timedelta(hours=1), now=NOW, trimmed=True).complete is True
+    )
+    assert summarize(records, since=NOW - timedelta(hours=24), now=NOW).complete is True
+
+
 def test_a_record_with_an_unreadable_date_is_left_out_not_fatal():
     broken = _record("r1", NOW, ("a.pdf", "OSError: x"))
     broken = RunRecord(**{**broken.__dict__, "finished": "not a date"})
 
-    day = summarize([broken, _record("r2", NOW)], since=NOW - timedelta(hours=24))
+    day = summarize([broken, _record("r2", NOW)], since=NOW - timedelta(hours=24), now=NOW)
 
     assert day.runs == 1
 
@@ -103,7 +164,7 @@ def test_only_the_most_frequent_kinds_and_a_few_files_are_kept():
         for i in range(8)
     ]
 
-    day = summarize(records, since=NOW - timedelta(hours=24), top=3, files=2)
+    day = summarize(records, since=NOW - timedelta(hours=24), now=NOW, top=3, files=2)
 
     assert [group.kind for group in day.errors] == ["E7: boom", "E6: boom", "E5: boom"]
     assert day.errors[0].files == ("f7-0", "f7-1")
@@ -176,7 +237,19 @@ def test_a_heartbeat_from_an_older_cubby_has_no_pass_measures():
     assert beat.last_pass is None
 
 
-def test_a_damaged_pass_measure_does_not_hide_the_heartbeat():
+@pytest.mark.parametrize(
+    "measure",
+    [
+        "?",
+        {"seconds": 1e999, "moved": 1, "failed": 0, "waiting": 0},
+        {"seconds": 1, "moved": 1e999, "failed": 0, "waiting": 0},
+        {"seconds": float("nan"), "moved": 1, "failed": 0, "waiting": 0},
+        {"seconds": 1, "moved": -1, "failed": 0, "waiting": 0},
+        {"seconds": -1, "moved": 1, "failed": 0, "waiting": 0},
+        {"seconds": 1, "moved": 1.5, "failed": 0, "waiting": 0},
+    ],
+)
+def test_a_damaged_pass_measure_does_not_hide_the_heartbeat(measure):
     ledger = Ledger()
     ledger.heartbeat_path.parent.mkdir(parents=True, exist_ok=True)
     ledger.heartbeat_path.write_text(
@@ -187,7 +260,7 @@ def test_a_damaged_pass_measure_does_not_hide_the_heartbeat():
                 "pid": 1,
                 "source": "/d",
                 "interval": 30.0,
-                "last_pass": "?",
+                "last_pass": measure,
             }
         ),
         encoding="utf-8",
@@ -223,7 +296,8 @@ def test_status_shows_the_last_pass_and_the_day(capsys, monkeypatch):
     assert day["errors"][0]["files"] == ["b.pdf", "a.pdf"]
     assert "took 1.5 s, moved 2, 1 failed, 4 waiting to settle" in text
     assert "2 runs, moved 2, 2 failed" in text
-    assert "2x PermissionError: [Errno 13] Permission denied: '...'" in text
+    assert "files: b.pdf, a.pdf" in text
+    assert "2x PermissionError: [Errno 13] Permission denied" in text
 
 
 def test_status_with_nothing_recorded_says_so(capsys, monkeypatch):
@@ -235,8 +309,10 @@ def test_status_with_nothing_recorded_says_so(capsys, monkeypatch):
     text = capsys.readouterr().out
 
     assert payload["agent"]["last_pass"] is None
-    assert payload["activity"] == {"hours": 24, "runs": 0, "moved": 0, "failed": 0, "errors": []}
-    assert "last 24 h" in text
+    assert payload["activity"] == {
+        "hours": 24, "runs": 0, "moved": 0, "failed": 0, "errors": [], "complete": True,
+    }  # fmt: skip
+    assert "no run moved or failed anything" in text
 
 
 def test_a_stop_during_the_sleep_ends_the_loop_without_another_pass(tmp_path):

@@ -238,7 +238,7 @@ def test_a_pass_that_fails_logs_the_failure_under_its_run_id(tmp_path):
     class Failing:
         source = tmp_path
 
-        def sort_once(self, *, apply, stop=None, run_id=None):
+        def sort_once(self, *, apply, stop=None, run_id=None, on_waiting=None):
             raise OSError(5, "I/O error")
 
     log_path = tmp_path / "cubby.log"
@@ -247,6 +247,7 @@ def test_a_pass_that_fails_logs_the_failure_under_its_run_id(tmp_path):
     lines = [json.loads(line) for line in log_path.read_text("utf-8").splitlines()]
     failed = [line for line in lines if "failed" in line["msg"]]
     assert failed
+    assert "I/O error" in failed[0]["msg"]  # the simulated failure, not a bad call
     assert failed[0].get("run")
 
 
