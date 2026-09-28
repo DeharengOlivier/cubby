@@ -108,6 +108,8 @@ def test_the_pass_summary_and_ledger_equal_those_of_the_full_list(tmp_path):
     assert tally.count == len(seen) == 32
     assert tally.moved == sum(1 for o in seen if o.moved_to is not None) == 7
     assert tally.failed == sum(1 for o in seen if o.error is not None) == 25
+    # A pass where every file fails must not keep a failure per file.
+    assert len(tally.failures) == MAX_FAILURES_RECORDED
     # What 0.3.0 wrote: the record built from every outcome, capped when written.
     (stored,) = [json.loads(line) for line in (state_dir / "runs.jsonl").read_text().splitlines()]
     expected = RunRecord(
@@ -155,7 +157,9 @@ def test_the_watcher_announces_failures_as_it_did_with_the_full_list(tmp_path):
             return tally
 
     alerts: list[str] = []
-    Watcher(Failing(), 1.0, sleep=lambda _: None, alert=alerts.append).run(max_cycles=2)
+    watcher = Watcher(Failing(), 1.0, sleep=lambda _: None, alert=alerts.append)
+
+    assert watcher.run(max_cycles=2) == 0  # nothing was sorted
 
     assert alerts == [
         "Could not sort f0000.pdf, f0001.pdf, f0002.pdf and 1002 more. See 'cubby status'.",
@@ -200,6 +204,51 @@ def test_compaction_keeps_what_0_3_0_kept(tmp_path_factory, content, keep_runs):
         Journal(path).compact()
 
     kept = compaction_reference.compact([line for line in content if line.strip()], keep_runs)
+    expected = raw if kept is None else "".join(line + "\n" for line in kept)
+    assert path.read_text(encoding="utf-8") == expected
+
+
+_MANY_RUNS = st.sampled_from([f"m{i}" for i in range(10)])
+_many_run_lines = st.lists(
+    st.one_of(
+        st.fixed_dictionaries(
+            {
+                "v": st.just(2),
+                "run": _MANY_RUNS,
+                "seq": st.integers(min_value=0, max_value=3),
+                "op": st.sampled_from(["move", "dedupe"]),
+                "from": st.just("/d/a"),
+                "to": st.just("/d/X/a"),
+            }
+        ).map(json.dumps),
+        st.fixed_dictionaries(
+            {
+                "v": st.just(2),
+                "run": _MANY_RUNS,
+                "seq": st.integers(min_value=0, max_value=3),
+                "op": st.sampled_from(["restored", "gone"]),
+            }
+        ).map(json.dumps),
+    ),
+    max_size=40,
+)
+
+
+@settings(max_examples=300, deadline=None)
+@given(content=_many_run_lines, keep_runs=st.integers(min_value=1, max_value=4))
+def test_compaction_over_many_runs_drops_what_0_3_0_dropped(tmp_path_factory, content, keep_runs):
+    # Many runs and a small keep_runs, so settled runs really are dropped: the
+    # census of what is left to undo decides every line here.
+    path = tmp_path_factory.mktemp("j") / "journal.jsonl"
+    raw = "".join(line + "\n" for line in content)
+    path.write_text(raw, encoding="utf-8")
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(journal_module, "MAX_BYTES", 0)
+        patch.setattr(journal_module, "KEEP_RUNS", keep_runs)
+        Journal(path).compact()
+
+    kept = compaction_reference.compact(content, keep_runs)
     expected = raw if kept is None else "".join(line + "\n" for line in kept)
     assert path.read_text(encoding="utf-8") == expected
 
