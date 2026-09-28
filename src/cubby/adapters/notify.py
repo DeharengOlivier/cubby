@@ -58,6 +58,7 @@ def command(message: str, platform: str | None = None) -> list[str] | None:
     if tool is None:
         return None
     # Shortened first, then made markup: a cut never falls inside ``&amp;``.
+    # MAX_CHARS bounds the text shown; the markup itself can be longer.
     return [tool, "--app-name", TITLE, TITLE, html.escape(text, quote=False)]
 
 
