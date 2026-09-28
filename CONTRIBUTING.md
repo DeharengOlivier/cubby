@@ -34,6 +34,26 @@ populate it, rather than reaching into the filesystem from the domain.
 - **Tests**: every behaviour change ships with a test. Keep domain tests free of
   real files.
 
+## Tests
+
+- `make test` runs the suite, including property-based tests (Hypothesis) and an
+  end-to-end journey that starts `cubby watch` as a real process.
+- `make mutation` runs mutation testing on the modules where a silent bug would
+  lose or misplace files (journal, containment, undo; see `[tool.mutmut]` in
+  `pyproject.toml`). Record the score in `docs/audits/` when those modules change.
+
+## Releasing
+
+1. On a branch, bump `version` in `pyproject.toml` and `__version__` in
+   `src/cubby/__init__.py`, move the `Unreleased` changelog entries under the new
+   version, and merge through a pull request.
+2. Tag the merge commit on `main` and push the tag:
+   `git tag -a vX.Y.Z -m "cubby X.Y.Z" && git push origin vX.Y.Z`.
+3. The Release workflow checks the tag against the package version, runs the
+   tests, smoke-tests the wheel and publishes the GitHub release with
+   `SHA256SUMS`.
+4. Rolling back is installing the previous tag; see [docs/RUNBOOK.md](docs/RUNBOOK.md).
+
 ## Before opening a PR
 
 ```sh

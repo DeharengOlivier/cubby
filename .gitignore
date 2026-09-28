@@ -24,3 +24,4 @@ config.local.toml
 coverage.xml
 .locked.txt
 mutants/
+.hypothesis/

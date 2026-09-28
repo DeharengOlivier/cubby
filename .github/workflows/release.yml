@@ -1,0 +1,73 @@
+name: Release
+
+# A tag vX.Y.Z on main builds the wheel and sdist from the locked toolchain,
+# checks that the tag matches the package version, runs the test suite, smoke-
+# tests the built wheel in a clean environment, and publishes a GitHub release with the artifacts and their
+# SHA-256 sums. Nothing is published to PyPI.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.12"
+      - name: Tag matches the package version
+        run: |
+          version="$(uv run --locked python -c 'import cubby; print(cubby.__version__)')"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match package version ${version}" >&2
+            exit 1
+          fi
+      - name: Build
+        run: uv build
+      - name: Test suite
+        run: |
+          uv sync --locked --all-extras
+          uv run --locked pytest
+      - name: Smoke-test the built wheel on its own
+        run: |
+          uv venv /tmp/wheel-env
+          uv pip install --python /tmp/wheel-env/bin/python dist/*.whl
+          mkdir -p /tmp/smoke/Downloads && touch /tmp/smoke/Downloads/a.pdf
+          HOME=/tmp/smoke CUBBY_STATE_DIR=/tmp/smoke/state /tmp/wheel-env/bin/cubby --version
+          HOME=/tmp/smoke CUBBY_STATE_DIR=/tmp/smoke/state \
+            /tmp/wheel-env/bin/cubby plan --source /tmp/smoke/Downloads --json
+      - name: Checksums
+        run: cd dist && sha256sum -- * > SHA256SUMS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The only job that may write, and it runs no project code.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "cubby ${GITHUB_REF_NAME}" \
+            --notes "See CHANGELOG.md for what changed. Verify downloads with SHA256SUMS."
