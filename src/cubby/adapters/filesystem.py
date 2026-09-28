@@ -225,11 +225,13 @@ class Moved:
 #: A folder with no file near its top (``_WITNESS_DEPTH``) records 0 and its
 #: own time.
 #:
-#: The limit: a folder deleted and made again by a program within the same
-#: clock tick as its witness was written can match on every field (the inodes
-#: come back, and the file time is coarser than a nanosecond: 45% of 2000
-#: immediate re-creations matched, measured on ext4). A person cannot be that
-#: fast; the tests of re-creation set the new file's time apart.
+#: The limit: a folder deleted and made again within the same tick of the
+#: file system's clock as its witness was written can match on every field:
+#: the inodes come back, and the file time is coarser than a nanosecond (about
+#: 1 ms on ext4, where 45% to 58% of immediate re-creations matched, measured;
+#: FAT32 and HFS+ keep whole seconds, not measured here). A person re-creating
+#: a folder by hand is slower than 1 ms, not always than a second on such a
+#: drive. The tests of re-creation set the new file's time apart.
 Identity = tuple[int, int, int, int]
 
 
