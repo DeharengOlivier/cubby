@@ -19,8 +19,16 @@ All notable changes to this project are documented here. The format is based on
   file planted in Downloads could clear the screen or forge those reports.
   Every human output now shows them as visible escapes (`\x1b`, `\u202e`)
   and doubles a backslash, so each shown name stands for one real name;
-  ordinary names (accented, CJK, emoji) read as they are. `--json` outputs
-  and the log file were already escaped and are unchanged.
+  ordinary names (accented, CJK, emoji, no-break and other spaces,
+  subdivision flags) read as they are.
+- `--json` outputs (`plan`, `explain`, `history`, `status`) wrote DEL, C1,
+  bidi and other format characters, line separators and lone surrogates
+  raw (the JSON encoder escaped C0 only). They are now written as `\uXXXX`
+  escapes: the output decodes to the same values, and accents, CJK and
+  emoji stay literal. `log --json` and the log file were already fully
+  escaped.
+- An `OSError` message naming a hostile file shows each escape once
+  (`\x1b`), no longer doubled by Python's own quoting (`\\x1b`).
 - The `notify-send` body is markup: `&`, `<` and `>` in a file name are
   now escaped there, and control characters are escaped in notifications
   on every platform.
