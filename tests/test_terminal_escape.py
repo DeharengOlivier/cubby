@@ -555,12 +555,33 @@ def test_a_literal_backslash_name_never_reads_like_an_escaped_one():
     assert escape_for_terminal("a\x1b") == "a\\x1b"
 
 
+def test_line_and_paragraph_separators_are_escaped():
+    assert escape_for_terminal("a\u2028b\u2029c") == "a\\u2028b\\u2029c"
+    assert "\\u2028\\u2029" in dumps_for_terminal(["\u2028\u2029"])
+
+
+def test_only_the_flag_tag_characters_are_kept():
+    assert escape_for_terminal("\U000e0067\U000e007f") == "\U000e0067\U000e007f"
+    assert escape_for_terminal("\U000e0001") == "\\U000e0001"
+    assert escape_for_terminal("\U000e001f") == "\\U000e001f"
+
+
+def test_a_lone_surrogate_pair_decodes_as_the_character_it_spells():
+    # JSON cannot tell a lone high surrogate followed by a lone low one from
+    # the pair that spells U+10000. File names never hold such a pair: an
+    # undecodable byte becomes one of U+DC80 to U+DCFF, never a high surrogate.
+    assert json.loads(dumps_for_terminal("\ud800\udc00")) == "\U00010000"
+
+
+def _no_surrogate_pair(text):
+    return re.search("[\ud800-\udbff][\udc00-\udfff]", text) is None
+
+
+_TEXT = st.text(st.characters(codec=None)).filter(_no_surrogate_pair)
+
 _JSON_VALUES = st.recursive(
-    st.none() | st.booleans() | st.integers() | st.text(st.characters(codec=None)),
-    lambda inner: (
-        st.lists(inner, max_size=4)
-        | st.dictionaries(st.text(st.characters(codec=None)), inner, max_size=4)
-    ),
+    st.none() | st.booleans() | st.integers() | _TEXT,
+    lambda inner: st.lists(inner, max_size=4) | st.dictionaries(_TEXT, inner, max_size=4),
     max_leaves=12,
 )
 

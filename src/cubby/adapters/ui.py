@@ -103,7 +103,9 @@ def dumps_for_terminal(value: Any) -> str:
     :func:`is_harmless` (DEL, C1, bidi and other format characters, line
     separators, lone surrogates) is written as ``\\uXXXX``, a pair of them
     above U+FFFF, so a ``--json`` output printed to a terminal cannot drive it
-    either, and still decodes to the same values. Such characters can only be
+    either, and still decodes to the same values (except a lone high
+    surrogate right before a lone low one, which JSON reads as the pair they
+    spell; file names never hold one). Such characters can only be
     inside a JSON string: the rest of the text is ASCII.
     """
     return _NOT_ASCII.sub(_json_escape, json.dumps(value, ensure_ascii=False, indent=2))
