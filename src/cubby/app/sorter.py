@@ -10,6 +10,7 @@ from pathlib import Path
 from ..adapters.filesystem import build_ref, is_eligible, iter_candidates, move_into
 from ..adapters.journal import Entry, Journal, new_run_id
 from ..adapters.ledger import Failure, Ledger, RunRecord, now_iso
+from ..adapters.logging import run_context
 from ..domain.category import Category, Config
 from ..domain.engine import Engine
 from ..domain.file_ref import FileRef
@@ -158,11 +159,29 @@ class Sorter:
         checked before each file, so a stop request ends the pass between two
         files, never in the middle of one.
         """
-        settings = self._config.settings
         run_id = new_run_id()
         started = now_iso()
         outcomes: list[SortOutcome] = []
+        with run_context(run_id):
+            self._sort_each(
+                outcomes, apply=apply, respect_age=respect_age, stop=stop, run_id=run_id
+            )
+            if apply:
+                self._record_run(run_id, started, outcomes)
+                if self._journal is not None:
+                    self._compact_journal(self._journal)
+        return outcomes
 
+    def _sort_each(
+        self,
+        outcomes: list[SortOutcome],
+        *,
+        apply: bool,
+        respect_age: bool,
+        stop: Callable[[], bool],
+        run_id: str,
+    ) -> None:
+        settings = self._config.settings
         for path in iter_candidates(settings, self._config.managed_dirs):
             if stop():
                 break
@@ -179,12 +198,6 @@ class Sorter:
                 error = describe_error(exc)
                 self._warn(f"could not sort {path.name}: {error}")
                 outcomes.append(SortOutcome.failed(path, error))
-
-        if apply:
-            self._record_run(run_id, started, outcomes)
-            if self._journal is not None:
-                self._compact_journal(self._journal)
-        return outcomes
 
     def _record_run(self, run_id: str, started: str, outcomes: list[SortOutcome]) -> None:
         if self._ledger is None or not outcomes:

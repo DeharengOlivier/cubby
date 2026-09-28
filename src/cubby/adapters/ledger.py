@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .. import __version__
 from . import state
 
 VERSION = 1
@@ -44,6 +45,7 @@ class RunRecord:
     moved: int
     failed: int
     failures: tuple[Failure, ...] = field(default_factory=tuple)
+    version: str = __version__  # the cubby that made the run
 
     @property
     def status(self) -> str:
@@ -70,6 +72,7 @@ class RunRecord:
             failures=tuple(
                 Failure(str(f["file"]), str(f["error"])) for f in data.get("failures", [])
             ),
+            version=str(data.get("version", "unknown")),  # records from before 0.3
         )
 
 
