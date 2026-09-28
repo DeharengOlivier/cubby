@@ -8,8 +8,12 @@ A review record is a pull request comment that:
   public and anyone may comment);
 - has a line ``Reviewed head: <sha>`` naming the commit the reviewer read,
   with the full 40-digit SHA (optionally in backticks, either case, nothing
-  else on the line but spaces). A short SHA is refused: a prefix could match
-  a later commit.
+  else on the line but spaces, at most three of them before it). A short SHA
+  is refused: a prefix could match a later commit. Only a line the reader
+  sees as text counts: not one inside a fenced code block, an indented code
+  block or an HTML comment. Lines are split on newlines only (``\n``, with
+  an optional ``\r`` before it), not on U+2028, U+2029, U+0085 or other
+  characters Python's ``splitlines`` would break on.
 
 The status is ``success`` only when a record names the pull request's current
 head. A push after the review therefore turns it back to ``failure`` until a
@@ -28,22 +32,47 @@ from __future__ import annotations
 import json
 import re
 import sys
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from typing import Any
 
 HEADING = "## Independent review record"
 TRUSTED = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
 _SHA = re.compile(r"[0-9a-fA-F]{40}")
 _REVIEWED_HEAD = re.compile(r"Reviewed head: (?:`([0-9a-fA-F]{40})`|([0-9a-fA-F]{40}))")
+# An HTML comment, or an unclosed one, which hides the rest of the comment.
+_HTML_COMMENT = re.compile(r"<!--.*?(?:-->|\Z)", re.DOTALL)
+_FENCE = re.compile(r" {0,3}(`{3,}|~{3,})")
 # GitHub refuses a status description longer than this.
 MAX_DESCRIPTION = 140
+
+
+def _text_lines(body: str) -> Iterator[str]:
+    """The body's lines outside HTML comments and fenced code blocks."""
+    fence = ""
+    for raw in _HTML_COMMENT.sub("", body).split("\n"):
+        line = raw.removesuffix("\r")
+        marker = _FENCE.match(line)
+        if not fence:
+            if marker:
+                fence = marker.group(1)
+            else:
+                yield line
+        elif (
+            marker
+            and marker.group(1)[0] == fence[0]
+            and len(marker.group(1)) >= len(fence)
+            and not line[marker.end() :].strip(" \t")
+        ):
+            fence = ""
 
 
 def reviewed_heads(body: str) -> set[str]:
     """The SHAs, in lowercase, named by the body's ``Reviewed head:`` lines."""
     heads = set()
-    for line in body.splitlines():
-        match = _REVIEWED_HEAD.fullmatch(line.strip())
+    for line in _text_lines(body):
+        text = line.rstrip(" \t")
+        indent = len(text) - len(text.lstrip(" "))
+        match = _REVIEWED_HEAD.fullmatch(text.lstrip(" ")) if indent <= 3 else None
         if match:
             heads.add((match.group(1) or match.group(2)).lower())
     return heads

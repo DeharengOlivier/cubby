@@ -148,6 +148,41 @@ def test_a_sha_embedded_in_other_text_does_not_count(rr, line):
     assert rr.decide([_comment(body)], HEAD)[0] == "failure"
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        f"{HEADING}\n\n```\nReviewed head: {HEAD}\n```\n",
+        f"{HEADING}\n\n```text\nReviewed head: {HEAD}\n```\n",
+        f"{HEADING}\n\n~~~\nReviewed head: {HEAD}\n~~~\n",
+        f"{HEADING}\n\n````\n```\nReviewed head: {HEAD}\n````\n",  # a shorter fence is text
+        f"{HEADING}\n\n```\n~~~\nReviewed head: {HEAD}\n```\n",  # the other fence is text
+        f"{HEADING}\n\n```\n``` x\nReviewed head: {HEAD}\n```\n",  # a closer has no text
+        f"{HEADING}\n\n  ```\nReviewed head: {HEAD}\n",  # an unclosed fence runs to the end
+        f"{HEADING}\n\n<!--\nReviewed head: {HEAD}\n-->\n",
+        f"{HEADING}\n\n<!-- Reviewed head: {HEAD} -->\n",
+        f"{HEADING}\n\n<!-- note\nReviewed head: {HEAD}\n",  # an unclosed comment too
+        f"{HEADING}\n\n    Reviewed head: {HEAD}\n",  # indented code
+        f"{HEADING}\n\n\tReviewed head: {HEAD}\n",
+    ],
+)
+def test_a_line_in_code_or_an_html_comment_does_not_count(rr, body):
+    assert rr.decide([_comment(body)], HEAD)[0] == "failure"
+
+
+def test_a_line_after_a_closed_fence_or_comment_counts(rr):
+    body = f"{HEADING}\n\n```\nReviewed head: {OLD}\n```\n<!-- x -->\nReviewed head: {HEAD}\n"
+    assert rr.decide([_comment(body)], HEAD)[0] == "success"
+    assert rr.decide([_comment(body)], OLD)[0] == "failure"
+
+
+@pytest.mark.parametrize("separator", ["\u2028", "\u2029", "\x85", "\x0b", "\x0c", "\x1c"])
+def test_only_a_newline_breaks_a_line(rr, separator):
+    body = f"{HEADING}\n\nThe fix is in.{separator}Reviewed head: {HEAD}\n"
+    assert rr.decide([_comment(body)], HEAD)[0] == "failure"
+    body = f"{HEADING}\n\n{separator}Reviewed head: {HEAD}\n"
+    assert rr.decide([_comment(body)], HEAD)[0] == "failure"
+
+
 def test_surrounding_spaces_on_the_line_are_accepted(rr):
     body = f"{HEADING}\n\n  Reviewed head: {HEAD}  \n"
     assert rr.decide([_comment(body)], HEAD)[0] == "success"
@@ -275,25 +310,39 @@ def test_the_workflow_checks_out_the_default_branch_only():
     assert step["with"]["sparse-checkout"].split() == ["scripts/review_record.py"]
 
 
-def test_the_workflow_reevaluates_on_every_push_and_comment_change():
-    # PyYAML reads the bare key `on` as True.
+def test_the_workflow_runs_the_default_branch_definition_on_every_push_and_comment():
+    # PyYAML reads the bare key `on` as True. `pull_request` would run the pull
+    # request's own copy of this file with `statuses: write`, so a branch that
+    # edits it could post success; `pull_request_target` runs the default
+    # branch's copy.
     triggers = _workflow()[True]
-    assert set(triggers["pull_request"]["types"]) >= {"opened", "synchronize", "reopened"}
+    assert set(triggers) == {"pull_request_target", "issue_comment"}
+    assert set(triggers["pull_request_target"]["types"]) == {"opened", "synchronize", "reopened"}
     assert set(triggers["issue_comment"]["types"]) == {"created", "edited", "deleted"}
+    assert "pull_request_target" in _workflow()["jobs"]["record"]["if"]
+
+
+def test_the_status_step_runs_even_when_the_checkout_failed():
+    (step,) = [s for s in _steps() if "run" in s]
+    assert step["if"] == "${{ !cancelled() }}"
 
 
 FAKE_GH = """#!/bin/sh
 # A stand-in for gh: answers the three calls the workflow makes.
 case "$*" in
-  "api repos/o/r/pulls/7 -q .head.sha") echo "$FAKE_HEAD" ;;
-  "api --paginate repos/o/r/issues/7/comments") cat "$FAKE_COMMENTS" ;;
+  "api repos/o/r/pulls/7 -q .head.sha")
+    [ -z "$FAKE_PULL_FAILS" ] || exit 1
+    echo "$FAKE_HEAD" ;;
+  "api --paginate repos/o/r/issues/7/comments")
+    [ -z "$FAKE_COMMENTS_FAIL" ] || exit 1
+    cat "$FAKE_COMMENTS" ;;
   "api repos/o/r/statuses/"*) printf '%s\\n' "$@" > "$FAKE_STATUS" ;;
   *) echo "fake gh: unexpected call: $*" >&2; exit 64 ;;
 esac
 """
 
 
-def _run_step(tmp_path, comments_text):
+def _run_step(tmp_path, comments_text, *, expect_exit=0, head=HEAD, **extra_env):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     gh = bin_dir / "gh"
@@ -314,6 +363,8 @@ def _run_step(tmp_path, comments_text):
         "FAKE_HEAD": HEAD,
         "FAKE_COMMENTS": str(comments),
         "FAKE_STATUS": str(status),
+        "EVENT_HEAD": "",
+        **extra_env,
     }
     bash = shutil.which("bash")
     assert bash
@@ -325,9 +376,12 @@ def _run_step(tmp_path, comments_text):
         text=True,
         check=False,
     )
-    assert done.returncode == 0, done.stderr
+    assert (done.returncode == 0) == (expect_exit == 0), done.stderr
+    if head is None:
+        assert not status.exists()
+        return None
     posted = status.read_text(encoding="utf-8").splitlines()
-    assert posted[:2] == ["api", f"repos/o/r/statuses/{HEAD}"]
+    assert posted[:2] == ["api", f"repos/o/r/statuses/{head}"]
     fields = dict(arg.split("=", 1) for flag, arg in itertools.pairwise(posted) if flag == "-f")
     assert fields["context"] == "review record"
     return fields
@@ -349,3 +403,19 @@ def test_the_step_posts_failure_when_the_record_is_for_an_older_head(tmp_path):
 def test_the_step_posts_an_error_when_the_decision_fails(tmp_path):
     fields = _run_step(tmp_path, "{not json")
     assert fields["state"] == "error"
+
+
+def test_the_step_posts_an_error_when_the_comments_cannot_be_read(tmp_path):
+    # A success posted earlier on this head must not survive a failed re-read.
+    fields = _run_step(tmp_path, "[]", expect_exit=1, FAKE_COMMENTS_FAIL="1")
+    assert fields["state"] == "error"
+
+
+def test_the_step_posts_an_error_on_the_event_head_when_the_head_cannot_be_read(tmp_path):
+    fields = _run_step(tmp_path, "[]", expect_exit=1, head=OLD, FAKE_PULL_FAILS="1", EVENT_HEAD=OLD)
+    assert fields["state"] == "error"
+
+
+def test_the_step_fails_without_a_status_when_no_head_is_known(tmp_path):
+    # A comment event carries no head SHA: nothing to post on, the run fails.
+    _run_step(tmp_path, "[]", expect_exit=1, head=None, FAKE_PULL_FAILS="1")
