@@ -227,7 +227,7 @@ def cmd_status(args: argparse.Namespace) -> int:
 
     pal = palette()
     _print_status(pal, agent, pause)
-    kv(pal, "live", "yes" if live else pal.yellow("no"))
+    kv(pal, "live", Shown("yes") if live else pal.yellow(Shown("no")))
     kv(pal, "ready", _readiness_text(pal, readiness, pause))
     _print_runs(pal, last, day)
     _print_latency(pal, day, saturation, agent)
@@ -328,19 +328,20 @@ _BASIS_TEXT = {
 }
 
 
-def _readiness_text(pal: Palette, readiness: Readiness, pause: Pause | None) -> str:
+def _readiness_text(pal: Palette, readiness: Readiness, pause: Pause | None) -> Shown:
     if readiness.ready:
-        text = "yes"
+        text = Shown("yes")
     else:
         reasons = [*readiness.problems, *([pause.describe()] if pause else [])]
-        text = pal.yellow(f"no ({shown('; '.join(reasons))})")
+        text = pal.yellow(Shown(f"no ({shown('; '.join(reasons))})"))
     if readiness.degraded:
-        formats = ", ".join(f".{ext}" for ext in readiness.degraded)
-        text += pal.dim(f"; degraded: no converter reads {formats} (see cubby doctor)")
-    basis = _BASIS_TEXT[readiness.basis]
+        formats = shown(", ".join(f".{ext}" for ext in readiness.degraded))
+        degraded = Shown(f"; degraded: no converter reads {formats} (see cubby doctor)")
+        text = Shown(text + pal.dim(degraded))
+    basis = shown(_BASIS_TEXT[readiness.basis])
     if readiness.config:
-        basis += f" ({shown(readiness.config)})"
-    return text + pal.dim(f"; checked with {basis}")
+        basis = Shown(f"{basis} ({shown(readiness.config)})")
+    return Shown(text + pal.dim(Shown(f"; checked with {basis}")))
 
 
 def _saturation(day: Activity, agent: dict[str, Any]) -> float | None:
@@ -356,29 +357,35 @@ def _print_latency(
 ) -> None:
     if day.pass_ms is not None:
         latency = day.pass_ms
-        text = (
+        text = Shown(
             f"p50 {_seconds(latency.p50)} s, p95 {_seconds(latency.p95)} s, "
-            f"max {_seconds(latency.max)} s over {latency.count} "
+            f"max {_seconds(latency.max)} s over {latency.count:d} "
             f"agent run{'s' if latency.count != 1 else ''}"
         )
         if saturation is not None:
-            share = f"p95 is {saturation:.0%} of the {format_duration(agent['interval'])} interval"
-            text += "; " + (pal.yellow(share) if saturation >= 0.5 else share)
+            interval = shown(format_duration(agent["interval"]))
+            share = Shown(f"p95 is {saturation:.0%} of the {interval} interval")
+            text = Shown(text + "; " + (pal.yellow(share) if saturation >= 0.5 else share))
         kv(pal, "run time", text)
     if day.backlog is not None:
         backlog = day.backlog
-        trend = {1: "rising", -1: "falling", 0: "steady"}[
-            (backlog.last > backlog.first) - (backlog.last < backlog.first)
-        ]
+        trend = shown(
+            {1: "rising", -1: "falling", 0: "steady"}[
+                (backlog.last > backlog.first) - (backlog.last < backlog.first)
+            ]
+        )
         kv(
             pal,
             "backlog",
-            f"{backlog.first} -> {backlog.last} waiting to settle ({trend}), peak {backlog.peak}",
+            Shown(
+                f"{backlog.first:d} -> {backlog.last:d} waiting to settle ({trend}), "
+                f"peak {backlog.peak:d}"
+            ),
         )
 
 
-def _seconds(ms: int) -> str:
-    return f"{ms / 1000:.3f}".rstrip("0").rstrip(".")
+def _seconds(ms: int) -> Shown:
+    return Shown(f"{ms / 1000:.3f}".rstrip("0").rstrip("."))
 
 
 def _print_status(pal: Palette, agent: dict[str, Any], pause: Pause | None) -> None:

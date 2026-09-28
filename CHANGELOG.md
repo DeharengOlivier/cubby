@@ -78,7 +78,6 @@ All notable changes to this project are documented here. The format is based on
   ran that file. The libraries are now checked in a child process started
   from the filesystem root with `-P`, as the parsers already were.
 
-
 ## [0.4.0] - 2026-09-28
 
 ### Added
