@@ -16,7 +16,7 @@ from ..adapters.config import (
 from ..adapters.journal import Journal
 from ..adapters.ledger import Ledger
 from ..adapters.logging import human_line, read_all
-from ..adapters.ui import Palette, dumps_for_terminal
+from ..adapters.ui import Palette, Shown, dumps_for_terminal
 from ..adapters.ui import escape_for_terminal as shown
 from ..app.explain import Explanation, PlannedPass, explain
 from ..app.history import recent_runs
@@ -56,20 +56,22 @@ def _print_explanation(pal: Palette, item: Explanation, source: Path) -> None:
         kv(pal, "  would fail", pal.yellow(shown(item.error)), _WIDTH)
     elif item.duplicate_of is not None and not stays:
         where = f"as a duplicate of {shown(_near(item.duplicate_of, source))}"
-        kv(pal, "  deleted", pal.accent(where), _WIDTH)
+        kv(pal, "  deleted", pal.accent(Shown(where)), _WIDTH)
     elif not stays:
         kv(pal, "  goes to", pal.accent(destination), _WIDTH)
     elif item.sortable or item.outside:  # never sorted: no destination to announce
         kv(pal, "  would go to", pal.accent(destination), _WIDTH)
-    rule = f"{shown(item.rule)}  ({item.stage.value} stage)" if item.rule else "no rule matched"
-    kv(pal, "  decided by", rule, _WIDTH)
+    rule = (
+        f"{shown(item.rule)}  ({shown(item.stage.value)} stage)" if item.rule else "no rule matched"
+    )
+    kv(pal, "  decided by", Shown(rule), _WIDTH)
     if item.content_chars is not None:
         read = (
-            f"read ({item.content_chars} characters), no content pattern matched"
+            f"read ({item.content_chars:d} characters), no content pattern matched"
             if item.content_chars
             else "no text could be read from it"
         )
-        kv(pal, "  content", pal.dim(read), _WIDTH)
+        kv(pal, "  content", pal.dim(Shown(read)), _WIDTH)
     if item.renamed_to:
         kv(pal, "  renamed", shown(item.renamed_to), _WIDTH)
 
@@ -121,11 +123,12 @@ def cmd_history(args: argparse.Namespace) -> int:
         return EXIT_OK
     for summary in runs:
         record = summary.record
-        counts = f"moved {record.moved}"
+        counts = f"moved {record.moved:d}"
         if record.failed:
-            counts += pal.yellow(f", {record.failed} failed")
-        flag = "" if summary.undo == "undoable" else pal.dim(f"  {summary.undo}")
-        print(f"{record.finished}  {pal.accent(record.run)}  {record.mode:<5}  {counts}{flag}")
+            counts += pal.yellow(f", {record.failed:d} failed")
+        flag = "" if summary.undo == "undoable" else pal.dim(f"  {shown(summary.undo)}")
+        finished, run, mode = shown(record.finished), shown(record.run), shown(record.mode)
+        print(f"{finished}  {pal.accent(run)}  {mode:<5}  {counts}{flag}")
     print(pal.dim("\nUndo one with: cubby undo --run <id>"))
     return EXIT_OK
 
@@ -159,19 +162,23 @@ def cmd_init(args: argparse.Namespace) -> int:
     in_use = config_module.find_user_config()
     if in_use is not None and in_use != target and not args.force:
         print(
-            f"cubby: cubby already reads {in_use}; a new file at {target} would change "
-            "which config is used. Edit that one, or use --force to write anyway.",
+            f"cubby: cubby already reads {shown(str(in_use))}; a new file at "
+            f"{shown(str(target))} would change which config is used. Edit that one, "
+            "or use --force to write anyway.",
             file=sys.stderr,
         )
         return EXIT_FAILED
     try:
         write_starter_config(target, force=args.force)
     except FileExistsError:
-        print(f"cubby: {target} already exists; use --force to replace it", file=sys.stderr)
+        print(
+            f"cubby: {shown(str(target))} already exists; use --force to replace it",
+            file=sys.stderr,
+        )
         return EXIT_FAILED
     except OSError as error:
-        print(f"cubby: could not write {target}: {error}", file=sys.stderr)
+        print(f"cubby: could not write {shown(str(target))}: {shown(str(error))}", file=sys.stderr)
         return EXIT_FAILED
-    print(f"Wrote a starter config to {target}")
+    print(f"Wrote a starter config to {shown(str(target))}")
     print("Preview what it does with: cubby plan")
     return EXIT_OK

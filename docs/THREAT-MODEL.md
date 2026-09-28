@@ -79,5 +79,8 @@ publish a release.
 - A file name cannot drive the terminal or a notification: control (C0, DEL, C1) and bidi
   characters are shown as escapes in every human output, `&`, `<` and `>` are escaped in a
   `notify-send` body, and every `--json` output writes those characters as `\uXXXX` escapes
-  (`tests/test_terminal_escape.py`).
+  (`tests/test_terminal_escape.py`). A new output cannot skip the escaping: the escapers
+  return a `Shown` type that `kv` and the renderers require (mypy strict), and an AST check
+  fails CI on any `print`, stream write or `Shown(...)` whose text it cannot trace to an
+  escaper, a literal or a number (`tests/test_output_escaping.py`).
 - No network access: the test suite runs with sockets disabled (`tests/conftest.py`).

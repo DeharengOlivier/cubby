@@ -31,7 +31,7 @@ from ..adapters.service import (
     detect_service,
     get_service,
 )
-from ..adapters.ui import Palette, dumps_for_terminal
+from ..adapters.ui import Palette, Shown, dumps_for_terminal
 from ..adapters.ui import escape_for_terminal as shown
 from ..app.activity import Activity, summarize
 from ..domain.duration import format_duration
@@ -95,10 +95,10 @@ def cmd_install(args: argparse.Namespace) -> int:
         environment["XDG_STATE_HOME"] = str(Path(xdg_state).expanduser().resolve())
     spec = ServiceSpec(program_args=_program_args(args), log_path=log_path, environment=environment)
     path = service.install(spec)
-    print(f"Installed {service.name} agent: {shown(str(path))} (running)")
+    print(f"Installed {shown(service.name)} agent: {shown(str(path))} (running)")
     print(
         f"Cubby will watch {shown(str(config.settings.source))} "
-        f"(delay {format_duration(config.settings.delay)}). Logs: {shown(str(log_path))}"
+        f"(delay {shown(format_duration(config.settings.delay))}). Logs: {shown(str(log_path))}"
     )
     return EXIT_OK
 
@@ -108,13 +108,14 @@ def cmd_uninstall(args: argparse.Namespace) -> int:
     if service is None or not service.uninstall():
         print("No cubby agent was installed.")
     else:
-        print(f"Removed the {service.name} agent.")
+        print(f"Removed the {shown(service.name)} agent.")
     # The manager can lose track of a process that still runs, and a foreground
     # `cubby watch` has no unit at all: the heartbeat is the last word.
     pid = _still_sorting()
     if pid is not None:
         print(
-            f"cubby: a cubby process (pid {pid}) is still sorting; stop it with: kill -TERM {pid}",
+            f"cubby: a cubby process (pid {pid:d}) is still sorting; "
+            f"stop it with: kill -TERM {pid:d}",
             file=sys.stderr,
         )
         return EXIT_FAILED
@@ -175,13 +176,13 @@ def _agent_text(pal: Palette, agent: dict[str, Any]) -> str:
     if not agent["installed"]:
         if agent["live_pid"]:
             return pal.yellow(
-                f"not installed, but cubby (pid {agent['live_pid']}) is still sorting"
+                f"not installed, but cubby (pid {agent['live_pid']:d}) is still sorting"
             )
         return pal.yellow("not installed")
     if agent["running"]:
-        pid = f", pid {agent['live_pid']}" if agent["live_pid"] else ""
-        return pal.green(f"running ({agent['manager']}{pid})")
-    return pal.yellow(f"installed but not running ({agent['manager']})")
+        pid = f", pid {agent['live_pid']:d}" if agent["live_pid"] else ""
+        return pal.green(f"running ({shown(agent['manager'])}{pid})")
+    return pal.yellow(f"installed but not running ({shown(agent['manager'])})")
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -221,7 +222,7 @@ def _print_status(
     agent: dict[str, Any], pause: Pause | None, last: RunRecord | None, day: Activity
 ) -> None:
     pal = palette()
-    kv(pal, "agent", _agent_text(pal, agent))
+    kv(pal, "agent", Shown(_agent_text(pal, agent)))
     if agent["unit"]:
         kv(pal, "agent file", shown(agent["unit"]))
     if agent["watching"]:
@@ -229,21 +230,21 @@ def _print_status(
         live = agent["live_pid"] or agent["running"]
         kv(pal, "watching" if live else "last watched", shown(agent["watching"]))
     if pause:
-        kv(pal, "paused", pal.yellow(pause.describe() + ": no file is moved"))
-    kv(pal, "last pass", _last_pass_text(pal, agent))
+        kv(pal, "paused", Shown(pal.yellow(shown(pause.describe()) + ": no file is moved")))
+    kv(pal, "last pass", Shown(_last_pass_text(pal, agent)))
     if last is None:
-        kv(pal, "last run", pal.dim("none recorded"))
+        kv(pal, "last run", Shown(pal.dim("none recorded")))
     else:
-        summary = f"{last.finished}  moved {last.moved}"
+        summary = f"{shown(last.finished)}  moved {last.moved:d}"
         if last.failed:
-            summary += pal.yellow(f", {last.failed} failed")
-        kv(pal, "last run", f"{summary}  ({last.mode}, run {last.run})")
+            summary += pal.yellow(f", {last.failed:d} failed")
+        kv(pal, "last run", Shown(f"{summary}  ({shown(last.mode)}, run {shown(last.run)})"))
         for failure in last.failures[:5]:
             print(f"  {shown(failure.file)}  {pal.dim(shown(failure.error))}")
     _print_activity(pal, day)
     log_path = state.log_path()
     tail = read_tail(log_path, limit=5)
-    kv(pal, "recent log", pal.dim(shown(str(log_path))) if tail else pal.dim("(none yet)"))
+    kv(pal, "recent log", pal.dim(shown(str(log_path)) if tail else Shown("(none yet)")))
     for record in tail:
         line = human_line(record) if "ts" in record else shown(record["msg"])
         print(f"  {pal.dim(line)}")
@@ -251,25 +252,25 @@ def _print_status(
 
 def _print_activity(pal: Palette, day: Activity) -> None:
     if not day.runs:
-        kv(pal, f"last {ACTIVITY_HOURS} h", pal.dim("no run moved or failed anything"))
+        kv(pal, f"last {ACTIVITY_HOURS} h", Shown(pal.dim("no run moved or failed anything")))
         return
-    summary = f"{day.runs} run{'s' if day.runs != 1 else ''}, moved {day.moved}"
+    summary = f"{day.runs:d} run{'s' if day.runs != 1 else ''}, moved {day.moved:d}"
     if day.failed:
-        summary += pal.yellow(f", {day.failed} failed")
+        summary += pal.yellow(f", {day.failed:d} failed")
     if day.extraction_failures:
         # Sorted by name and type, so not failed: but a converter broke on them.
-        unread = f", content unreadable for {day.extraction_failures} (see cubby log --warnings)"
+        unread = f", content unreadable for {day.extraction_failures:d} (see cubby log --warnings)"
         summary += pal.yellow(unread)
     if not day.complete:
         summary += pal.yellow(
-            f" (the ledger keeps its last {KEEP_LINES} runs: older ones may be missing)"
+            f" (the ledger keeps its last {KEEP_LINES:d} runs: older ones may be missing)"
         )
-    kv(pal, f"last {ACTIVITY_HOURS} h", summary)
+    kv(pal, f"last {ACTIVITY_HOURS} h", Shown(summary))
     for group in day.errors:
-        print(f"  {group.count}x {shown(_shortened(group.kind))}")
+        print(f"  {group.count:d}x {shown(_shortened(group.kind))}")
         files = ", ".join(shown(name) for name in group.files)
         seen = f"last seen {shown(group.last_seen)}; files: {files}"
-        print(f"     {pal.dim(seen + '; cubby ' + ', '.join(group.versions))}")
+        print(f"     {pal.dim(seen + '; cubby ' + shown(', '.join(group.versions)))}")
 
 
 def _shortened(text: str, limit: int = 100) -> str:
@@ -281,7 +282,7 @@ def _last_pass_text(pal: Palette, agent: dict[str, Any]) -> str:
         return pal.yellow("no pass completed since install: see the log")
     if agent["last_pass_age"] is None:
         return pal.dim("never")
-    text = format_age(agent["last_pass_age"])
+    text: str = shown(format_age(agent["last_pass_age"]))
     text = pal.yellow(text + " (stale)") if agent["stale"] else text
     measures = agent["last_pass"]
     return f"{text}, {_measures_text(pal, measures)}" if measures else text
@@ -289,11 +290,11 @@ def _last_pass_text(pal: Palette, agent: dict[str, Any]) -> str:
 
 def _measures_text(pal: Palette, measures: dict[str, Any]) -> str:
     seconds = f"{measures['seconds']:.3f}".rstrip("0").rstrip(".")
-    parts = [f"took {seconds} s", f"moved {measures['moved']}"]
+    parts = [f"took {seconds} s", f"moved {measures['moved']:d}"]
     if measures["failed"]:
-        parts.append(pal.yellow(f"{measures['failed']} failed"))
+        parts.append(pal.yellow(f"{measures['failed']:d} failed"))
     if measures["waiting"]:
-        parts.append(f"{measures['waiting']} waiting to settle")
+        parts.append(f"{measures['waiting']:d} waiting to settle")
     return ", ".join(parts)
 
 
@@ -312,9 +313,13 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     pal = palette()
     config = load_from_args(args)
     service = detect_service()
-    print(pal.bold(pal.accent(f"cubby {__version__}")))
-    kv(pal, "platform", sys.platform)
-    kv(pal, "service", service.name if service else pal.yellow("none (manual watch only)"))
+    print(pal.bold(pal.accent(f"cubby {shown(__version__)}")))
+    kv(pal, "platform", shown(sys.platform))
+    kv(
+        pal,
+        "service",
+        shown(service.name) if service else Shown(pal.yellow("none (manual watch only)")),
+    )
     kv(pal, "config file", shown(str(find_user_config() or "defaults only")))
     kv(pal, "source", shown(str(config.settings.source)))
     kv(pal, "state", shown(str(state.state_dir())))
@@ -329,10 +334,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             libs[lib] = True
         except (ImportError, OSError):  # absent, or a broken native wheel
             libs[lib] = False
-    kv(pal, "extract tools", format_features(pal, tools))
-    kv(pal, "extract libs", format_features(pal, libs))
-    kv(pal, "parsable", pal.dim(", ".join(sorted(PARSABLE))))
-    kv(pal, "notifications", _notifications_text(pal, config.settings.notify))
+    kv(pal, "extract tools", Shown(format_features(pal, tools)))
+    kv(pal, "extract libs", Shown(format_features(pal, libs)))
+    kv(pal, "parsable", pal.dim(shown(", ".join(sorted(PARSABLE)))))
+    kv(pal, "notifications", Shown(_notifications_text(pal, config.settings.notify)))
     if getattr(args, "notify", False):
         return _test_notification(pal)
     return 0

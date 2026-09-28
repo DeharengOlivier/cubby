@@ -13,7 +13,7 @@ from ..adapters.config import (
 )
 from ..adapters.logging import Level, LevelLogger
 from ..adapters.pause import MAX_DURATION as MAX_PAUSE
-from ..adapters.ui import Palette, supports_color
+from ..adapters.ui import Palette, Shown, supports_color
 from ..adapters.ui import escape_for_terminal as shown
 from ..domain.category import Config
 from ..domain.duration import format_duration, parse_duration
@@ -160,7 +160,7 @@ def make_loud(log: LevelLogger) -> LevelLogger:
     def log_and_tell(message: str, *, level: Level = "INFO") -> None:
         log(message, level=level)
         if level != "INFO":
-            print(f"cubby: {level.lower()}: {shown(message)}", file=sys.stderr)
+            print(f"cubby: {shown(level.lower())}: {shown(message)}", file=sys.stderr)
 
     return log_and_tell
 
@@ -202,14 +202,14 @@ def positive_duration(value: str) -> float:
     return seconds
 
 
-def kv(pal: Palette, key: str, value: str, width: int = 16) -> None:
+def kv(pal: Palette, key: str, value: Shown, width: int = 16) -> None:
     # A key longer than the column still gets two spaces before its value.
-    print(f"{pal.dim(key.ljust(max(width, len(key) + 2)))}{value}")
+    print(f"{pal.dim(shown(key).ljust(max(width, len(key) + 2)))}{value}")
 
 
 def format_features(pal: Palette, mapping: dict[str, bool]) -> str:
     parts = [
-        pal.green(f"{name} ok") if present else pal.dim(f"{name} -")
+        pal.green(f"{shown(name)} ok") if present else pal.dim(f"{shown(name)} -")
         for name, present in mapping.items()
     ]
     return "  ".join(parts)

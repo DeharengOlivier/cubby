@@ -38,7 +38,7 @@ def _quiet(_: str) -> None:
 def command(message: str, platform: str | None = None) -> list[str] | None:
     """The argument list that shows ``message``, or None if there is no tool."""
     platform = platform or sys.platform
-    text = escape_for_terminal(message)
+    text: str = escape_for_terminal(message)  # a plain str once cut below
     text = text if len(text) <= MAX_CHARS else text[: MAX_CHARS - 1] + "…"
     if platform == "darwin":
         tool = shutil.which("osascript")

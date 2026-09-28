@@ -6,7 +6,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from ..adapters.ledger import MAX_FAILURES_RECORDED, Failure
-from ..adapters.ui import Palette, dumps_for_terminal
+from ..adapters.ui import Palette, Shown, dumps_for_terminal
 from ..adapters.ui import escape_for_terminal as shown
 from ..domain.file_ref import Stage
 
@@ -121,7 +121,7 @@ def render_plan(
     palette: Palette | None = None,
     left_alone: list[LeftAlone] | None = None,
     blocked: list[str] | None = None,
-) -> str:
+) -> Shown:
     """Render outcomes grouped by destination folder, then what is not moved.
 
     Non-name stages are annotated (``<- content``) so it is obvious why a file
@@ -141,7 +141,7 @@ def render_plan(
     if not outcomes:
         lines.append(p.dim("Nothing to sort."))
         lines.extend(_left_alone_lines(p, left_alone or []))
-        return "\n".join(lines)
+        return Shown("\n".join(lines))
 
     grouped = group_by_category(outcomes)
     failures = [o for o in outcomes if o.error is not None]
@@ -152,7 +152,9 @@ def render_plan(
         lines.append(f"\n{header}")
         for outcome in sorted(items, key=lambda o: o.display_name.lower()):
             stage = outcome.stage
-            tag = "" if stage is None or stage is Stage.NAME else p.dim(f"   <- {stage.value}")
+            tag = (
+                "" if stage is None or stage is Stage.NAME else p.dim(f"   <- {shown(stage.value)}")
+            )
             if outcome.renamed_to:
                 tag += p.dim(f"   (was {shown(outcome.name)})")
             lines.append(f"    {shown(outcome.display_name)}{tag}")
@@ -186,7 +188,7 @@ def render_plan(
     if failures:
         summary += f" {len(failures)} {'could not be sorted' if applied else 'would fail'}."
     lines.append("\n" + (p.green(summary) if applied and not failures else p.bold(summary)))
-    return "\n".join(lines).lstrip("\n")
+    return Shown("\n".join(lines).lstrip("\n"))
 
 
 def _left_alone_lines(p: Palette, left_alone: list[LeftAlone]) -> list[str]:
@@ -207,7 +209,7 @@ def render_json(
     applied: bool,
     left_alone: list[LeftAlone] | None = None,
     blocked: list[str] | None = None,
-) -> str:
+) -> Shown:
     """Render outcomes as JSON, for scripting and integration."""
     payload = {
         "version": JSON_VERSION,
