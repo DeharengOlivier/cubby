@@ -59,7 +59,7 @@ def test_the_child_parser_runs_isolated_from_the_working_directory(monkeypatch, 
         return subprocess.CompletedProcess(cmd, 0, b"", b"")
 
     monkeypatch.setattr(extraction.subprocess, "run", fake_run)
-    extraction._in_child("pdf", tmp_path / "a.pdf", 100)
+    extraction._in_child("pdf", tmp_path / "a.pdf", 100, [])
 
     ((cmd, kwargs),) = calls
     assert cmd[:3] == [sys.executable, "-P", "-m"]

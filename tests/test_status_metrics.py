@@ -311,6 +311,7 @@ def test_status_with_nothing_recorded_says_so(capsys, monkeypatch):
     assert payload["agent"]["last_pass"] is None
     assert payload["activity"] == {
         "hours": 24, "runs": 0, "moved": 0, "failed": 0, "errors": [], "complete": True,
+        "extraction_failures": 0,
     }  # fmt: skip
     assert "no run moved or failed anything" in text
 

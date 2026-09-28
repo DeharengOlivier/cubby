@@ -1,9 +1,11 @@
 """What cubby did over a recent window, read from the run ledger.
 
 ``cubby status`` shows it: how many runs, moves and failures, and the failures
-grouped by kind of error. Forty files refused with the same permission error
-are one problem to fix, not forty, so they read as one line, with the files it
-hit, when it was last seen and which cubby versions saw it.
+grouped by kind of error, plus how many files a content converter broke on
+(sorted anyway, so counted apart from the failures). Forty files refused with
+the same permission error are one problem to fix, not forty, so they read as
+one line, with the files it hit, when it was last seen and which cubby versions
+saw it.
 """
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ class Activity:
     failed: int  # exact, even when a run recorded only its first failures
     errors: tuple[ErrorGroup, ...]  # the most frequent first
     complete: bool  # False when the ledger was trimmed of runs inside the window
+    extraction_failures: int  # files sorted without their content: a converter broke
 
 
 def error_kind(error: str) -> str:
@@ -104,6 +107,7 @@ def summarize(
         failed=sum(record.failed for record in recent),
         errors=tuple(_frozen(kind, group) for kind, group in ranked[:top]),
         complete=complete,
+        extraction_failures=sum(record.extraction_failures for record in recent),
     )
 
 

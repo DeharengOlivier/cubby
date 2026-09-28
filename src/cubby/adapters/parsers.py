@@ -9,8 +9,10 @@ tests, and in production through::
     python -m cubby.adapters.parsers <pdf|docx|xlsx> <path> <max_chars>
 
 which prints the text on stdout. The parent sets the timeout, the memory
-ceiling and a neutral working directory (see ``extraction._run``). Every
-failure is an empty result: the engine then falls back to the filename and
+ceiling and a neutral working directory (see ``extraction._run``). A parser
+that raises (a corrupt file, a ``MemoryError`` under the ceiling) makes the
+child exit with :data:`EXIT_PARSE_FAILED` and name the exception on stderr,
+so the parent can report it; the engine still falls back to the filename and
 type stages, as designed.
 """
 
@@ -53,16 +55,20 @@ def xlsx_text(path: str, max_chars: int) -> str:
 
 PARSERS = {"pdf": pdf_text, "docx": docx_text, "xlsx": xlsx_text}
 
+#: The child's exit status when its parser raised.
+EXIT_PARSE_FAILED = 3
+
 
 def parse(kind: str, path: str, max_chars: int) -> str:
-    """Text of ``path`` read by the ``kind`` parser; ``""`` on any failure."""
+    """Text of ``path`` read by the ``kind`` parser; ``""`` for a kind with no parser.
+
+    Raises:
+        Exception: Whatever the parser raised on the file.
+    """
     parser = PARSERS.get(kind)
     if parser is None:
-        return ""
-    try:
-        return parser(path, max_chars)
-    except Exception:  # noqa: BLE001 - absent library, corrupt or hostile file: no text
-        return ""
+        return ""  # the parent only asks for the kinds of extraction._LIBRARIES
+    return parser(path, max_chars)
 
 
 def main(argv: list[str]) -> int:
@@ -70,9 +76,14 @@ def main(argv: list[str]) -> int:
         print("usage: python -m cubby.adapters.parsers KIND PATH MAX_CHARS", file=sys.stderr)
         return 2
     kind, path, max_chars = argv
+    try:
+        text = parse(kind, path, int(max_chars))
+    except Exception as exc:  # noqa: BLE001 - reported to the parent, which logs and counts it
+        print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        return EXIT_PARSE_FAILED
     # Bytes, not text: the child's locale may not be UTF-8, and an accented
     # invoice must not turn into an encoding error.
-    sys.stdout.buffer.write(parse(kind, path, int(max_chars)).encode("utf-8"))
+    sys.stdout.buffer.write(text.encode("utf-8"))
     return 0
 
 

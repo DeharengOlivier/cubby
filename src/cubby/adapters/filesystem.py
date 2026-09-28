@@ -9,7 +9,7 @@ import os
 import shutil
 import stat
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -18,20 +18,37 @@ from ..domain.category import Settings
 from ..domain.duration import format_duration
 from ..domain.file_ref import FileRef
 from ..domain.naming import safe_component
-from .extraction import extract_text
+from .extraction import ConverterFailure, extract
+
+#: Told which file's extraction broke, and how.
+ExtractionFailureHandler = Callable[[Path, tuple[ConverterFailure, ...]], None]
 
 
-def build_ref(path: Path, max_bytes: int = 4000) -> FileRef:
-    """Wrap a real path as a FileRef, wiring extraction as the read_text port."""
+def build_ref(
+    path: Path,
+    max_bytes: int = 4000,
+    *,
+    on_extraction_failure: ExtractionFailureHandler | None = None,
+) -> FileRef:
+    """Wrap a real path as a FileRef, wiring extraction as the read_text port.
+
+    ``on_extraction_failure`` hears of every converter that broke on the file.
+    The domain still sees only the text, so the engine's fallback to name and
+    type rules is unchanged; the FileRef reads the text once, so a file is
+    reported once.
+    """
     ext = path.suffix.lower().lstrip(".")
     is_file = path.is_file()
-    return FileRef(
-        name=path.name,
-        stem=path.stem,
-        ext=ext,
-        is_file=is_file,
-        read_text=lambda: extract_text(path, ext, max_bytes) if is_file else "",
-    )
+
+    def read_text() -> str:
+        if not is_file:
+            return ""
+        result = extract(path, ext, max_bytes)
+        if result.failures and on_extraction_failure is not None:
+            on_extraction_failure(path, result.failures)
+        return result.text
+
+    return FileRef(name=path.name, stem=path.stem, ext=ext, is_file=is_file, read_text=read_text)
 
 
 def ignored_by(name: str, patterns: tuple[str, ...]) -> str | None:

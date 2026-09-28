@@ -11,6 +11,8 @@ Fakes stand in for the tools, so the behaviour is asserted on any machine.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import subprocess
 import sys
 import time
@@ -37,7 +39,7 @@ def tools_available(monkeypatch):
 
     def fake_run(cmd, capture_output=False, timeout=None, check=False, **kwargs):
         commands.append(cmd)
-        return types.SimpleNamespace(stdout=b"extracted by " + cmd[0].encode())
+        return subprocess.CompletedProcess(cmd, 0, b"extracted by " + cmd[0].encode(), b"")
 
     monkeypatch.setattr(extraction.subprocess, "run", fake_run)
     return commands
@@ -45,16 +47,27 @@ def tools_available(monkeypatch):
 
 @pytest.fixture
 def in_process_parsers(monkeypatch):
-    """Run the Python parsers in this process, so fake libraries can stand in.
+    """Run the parser child's entry point in this process, so fake libraries can stand in.
 
-    Production runs them in a child process (tested separately below); what is
-    under test here is the parsing logic and its bounds, not the process.
+    Production runs it in a child process (tested separately below); what is
+    under test here is the parsing logic and its bounds, not the process. The
+    parent's side (its exit-status handling) is the real one.
     """
-    monkeypatch.setattr(
-        extraction,
-        "_in_child",
-        lambda kind, path, max_bytes: parsers.parse(kind, str(path), max_bytes),
-    )
+    monkeypatch.setattr(extraction.importlib.util, "find_spec", lambda name: object())
+    real_run = subprocess.run
+
+    def run_parser_here(cmd, *args, **kwargs):
+        if cmd[1:4] != ["-P", "-m", "cubby.adapters.parsers"]:
+            return real_run(cmd, *args, **kwargs)
+        out = types.SimpleNamespace(buffer=io.BytesIO())
+        err = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            status = parsers.main(cmd[4:])
+        return subprocess.CompletedProcess(
+            cmd, status, out.buffer.getvalue(), err.getvalue().encode()
+        )
+
+    monkeypatch.setattr(extraction.subprocess, "run", run_parser_here)
 
 
 def _file(tmp_path: Path, name: str) -> Path:
@@ -90,7 +103,7 @@ def test_every_external_command_is_given_a_timeout(monkeypatch, tmp_path):
 
     def fake_run(cmd, capture_output=False, timeout=None, check=False, **kwargs):
         seen["timeout"] = timeout
-        return types.SimpleNamespace(stdout=b"text")
+        return subprocess.CompletedProcess(cmd, 0, b"text", b"")
 
     monkeypatch.setattr(extraction.subprocess, "run", fake_run)
     extract_text(_file(tmp_path, "invoice.pdf"), "pdf")
@@ -207,7 +220,7 @@ def test_legacy_office_tries_each_tool_in_turn(monkeypatch, tmp_path):
 
     def fake_run(cmd, capture_output=False, timeout=None, check=False, **kwargs):
         commands.append(cmd)
-        return types.SimpleNamespace(stdout=b"read by catdoc")
+        return subprocess.CompletedProcess(cmd, 0, b"read by catdoc", b"")
 
     monkeypatch.setattr(extraction.subprocess, "run", fake_run)
 
@@ -237,7 +250,7 @@ def test_the_resolved_absolute_path_is_executed_not_a_bare_name(monkeypatch, tmp
 
     def fake_run(cmd, capture_output=False, timeout=None, check=False, **kwargs):
         commands.append(cmd)
-        return types.SimpleNamespace(stdout=b"text")
+        return subprocess.CompletedProcess(cmd, 0, b"text", b"")
 
     monkeypatch.setattr(extraction.subprocess, "run", fake_run)
     extract_text(_file(tmp_path, "invoice.pdf"), "pdf")
@@ -281,10 +294,10 @@ def test_the_child_parser_is_given_a_timeout_and_this_interpreter(monkeypatch, t
     def fake_run(cmd, capture_output=False, timeout=None, check=False, **kwargs):
         commands.append(cmd)
         assert timeout, "a parser without a timeout can stall the agent"
-        return types.SimpleNamespace(stdout=b"text")
+        return subprocess.CompletedProcess(cmd, 0, b"text", b"")
 
     monkeypatch.setattr(extraction.subprocess, "run", fake_run)
-    extraction._in_child("pdf", tmp_path / "a.pdf", 100)
+    extraction._in_child("pdf", tmp_path / "a.pdf", 100, [])
 
     assert commands == [
         [
@@ -303,9 +316,12 @@ def test_a_parser_that_hangs_costs_one_timeout(monkeypatch, tmp_path):
     monkeypatch.setattr(extraction, "_TIMEOUT", 0.5)
     started = time.monotonic()
 
-    text = extraction._run([sys.executable, "-c", "import time; time.sleep(30)"])
+    failures: list[extraction.ConverterFailure] = []
+
+    text = extraction._run([sys.executable, "-c", "import time; time.sleep(30)"], failures)
 
     assert text == ""
+    assert [failure.kind for failure in failures] == ["timeout"]
     assert time.monotonic() - started < 10
 
 
@@ -313,7 +329,10 @@ def test_no_child_is_started_when_the_library_is_absent(monkeypatch, tmp_path):
     monkeypatch.setattr(extraction.importlib.util, "find_spec", lambda name: None)
     monkeypatch.setattr(extraction.subprocess, "run", lambda *a, **k: pytest.fail("spawned"))
 
-    assert extraction._in_child("docx", tmp_path / "a.docx", 100) == ""
+    failures: list[extraction.ConverterFailure] = []
+
+    assert extraction._in_child("docx", tmp_path / "a.docx", 100, failures) == ""
+    assert failures == []  # an optional library that is absent is not a failure
 
 
 def test_the_parser_entry_point_rejects_bad_usage(capsys):
