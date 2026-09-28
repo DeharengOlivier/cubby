@@ -169,6 +169,14 @@ _MAX_NAME_RACES = 100
 _NO_LINK = frozenset({errno.EXDEV, errno.EPERM, errno.EMLINK, errno.ENOTSUP, errno.EOPNOTSUPP})
 
 
+def _same_file(a: Path, b: Path) -> bool:
+    """Whether two names still lead to the same file; False if either is gone."""
+    try:
+        return a.samefile(b)
+    except OSError:
+        return False
+
+
 def move_no_clobber(source: Path, destination: Path) -> None:
     """Move ``source`` to ``destination``, failing rather than replacing a file.
 
@@ -193,6 +201,11 @@ def move_no_clobber(source: Path, destination: Path) -> None:
             try:
                 source.unlink()
             except OSError as exc:
+                if not _same_file(source, destination):
+                    # The old name is gone (a network filesystem can report a
+                    # delete that happened as failed) or now holds another
+                    # file: ours is at the destination, under its only name.
+                    return
                 # Left alone, the new link would be a second name for the file:
                 # a retried undo would restore it again as "name (1)". A move
                 # that fails must change nothing.

@@ -109,8 +109,8 @@ def _spec(tmp_path: Path) -> ServiceSpec:
 
 def test_systemd_gives_the_agent_time_to_stop(tmp_path, monkeypatch):
     monkeypatch.setattr(systemd_mod, "_UNIT_DIR", tmp_path)
-    monkeypatch.setattr(systemd_mod, "require_success", lambda cmd: None)
-    monkeypatch.setattr(systemd_mod, "run_manager", lambda cmd: None)
+    monkeypatch.setattr(systemd_mod, "require_success", lambda cmd, **_: None)
+    monkeypatch.setattr(systemd_mod, "run_manager", lambda cmd, **_: None)
     monkeypatch.setattr(SystemdService, "is_running", lambda self, label=None: True)
 
     unit = SystemdService().install(_spec(tmp_path)).read_text()
@@ -120,8 +120,8 @@ def test_systemd_gives_the_agent_time_to_stop(tmp_path, monkeypatch):
 
 def test_launchd_gives_the_agent_time_to_stop(tmp_path, monkeypatch):
     monkeypatch.setattr(launchd_mod, "_AGENTS_DIR", tmp_path)
-    monkeypatch.setattr(launchd_mod, "require_success", lambda cmd: None)
-    monkeypatch.setattr(launchd_mod, "run_manager", lambda cmd: None)
+    monkeypatch.setattr(launchd_mod, "require_success", lambda cmd, **_: None)
+    monkeypatch.setattr(launchd_mod, "run_manager", lambda cmd, **_: None)
     monkeypatch.setattr(LaunchdService, "is_running", lambda self, label=None: True)
 
     path = LaunchdService().install(_spec(tmp_path))

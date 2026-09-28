@@ -102,7 +102,7 @@ class FakeSorter:
         self._outcomes = outcomes or []
         self._error = error
 
-    def sort_once(self, *, apply: bool, stop=None):
+    def sort_once(self, *, apply: bool, stop=None, run_id=None):
         self.passes += 1
         if self._error:
             raise self._error

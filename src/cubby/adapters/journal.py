@@ -146,6 +146,8 @@ class Journal:
             size = self.path.stat().st_size
         except FileNotFoundError:
             return
+        if size < self._compacted_size:
+            self._compacted_size = 0  # rewritten or removed since: start afresh
         if size <= max(MAX_BYTES, 2 * self._compacted_size):
             return
         runs = self.runs()

@@ -26,7 +26,7 @@ from cubby.app.sorter import Sorter
 from cubby.app.undo import undo_run
 from cubby.cli import agent as cli_agent
 from cubby.cli import main
-from tests.helpers import config_for
+from tests.helpers import config_for, process_named_cubby_watch
 from tests.test_service_boundary import FakeManager, unit_dirs  # noqa: F401 - fixture
 
 needs_permissions = pytest.mark.skipif(os.geteuid() == 0, reason="root ignores folder permissions")
@@ -96,6 +96,12 @@ def test_uninstall_fails_and_keeps_the_unit_while_the_agent_survives(
     assert unit.exists()
 
 
+@pytest.fixture
+def agent_pid():
+    with process_named_cubby_watch() as pid:
+        yield pid
+
+
 # --- D1: status does not call a live agent "not installed" and leave it there --
 
 
@@ -115,17 +121,17 @@ def _beat(pid: int) -> None:
     )
 
 
-def test_status_names_a_cubby_that_still_sorts_without_an_agent(monkeypatch, capsys):
+def test_status_names_a_cubby_that_still_sorts_without_an_agent(monkeypatch, capsys, agent_pid):
     monkeypatch.setattr(cli_agent, "detect_service", lambda: None)
-    _beat(os.getpid())
+    _beat(agent_pid)
 
     main(["status"])
     out = capsys.readouterr().out
     assert "not installed" in out
-    assert f"pid {os.getpid()}" in out
+    assert f"pid {agent_pid}" in out
 
     main(["status", "--json"])
-    assert json.loads(capsys.readouterr().out)["agent"]["live_pid"] == os.getpid()
+    assert json.loads(capsys.readouterr().out)["agent"]["live_pid"] == agent_pid
 
 
 def test_status_ignores_the_heartbeat_of_a_process_that_is_gone(monkeypatch, capsys):
@@ -183,20 +189,20 @@ class _Uninstalled:
         return True
 
 
-def test_uninstall_fails_when_a_cubby_is_still_sorting_afterwards(monkeypatch, capsys):
+def test_uninstall_fails_when_a_cubby_is_still_sorting_afterwards(monkeypatch, capsys, agent_pid):
     # The service manager said the agent stopped, but a fresh heartbeat from a
     # live process says something still sorts: the operator must hear it.
     monkeypatch.setattr(cli_agent, "detect_service", _Uninstalled)
-    _beat(os.getpid())
+    _beat(agent_pid)
 
     assert main(["uninstall"]) == 1
 
     err = capsys.readouterr().err
-    assert f"pid {os.getpid()}" in err
-    assert f"kill -TERM {os.getpid()}" in err
+    assert f"pid {agent_pid}" in err
+    assert f"kill -TERM {agent_pid}" in err
 
 
-def test_status_names_the_pid_of_a_running_agent(monkeypatch, capsys):
+def test_status_names_the_pid_of_a_running_agent(monkeypatch, capsys, agent_pid):
     class Running:
         name = "fake"
 
@@ -210,11 +216,11 @@ def test_status_names_the_pid_of_a_running_agent(monkeypatch, capsys):
             return "/tmp/fake.agent"
 
     monkeypatch.setattr(cli_agent, "detect_service", Running)
-    _beat(os.getpid())
+    _beat(agent_pid)
 
     main(["status"])
 
-    assert f"running (fake, pid {os.getpid()})" in capsys.readouterr().out
+    assert f"running (fake, pid {agent_pid})" in capsys.readouterr().out
 
 
 def test_uninstall_script_keeps_the_cli_when_the_agent_cannot_be_stopped(tmp_path):

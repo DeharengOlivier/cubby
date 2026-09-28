@@ -21,6 +21,8 @@ COMMAND_TIMEOUT = 30.0
 #: A stop waits for the file in progress (text extraction is capped at 15 s)
 #: and, at worst, for the pass lock (30 s), so 60 s lets it end cleanly.
 STOP_TIMEOUT = 60
+#: A command that stops the agent waits for it: the agent's grace, and some.
+STOPPING_TIMEOUT = STOP_TIMEOUT + COMMAND_TIMEOUT
 
 
 class ServiceError(RuntimeError):
@@ -38,27 +40,29 @@ class ServiceSpec:
     environment: dict[str, str] = field(default_factory=dict)
 
 
-def run_manager(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+def run_manager(
+    cmd: list[str], *, timeout: float = COMMAND_TIMEOUT
+) -> subprocess.CompletedProcess[str]:
     """Run a service-manager command with a timeout; the caller judges the result.
 
     Raises:
         ServiceError: The command could not be started or timed out.
     """
     try:
-        return subprocess.run(
-            cmd, capture_output=True, text=True, timeout=COMMAND_TIMEOUT, check=False
-        )
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise ServiceError(f"{' '.join(cmd)} failed: {exc}") from exc
 
 
-def require_success(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+def require_success(
+    cmd: list[str], *, timeout: float = COMMAND_TIMEOUT
+) -> subprocess.CompletedProcess[str]:
     """Run ``cmd`` and raise with its own words if it fails.
 
     Raises:
         ServiceError: Non-zero exit, timeout, or the command is missing.
     """
-    result = run_manager(cmd)
+    result = run_manager(cmd, timeout=timeout)
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip() or f"exit code {result.returncode}"
         raise ServiceError(f"{' '.join(cmd)} failed: {detail}")

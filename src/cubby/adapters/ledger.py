@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess  # nosec B404 - ps, with a fixed argument list and a timeout
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -87,16 +89,54 @@ class Heartbeat:
         return ((now or datetime.now()) - self.at).total_seconds()
 
     def process_alive(self) -> bool:
-        """Whether the process that beat still exists (signal 0 probes, sends nothing)."""
+        """Whether the process that beat still exists and is a ``cubby watch``.
+
+        Signal 0 probes without sending anything. A pid that exists but runs
+        something else was reused after the agent ended; one whose command line
+        cannot be read counts as cubby, so a live agent is never reported gone.
+        """
+        if self.pid <= 0:
+            return False  # 0 and -1 name process groups, not a process
         try:
             os.kill(self.pid, 0)
         except ProcessLookupError:
             return False
         except PermissionError:
-            return True  # it exists, under another user
+            pass  # it exists, under another user
         except (OverflowError, OSError):
             return False  # not a pid this system can have
-        return True
+        argv = _command_line(self.pid)
+        return argv is None or is_cubby_watch(argv)
+
+
+def is_cubby_watch(argv: list[str]) -> bool:
+    """``cubby watch ...`` or ``python -m cubby watch ...``, however cubby was installed."""
+    names = [Path(arg).name for arg in argv]
+    return "cubby" in names and "watch" in names[names.index("cubby") + 1 :]
+
+
+def _command_line(pid: int) -> list[str] | None:
+    """The arguments ``pid`` runs with, or None when they cannot be read."""
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()  # Linux
+    except OSError:
+        pass
+    else:
+        return [part.decode(errors="replace") for part in raw.split(b"\0") if part]
+    ps = shutil.which("ps")
+    if ps is None:
+        return None
+    try:
+        result = subprocess.run(  # macOS and the BSDs have no /proc
+            [ps, "-o", "command=", "-p", str(pid)],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.stdout.split() if result.returncode == 0 and result.stdout.strip() else None
 
 
 def now_iso() -> str:

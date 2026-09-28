@@ -8,6 +8,7 @@ from .. import state
 from .base import (
     DEFAULT_LABEL,
     STOP_TIMEOUT,
+    STOPPING_TIMEOUT,
     Service,
     ServiceError,
     ServiceSpec,
@@ -116,7 +117,7 @@ class SystemdService(Service):
         require_success(["systemctl", "--user", "daemon-reload"])
         require_success(["systemctl", "--user", "enable", unit])
         # restart, not start: a reinstall must pick up the new command line.
-        require_success(["systemctl", "--user", "restart", unit])
+        require_success(["systemctl", "--user", "restart", unit], timeout=STOPPING_TIMEOUT)
         if not wait_until(lambda: self.is_running(spec.label), _START_TIMEOUT):
             raise ServiceError(
                 f"{unit} was installed but is not running; "
@@ -129,7 +130,7 @@ class SystemdService(Service):
         if not path.exists():
             return False
         unit = self._unit_name(label)
-        require_success(["systemctl", "--user", "disable", "--now", unit])
+        require_success(["systemctl", "--user", "disable", "--now", unit], timeout=STOPPING_TIMEOUT)
         if self.is_running(label):
             # The unit stays, so `systemctl --user stop` still has one to name.
             raise ServiceError(f"{unit} is still running after 'systemctl --user disable --now'")
