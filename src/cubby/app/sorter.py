@@ -50,8 +50,8 @@ def _mtime_date(path: Path) -> date:
 
 #: What to do about an error, by errno, when there is something to do.
 _HINTS = {
-    errno.EACCES: "check that cubby may write there",
-    errno.EPERM: "check that cubby may write there",
+    errno.EACCES: "check cubby's permissions there",
+    errno.EPERM: "check cubby's permissions there",
     errno.EROFS: "the disk is read-only",
     errno.ENOSPC: "the disk is full",
 }
@@ -66,17 +66,27 @@ def describe_error(exc: BaseException, root: Path | None = None) -> str:
     groups on.
     """
     kind = type(exc).__name__
-    if isinstance(exc, OSError) and exc.strerror and exc.filename is not None:
-        paths = " -> ".join(
-            _shown(Path(os.fsdecode(name)), root) if root else os.fsdecode(name)
-            for name in (exc.filename, exc.filename2)
-            if name is not None
-        )
-        hint = _HINTS.get(exc.errno or 0)
-        # cubby's own messages already name the file, with the remedy.
-        where = "" if Path(os.fsdecode(exc.filename)).name in exc.strerror else f": {paths}"
-        return f"{kind}: {exc.strerror}{where}" + (f" ({hint})" if hint else "")
-    return f"{kind}: {str(exc) or 'no detail'}"
+    if not isinstance(exc, OSError):
+        return f"{kind}: {str(exc) or 'no detail'}"
+    hint = _HINTS.get(exc.errno or 0)
+    tail = f" ({hint})" if hint else ""
+    if getattr(exc, "names_its_file", False):  # cubby's own message, remedy included
+        return f"{kind}: {exc.strerror}"
+    if not (exc.strerror and exc.filename is not None):
+        return f"{kind}: {str(exc) or 'no detail'}{tail}"
+    paths = " -> ".join(
+        _where(Path(os.fsdecode(name)), root)
+        for name in (exc.filename, exc.filename2)
+        if name is not None
+    )
+    return f"{kind}: {exc.strerror}: {paths}{tail}"
+
+
+def _where(path: Path, root: Path | None) -> str:
+    """``path`` relative to ``root``, or whole when it is ``root`` or outside it."""
+    if root is None or path == root:
+        return str(path)
+    return _shown(path, root)
 
 
 def _never() -> bool:

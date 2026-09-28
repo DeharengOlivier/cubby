@@ -81,9 +81,69 @@ def test_a_refused_move_is_described_in_words_with_short_paths(tmp_path):
     assert str(tmp_path) not in outcome.error
     assert outcome.error.startswith("PermissionError: Permission denied: ")
     assert "fresh.txt -> Documents/" in outcome.error
-    assert "check that cubby may write there" in outcome.error
+    assert "check cubby's permissions there" in outcome.error
 
 
 def test_an_error_without_a_file_keeps_its_own_words():
     assert describe_error(ValueError("bad value")) == "ValueError: bad value"
     assert describe_error(OSError()) == "OSError: no detail"
+
+
+# --- from the review of this change ---------------------------------------------
+
+
+def test_undo_never_removes_a_folder_outside_the_one_the_file_came_from(tmp_path):
+    # Found by review: without the containment check, undoing an entry filed
+    # outside its source removed the empty folders above it.
+    import json
+
+    source = tmp_path / "src"
+    source.mkdir()
+    elsewhere = tmp_path / "other" / "deep"
+    elsewhere.mkdir(parents=True)
+    (elsewhere / "a.txt").write_text("x", encoding="utf-8")
+    journal = Journal(tmp_path / "j.jsonl")
+    journal.path.write_text(
+        json.dumps({"v": 2, "run": "r1", "seq": 0, "op": "move",
+                    "from": str(source / "a.txt"), "to": str(elsewhere / "a.txt")}) + "\n",
+        encoding="utf-8",
+    )  # fmt: skip
+
+    assert undo_run(journal).restored == 1
+    assert elsewhere.is_dir()
+
+
+def test_an_error_on_the_sorted_folder_itself_names_it(tmp_path):
+    # Found by review: the watched folder showed as ".".
+    error = PermissionError(13, "Permission denied", str(tmp_path))
+
+    assert describe_error(error, tmp_path) == (
+        f"PermissionError: Permission denied: {tmp_path} (check cubby's permissions there)"
+    )
+
+
+@pytest.mark.parametrize(
+    ("number", "hint"),
+    [(13, "check cubby's permissions there"), (1, "check cubby's permissions there"),
+     (30, "the disk is read-only"), (28, "the disk is full"), (2, None)],
+)  # fmt: skip
+def test_each_error_gets_its_hint(tmp_path, number, hint):
+    error = OSError(number, os.strerror(number), str(tmp_path / "a.txt"))
+
+    described = describe_error(error, tmp_path)
+
+    assert described.startswith(f"{type(error).__name__}: {os.strerror(number)}: a.txt")
+    assert described.endswith(f" ({hint})" if hint else "a.txt")
+
+
+def test_a_full_disk_without_a_file_still_gets_its_hint():
+    assert describe_error(OSError(28, "No space left on device")) == (
+        "OSError: [Errno 28] No space left on device (the disk is full)"
+    )
+
+
+def test_a_file_named_like_a_word_of_the_message_keeps_its_path(tmp_path):
+    # Found by review: the paths were dropped when the name appeared in the text.
+    error = OSError(28, "No space left on device", str(tmp_path / "on"))
+
+    assert ": on (the disk is full)" in describe_error(error, tmp_path)
