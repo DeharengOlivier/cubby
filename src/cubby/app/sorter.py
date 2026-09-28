@@ -46,6 +46,14 @@ def _never() -> bool:
     return False
 
 
+def _shown(destination: Path, root: Path) -> str:
+    """Where a file went, relative to the sorted folder when it is inside it."""
+    try:
+        return destination.relative_to(root).as_posix()
+    except ValueError:
+        return str(destination)
+
+
 class Sorter:
     """Wires the engine to the filesystem. Holds no mutable state itself."""
 
@@ -127,7 +135,10 @@ class Sorter:
         result = outcome.moved(moved.destination, journaled=journaled)
         # The move and its journal entry are done; a lost log line changes neither.
         with contextlib.suppress(OSError):
-            self._log(f"[{decision.category}] ({decision.stage.value}) {path.name}")
+            self._log(
+                f"[{decision.category}] ({decision.stage.value}) {path.name} -> "
+                f"{_shown(moved.destination, self.source)}"
+            )
         return result
 
     def _journal_move(self, entry: Entry) -> bool:

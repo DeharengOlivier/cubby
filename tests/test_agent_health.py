@@ -317,7 +317,7 @@ def test_status_of_a_healthy_agent(monkeypatch, capsys):
     code, out = _status(monkeypatch, capsys, Agent(installed=True, running=True))
 
     assert code == EXIT_OK
-    assert "running (fake)" in out
+    assert "running (fake, pid " in out  # the heartbeat is this live process
     assert "moved 2, 1 failed" in out
     assert "f0" in out
 

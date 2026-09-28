@@ -8,10 +8,13 @@ PREFIX="${HOME}/.local"
 VENV_DIR="${PREFIX}/share/cubby/venv"
 BIN_LINK="${PREFIX}/bin/cubby"
 
-# Stop and remove the background agent first (ignore if not installed).
+# Stop and remove the background agent first. If it cannot be stopped, keep
+# the CLI: without it there is no 'cubby' left to stop the agent with.
 if command -v cubby >/dev/null 2>&1; then
     if ! cubby uninstall; then
-        echo "warning: could not remove the background agent; see 'cubby status'" >&2
+        echo "error: the background agent could not be stopped; cubby was NOT removed." >&2
+        echo "Stop it as docs/RUNBOOK.md section 1 says, then run this script again." >&2
+        exit 1
     fi
 fi
 

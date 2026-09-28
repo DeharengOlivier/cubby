@@ -79,7 +79,10 @@ def undo_run(journal: Journal, run_id: str | None = None, *, log: Logger = _noop
         try:
             name = _restore(entry)
         except OSError as exc:
-            log(f"skip (cannot restore {entry.destination.name}): {exc}")
+            log(
+                f"pending (cannot restore {entry.destination.name}): {exc}; "
+                f"fix the cause, then retry with 'cubby undo --run {run.run_id}'"
+            )
             result.failed.append(entry.destination.name)
             continue
         journal.settle(entry, "restored")
