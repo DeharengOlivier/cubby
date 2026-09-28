@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- `cubby status` measures the agent's last pass: how long it took, what it
+  moved or failed, and how many files still wait to settle. It also sums up
+  the last 24 hours: runs, moves, failures, and the failures grouped by kind
+  of error (the file name blanked out), with the files and cubby versions
+  that hit each. `--json` has them as `agent.last_pass` and `activity`.
 - JSON Schemas for every `--json` output in `docs/schemas/` (`plan`, `status`,
   `history`, `explain`, `log-record`), checked against the real outputs by
   the test suite. The schemas allow fields added later within a version.
@@ -26,6 +31,10 @@ All notable changes to this project are documented here. The format is based on
 - Journal compaction dropped a run whose id was not a string (a hand-edited
   or foreign line such as `"run": 7`) while `cubby undo` could still revert
   it: the reads took such an id as `"7"`, compaction ignored it.
+- A stop request (SIGTERM from launchd or systemd) that arrived while the
+  agent slept between passes started one more pass before the agent exited.
+  That pass moved nothing, but it took a new run id and overwrote the
+  heartbeat. The agent now exits without it.
 - Run ids carry 64 random bits instead of 32. Two runs started in the same
   second could draw the same id (CI saw it once in 5 000 draws), and their
   moves then shared one journal entry list: undoing one reverted both. Older

@@ -46,6 +46,10 @@ def _never() -> bool:
     return False
 
 
+def _ignore(_: Path) -> None:
+    return None
+
+
 def _shown(destination: Path, root: Path) -> str:
     """Where a file went, relative to the sorted folder when it is inside it."""
     try:
@@ -163,6 +167,7 @@ class Sorter:
         respect_age: bool = True,
         stop: Callable[[], bool] = _never,
         run_id: str | None = None,
+        on_waiting: Callable[[Path], None] = _ignore,
     ) -> list[SortOutcome]:
         """Classify every candidate once.
 
@@ -174,13 +179,20 @@ class Sorter:
         checked before each file, so a stop request ends the pass between two
         files, never in the middle of one. ``run_id`` names the pass in the
         journal, the ledger and the log; a fresh one is made when omitted.
+        ``on_waiting`` is called with each file left for a later pass because
+        it has not settled yet.
         """
         run_id = run_id or new_run_id()
         started = now_iso()
         outcomes: list[SortOutcome] = []
         with run_context(run_id):
             self._sort_each(
-                outcomes, apply=apply, respect_age=respect_age, stop=stop, run_id=run_id
+                outcomes,
+                apply=apply,
+                respect_age=respect_age,
+                stop=stop,
+                run_id=run_id,
+                on_waiting=on_waiting,
             )
             if apply:
                 self._record_run(run_id, started, outcomes)
@@ -196,12 +208,14 @@ class Sorter:
         respect_age: bool,
         stop: Callable[[], bool],
         run_id: str,
+        on_waiting: Callable[[Path], None],
     ) -> None:
         settings = self._config.settings
         for path in iter_candidates(settings, self._config.managed_dirs):
             if stop():
                 break
             if respect_age and not is_eligible(path, settings):
+                on_waiting(path)
                 continue
             try:
                 outcomes.append(self._outcome(path, apply=apply, run_id=run_id, seq=len(outcomes)))

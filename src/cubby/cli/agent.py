@@ -8,6 +8,8 @@ import os
 import shutil
 import sys
 import time
+from dataclasses import asdict
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +31,7 @@ from ..adapters.service import (
     get_service,
 )
 from ..adapters.ui import Palette
+from ..app.activity import Activity, summarize
 from ..domain.duration import format_duration
 from .common import (
     EXIT_FAILED,
@@ -40,6 +43,9 @@ from .common import (
     palette,
     source_error,
 )
+
+#: The window of `cubby status`'s activity summary.
+ACTIVITY_HOURS = 24
 
 
 def _program_args(args: argparse.Namespace) -> list[str]:
@@ -136,6 +142,7 @@ def _agent_state() -> dict[str, Any]:
         "live_pid": live_pid,
         "never_passed": never_passed,
         "watching": beat.source if beat else None,
+        "last_pass": asdict(beat.last_pass) if beat and beat.last_pass else None,
     }
 
 
@@ -168,8 +175,9 @@ def _agent_text(pal: Palette, agent: dict[str, Any]) -> str:
 def cmd_status(args: argparse.Namespace) -> int:
     agent = _agent_state()
     pause = current_pause()
-    runs = Ledger().runs(limit=1)
+    runs = Ledger().runs()
     last = runs[0] if runs else None
+    day = summarize(runs, since=datetime.now() - timedelta(hours=ACTIVITY_HOURS))
     healthy = not agent["installed"] or (
         agent["running"] and not agent["stale"] and not agent["never_passed"]
     )
@@ -181,16 +189,19 @@ def cmd_status(args: argparse.Namespace) -> int:
             "agent": agent,
             "paused": pause.to_json() if pause else None,
             "last_run": last.to_json() if last else None,
+            "activity": {"hours": ACTIVITY_HOURS, **asdict(day)},
             "log": str(state.log_path()),
         }
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return EXIT_OK if healthy else EXIT_FAILED
 
-    _print_status(agent, pause, last)
+    _print_status(agent, pause, last, day)
     return EXIT_OK if healthy else EXIT_FAILED
 
 
-def _print_status(agent: dict[str, Any], pause: Pause | None, last: RunRecord | None) -> None:
+def _print_status(
+    agent: dict[str, Any], pause: Pause | None, last: RunRecord | None, day: Activity
+) -> None:
     pal = palette()
     kv(pal, "agent", _agent_text(pal, agent))
     if agent["unit"]:
@@ -209,11 +220,24 @@ def _print_status(agent: dict[str, Any], pause: Pause | None, last: RunRecord | 
         kv(pal, "last run", f"{summary}  ({last.mode}, run {last.run})")
         for failure in last.failures[:5]:
             print(f"  {failure.file}  {pal.dim(failure.error)}")
+    _print_activity(pal, day)
     log_path = state.log_path()
     tail = read_tail(log_path, limit=5)
     kv(pal, "recent log", pal.dim(str(log_path)) if tail else pal.dim("(none yet)"))
     for record in tail:
         print(f"  {pal.dim(human_line(record) if 'ts' in record else record['msg'])}")
+
+
+def _print_activity(pal: Palette, day: Activity) -> None:
+    summary = f"{day.runs} runs, moved {day.moved}"
+    if day.failed:
+        summary += pal.yellow(f", {day.failed} failed")
+    kv(pal, f"last {ACTIVITY_HOURS} h", summary if day.runs else pal.dim("no run moved anything"))
+    for group in day.errors:
+        seen = (
+            f"last {group.last_seen}, {', '.join(group.files)}; cubby {', '.join(group.versions)}"
+        )
+        print(f"  {group.count}x {group.kind}  {pal.dim(seen)}")
 
 
 def _last_pass_text(pal: Palette, agent: dict[str, Any]) -> str:
@@ -222,7 +246,19 @@ def _last_pass_text(pal: Palette, agent: dict[str, Any]) -> str:
     if agent["last_pass_age"] is None:
         return pal.dim("never")
     text = format_age(agent["last_pass_age"])
-    return pal.yellow(text + " (stale)") if agent["stale"] else text
+    text = pal.yellow(text + " (stale)") if agent["stale"] else text
+    measures = agent["last_pass"]
+    return f"{text}, {_measures_text(pal, measures)}" if measures else text
+
+
+def _measures_text(pal: Palette, measures: dict[str, Any]) -> str:
+    seconds = f"{measures['seconds']:.3f}".rstrip("0").rstrip(".")
+    parts = [f"took {seconds} s", f"moved {measures['moved']}"]
+    if measures["failed"]:
+        parts.append(pal.yellow(f"{measures['failed']} failed"))
+    if measures["waiting"]:
+        parts.append(f"{measures['waiting']} waiting to settle")
+    return ", ".join(parts)
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:

@@ -14,7 +14,7 @@
 | `cubby init`      | Write a starter config (the defaults, annotated) to `~/.config/cubby/config.toml`. Never overwrites, and refuses to shadow a config cubby already reads (`CUBBY_CONFIG`, `~/.cubby.toml`), without `--force`; `--force` replaces the file atomically. |
 | `cubby install`   | Register a background agent that runs `watch` and starts at login. |
 | `cubby uninstall` | Stop and remove the background agent.                    |
-| `cubby status`    | Whether the agent is really running (asked of launchd/systemd), when it last completed a pass, what its last run moved or failed, and the recent log. Exits 1 when an installed agent is not running or has stalled. `--json` for scripts. |
+| `cubby status`    | Whether the agent is really running (asked of launchd/systemd), when it last completed a pass and what that pass cost (its duration, what it moved or failed, how many files still wait to settle), what its last run moved or failed, the last 24 hours with their failures grouped by kind of error (and the cubby versions that hit them), and the recent log. Exits 1 when an installed agent is not running or has stalled. `--json` for scripts. |
 | `cubby pause`     | Stop the agent moving files, from the next file on (even mid-pass), without uninstalling it. `--for 2h` resumes by itself. The switch to pull when cubby does something unexpected. |
 | `cubby resume`    | Let a paused agent sort again. |
 | `cubby doctor`    | Print platform, service backend, config in use, extraction support and whether notifications are on. `--notify` sends a test notification. |
