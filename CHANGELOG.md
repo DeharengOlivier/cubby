@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-28
+
 ### Added
 - `make flaky-rate` measures how often CI fails on a commit that later passes
   unchanged, against the 2% budget in `docs/READINESS.md`.
@@ -413,7 +415,8 @@ after upgrading, then `cubby install` again to refresh the agent unit.
 - Portable `install.sh` / `uninstall.sh`.
 - Test suite covering the engine, adapters, use cases and CLI, plus a fuzz test.
 
-[Unreleased]: https://github.com/DeharengOlivier/cubby/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/DeharengOlivier/cubby/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/DeharengOlivier/cubby/releases/tag/v0.4.0
 [0.3.0]: https://github.com/DeharengOlivier/cubby/releases/tag/v0.3.0
 [0.2.0]: https://github.com/DeharengOlivier/cubby/releases/tag/v0.2.0
 [0.1.0]: https://github.com/DeharengOlivier/cubby/releases/tag/v0.1.0

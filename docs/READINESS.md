@@ -1,7 +1,7 @@
 # Readiness register: cubby
 
 Standards version: 2026-09-25.1 (`CODING-RULES.md`, `SECURITY-CHECKLIST.md`).
-Last reviewed: 2026-09-28 by the maintainer (Olivier Dehareng), at release 0.3.0.
+Last reviewed: 2026-09-28 by the maintainer (Olivier Dehareng), at release 0.4.0.
 
 This file is the project's single record of its level, its baseline and the status of every
 applicable control (CODING-RULES section 14, SECURITY-CHECKLIST SEC-GOV-01). Update the rows a
@@ -37,7 +37,7 @@ like `FAIL` for a P0), `N/A` (with the reason the surface does not exist).
 | Protected branch enforced by the platform, required checks | PASS | branch protection on `main`: PR required, `enforce_admins: true`, linear history, conversation resolution, the 8 CI checks and the `review record` status required (`gh api .../branches/main/protection`, 2026-09-28) | each release |
 | Untrusted CI code isolated from production hosts and credentials | PASS | no production host or secret exists; default workflow token `read`; only the tag-triggered publish job has `contents: write` and runs no project code | each release |
 | Independent review of every merged change | PASS | the reviewer's own record and the author's resolution on #1 to #5, #7 to #12 and #19 (PR comments); on #13 to #18 only the resolutions were posted before merge, and the reviewers' records, written before merge, were posted afterwards (found by audit 3); #6 (the 0.2.0 version bump) merged without one and was reviewed after the merge (comment on #6). Enforced since #20 by the required `review record` status (`.github/workflows/review-record.yml`): a pull request cannot merge until a comment starting with "## Independent review record", from the owner, a member or a collaborator, is on it. It checks that the record exists, not who wrote its text, and a record posted for an older commit still counts after a later push: a single maintainer has no second account to approve | each PR |
-| Coverage instrumented, changed-code threshold | PASS | `pytest --cov --cov-fail-under=90` on 6 OS/Python combinations; `diff-cover --fail-under=90` on PRs; 97% total at 0.3.0 measured locally, 96.5% to 96.8% in the six CI jobs (0.2.0 was 96.4%) | each release |
+| Coverage instrumented, changed-code threshold | PASS | `pytest --cov --cov-fail-under=90` on 6 OS/Python combinations; `diff-cover --fail-under=90` on PRs; 97% total at 0.4.0 measured locally (0.3.0: 97% locally, 96.5% to 96.8% in the six CI jobs; 0.2.0 was 96.4%) | each release |
 | Integration tests of critical contracts and failure paths | PASS | service boundary with a fake manager (`test_service_boundary.py`), parser child process (`test_review_pr2.py`), journal and undo failure paths (`test_undo_everything.py`, `test_file_safety_edges.py`) | each release |
 | Critical-journey end-to-end tests in CI | PASS | `test_agent_journey.py` (agent as a real process: sort, history, SIGTERM, undo), `test_pause_and_alerts.py::test_the_real_agent_stops_at_a_pause_and_sorts_after_resume` | each release |
 | Flaky tests measured against a budget | PASS | `make flaky-rate` (`scripts/flaky_rate.py`, tested in `test_flaky_rate.py`): commits of the last 90 days whose CI runs or rerun attempts both failed and passed; it exits 2 when it measured nothing. 0 of 84 CI commits on 2026-09-28, budget 2%. The four failed commits were real defects fixed by later commits: a manual judgement from their logs, which the script does not make | each release |
@@ -48,7 +48,7 @@ like `FAIL` for a P0), `N/A` (with the reason the surface does not exist).
 | Alert delivered to a named human; heartbeat checked | NOT_VERIFIED | desktop notification on unsortable file, failed pass, missing folder (`adapters/notify.py`, tested with fakes); delivery on the maintainer's Mac not yet observed: run `cubby doctor --notify` | at install on each machine |
 | Reproducible build: frozen lockfiles, one toolchain | PASS | `uv.lock` honored with `--locked` everywhere; build backend pinned by hash (`build-constraints.txt`); `scripts/rebuild.sh` builds twice (other umask, time zone, locale, file dates) and fails on any difference, run by CI on every PR and by `release.yml` against the published artifacts; v0.2.0 rebuilt byte for byte from its tag (`docs/audits/2026-09-28-reproducible-build.md`) | each release |
 | Versioned releases: tag and changelog | PASS | `CHANGELOG.md`, tags, `release.yml` (tag on main, version match, SHA256SUMS) | each release |
-| Rollback rehearsed | PASS | 0.3 to 0.2 and back (`docs/audits/2026-09-28-rollback-0.3.md`) and 0.2 to 0.1.0 and back in a throwaway HOME, 2026-09-28, the latter repeated by two independent operator drills (`docs/audits/2026-09-28-runbook-drill*.md`); results in `docs/RUNBOOK.md` section 4 | each release |
+| Rollback rehearsed | PASS | 0.4 to 0.3 and back (`docs/audits/2026-09-28-rollback-0.4.md`), 0.3 to 0.2 and back (`docs/audits/2026-09-28-rollback-0.3.md`) and 0.2 to 0.1.0 and back in a throwaway HOME, 2026-09-28, the latter repeated by two independent operator drills (`docs/audits/2026-09-28-runbook-drill*.md`); results in `docs/RUNBOOK.md` section 4 | each release |
 | Backups 3-2-1; restore drilled | N/A | cubby stores no data of its own worth backing up; the user's files stay on their disk and in their own backups; the journal is recovery metadata, bounded and rebuilt by use | - |
 | Load test of capacity-sensitive paths | PASS | `docs/PERFORMANCE.md`: 1 000 to 400 000 files (20x the previous ceiling; 400 000 a real run, not extrapolated), 1 to 5 repetitions in fresh processes, median and slowest, CPU and memory, journal read at 200 000 moves; limits and next steps listed; found and fixed the idle-pass compaction cost, 2026-09-28; memory of the agent's pass bounded to about 135 bytes per file (54 MB at 400 000 files, 2.6 KB per file before, audit 3 PRF-04 and SCL-02), profiled by `benchmarks/profile_pass.py` and pinned by `tests/test_bounded_pass_memory.py`; `plan` and `run` still hold 1.3 to 1.4 KB per file, listed as a limit | when the scan, move or journal path changes |
 | Feature disable capability for high-impact features | PASS | `cubby pause` (tested against a real agent process), `dedupe` and `vendor_rename` off by config, `cubby uninstall` | each release |
@@ -66,7 +66,7 @@ containers, infrastructure, secrets.
 |---|---|---|---|---|
 | SEC-GOV-01 | P0 | PASS | this register, 2026-09-28 | each release |
 | SEC-GOV-02 | P0 | PASS | tests use temp folders and a per-test `CUBBY_STATE_DIR` (`conftest.py`), no network, fake service managers; mutation and property runs local only | each release |
-| SEC-GATE-01 | P0 | PASS | `pip-audit --strict` over the exported lock including the `extract` extras, bandit, gitleaks: CI job "Dependency and code scanning" green on the release 0.3.0 pull request (#19) | each release |
+| SEC-GATE-01 | P0 | PASS | `pip-audit --strict` over the exported lock including the `extract` extras, bandit, gitleaks: CI job "Dependency and code scanning" green on the release 0.4.0 pull request | each release |
 | SEC-01-001 to 007 | P0 | PASS | `docs/THREAT-MODEL.md` | release adding an entry point, parser or side effect |
 | SEC-04, 05, 06 (authn, authz, sessions) | P0 | N/A | no accounts, roles or sessions; runs as the local user with OS permissions | - |
 | SEC-05-006 least privilege | P0 | PASS | user agent (launchd `LaunchAgents`, systemd `--user`), no root, no sudo in `install.sh` | each release |
@@ -118,7 +118,7 @@ containers, infrastructure, secrets.
 | SEC-20-008 to 010 | P0 | N/A | no accounts, tokens or secrets | - |
 | SEC-20-011 isolate a system | P0 | PASS | `cubby pause`, `cubby uninstall` (runbook section 1) | each release |
 | SEC-20-012 disable a high-impact feature | P0 | PASS | `cubby pause` against a real agent process (`test_the_real_agent_stops_at_a_pause_and_sorts_after_resume`); `dedupe`, `vendor_rename` switches | each release |
-| SEC-20-013 roll back | P0 | PASS | 0.3 to 0.2 and 0.2 to 0.1 rehearsals recorded in `docs/RUNBOOK.md` section 4 | each release |
+| SEC-20-013 roll back | P0 | PASS | 0.4 to 0.3, 0.3 to 0.2 and 0.2 to 0.1 rehearsals recorded in `docs/RUNBOOK.md` section 4 | each release |
 | SEC-20-015 evidence preservation | P0 | PASS | runbook section 2 | each release |
 
 ## 4. Accepted constraints and known debt
@@ -133,5 +133,6 @@ containers, infrastructure, secrets.
 
 | Date | Release tag | Gate status | Open blockers |
 |---|---|---|---|
+| 2026-09-28 | v0.4.0 | BLOCKED | SEC-14-003 NOT_VERIFIED (maintainer to confirm 2FA). Released for the maintainer's own use; SEC-08-004, the FAIL found by audit 3, is fixed (#21); every other applicable P0 PASS or N/A |
 | 2026-09-28 | v0.3.0 | BLOCKED | SEC-14-003 NOT_VERIFIED (maintainer to confirm 2FA). Released for the maintainer's own use; every other applicable P0 PASS or N/A |
 | 2026-09-28 | v0.2.0 | BLOCKED | SEC-14-003 NOT_VERIFIED (maintainer to confirm 2FA). Released for the maintainer's own use; every other applicable P0 PASS or N/A |
