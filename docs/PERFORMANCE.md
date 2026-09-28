@@ -197,10 +197,10 @@ percentile: `python benchmarks/latency.py` (defaults below), smoke-tested by
 - Every child runs with `HOME`, `CUBBY_STATE_DIR`, `CUBBY_CONFIG` and `TMPDIR` in a
   throwaway folder, and without any `XDG_*` or other `CUBBY_*` variable.
 - Conditions, as the script records them: AMD EPYC (12 vCPU), 47 GB RAM, Linux 6.8.0,
-  Python 3.11.16, ext4, cubby 0.4.0 at `cc8614b`, 2026-09-28. The runs were made at
-  `8634d6e`, the same commit before it was rebased onto main: `src/` and `benchmarks/` are
-  identical in both (the script printed `8634d6e-dirty`: this changelog entry was being
-  written during the run, no code). The machine was shared: load average 21.0 to 25.9 in
+  Python 3.11.16, ext4, cubby 0.4.0, 2026-09-28: the measured `src/` is exactly tag `v0.4.0`
+  (`git diff v0.4.0 -- src` is empty), with `benchmarks/latency.py` as committed in the pull
+  request that added this section (the script printed `8634d6e-dirty`, a branch commit
+  later rebased; only the changelog was being edited during the run). The machine was shared: load average 21.0 to 25.9 in
   run 1 and 22.7 to 26.9 in run 2 (1, 5 and 15 minutes, before and after), on 12 CPUs. Two
   full runs, one after the other; run 1 took 7 min 40 s, the duration of run 2 was not
   recorded.
@@ -253,7 +253,7 @@ run, as a check of how much the load moves it:
 - **`cubby run` of 1 000 files is 2.7 times the agent's pass over the same number** (median
   3.62 s against 1.32 s) and misses its 5 s budget (p95 5.68 and 6.60 s). The probe
   `python benchmarks/run_journal_cost.py` (defaults: the same state, 10 rounds), run once
-  at `4da2bb2` in a throwaway `HOME`, load 31.6 before and 24.2 after, says where the
+  on the same `src/` (tag `v0.4.0`) in a throwaway `HOME`, load 31.6 before and 24.2 after, says where the
   difference goes. Its output, whole:
 
   ```text
