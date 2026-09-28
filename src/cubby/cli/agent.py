@@ -19,7 +19,7 @@ from ..adapters.config import (
     find_user_config,
 )
 from ..adapters.extraction import PARSABLE
-from ..adapters.ledger import Heartbeat, Ledger, RunRecord
+from ..adapters.ledger import KEEP_LINES, Heartbeat, Ledger, RunRecord
 from ..adapters.logging import human_line, read_tail
 from ..adapters.notify import notifier
 from ..adapters.pause import Pause, current_pause
@@ -177,7 +177,13 @@ def cmd_status(args: argparse.Namespace) -> int:
     pause = current_pause()
     runs = Ledger().runs()
     last = runs[0] if runs else None
-    day = summarize(runs, since=datetime.now() - timedelta(hours=ACTIVITY_HOURS))
+    # A ledger at its line limit has dropped its oldest runs (the count is of
+    # the lines that could be read, so a damaged line can hide a trim).
+    day = summarize(
+        runs,
+        since=datetime.now() - timedelta(hours=ACTIVITY_HOURS),
+        trimmed=len(runs) >= KEEP_LINES,
+    )
     healthy = not agent["installed"] or (
         agent["running"] and not agent["stale"] and not agent["never_passed"]
     )
@@ -229,15 +235,23 @@ def _print_status(
 
 
 def _print_activity(pal: Palette, day: Activity) -> None:
-    summary = f"{day.runs} runs, moved {day.moved}"
+    if not day.runs:
+        kv(pal, f"last {ACTIVITY_HOURS} h", pal.dim("no run moved or failed anything"))
+        return
+    summary = f"{day.runs} run{'s' if day.runs != 1 else ''}, moved {day.moved}"
     if day.failed:
         summary += pal.yellow(f", {day.failed} failed")
-    kv(pal, f"last {ACTIVITY_HOURS} h", summary if day.runs else pal.dim("no run moved anything"))
+    if not day.complete:
+        summary += pal.yellow(" (the ledger was trimmed: older runs of the window are missing)")
+    kv(pal, f"last {ACTIVITY_HOURS} h", summary)
     for group in day.errors:
-        seen = (
-            f"last {group.last_seen}, {', '.join(group.files)}; cubby {', '.join(group.versions)}"
-        )
-        print(f"  {group.count}x {group.kind}  {pal.dim(seen)}")
+        print(f"  {group.count}x {_shortened(group.kind)}")
+        seen = f"last seen {group.last_seen}; files: {', '.join(group.files)}"
+        print(f"     {pal.dim(seen + '; cubby ' + ', '.join(group.versions))}")
+
+
+def _shortened(text: str, limit: int = 100) -> str:
+    return text if len(text) <= limit else text[: limit - 3] + "..."
 
 
 def _last_pass_text(pal: Palette, agent: dict[str, Any]) -> str:

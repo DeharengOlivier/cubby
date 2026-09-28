@@ -57,7 +57,7 @@
           ]
         },
         "last_pass": {
-          "description": "The agent's last pass: its duration in seconds, the files it moved and failed, and those still settling. Null after a pause or from a cubby before 0.3.",
+          "description": "The agent's last pass: its duration in seconds, the files it moved and failed, and those still settling. Null when there is no heartbeat, after a pause, or from a cubby before 0.3.",
           "oneOf": [
             {
               "type": "null"
@@ -220,7 +220,7 @@
       "type": "string"
     },
     "activity": {
-      "description": "Runs recorded in the last `hours` hours, with their failures grouped by kind of error (the quoted file name blanked out), the most frequent first.",
+      "description": "Runs that finished in the last `hours` hours (local time), with their failures grouped by kind of error, the file names left out, the most frequent first.",
       "type": "object",
       "properties": {
         "hours": {
@@ -280,9 +280,14 @@
               "versions"
             ]
           }
+        },
+        "complete": {
+          "description": "False when the ledger, trimmed to its last 2000 lines, may be missing older runs of the window.",
+          "type": "boolean"
         }
       },
       "required": [
+        "complete",
         "errors",
         "failed",
         "hours",

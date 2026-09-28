@@ -148,12 +148,17 @@ class Watcher:
             return self._sort_pass(run_id)
 
     def _sort_pass(self, run_id: str) -> int:
-        waiting: list[object] = []
+        waiting = 0
+
+        def count_waiting(_: object) -> None:
+            nonlocal waiting
+            waiting += 1
+
         try:
             with exclusive(timeout=self._lock_timeout):
                 started = self._clock()
                 outcomes = self._sorter.sort_once(
-                    apply=True, stop=self._stop_or_pause, run_id=run_id, on_waiting=waiting.append
+                    apply=True, stop=self._stop_or_pause, run_id=run_id, on_waiting=count_waiting
                 )
                 seconds = self._clock() - started
         except Busy as exc:
@@ -173,7 +178,7 @@ class Watcher:
                 seconds=round(seconds, 3),
                 moved=sum(1 for o in outcomes if o.moved_to is not None),
                 failed=sum(1 for o in outcomes if o.error is not None),
-                waiting=len(waiting),
+                waiting=waiting,
             )
         )
         return sum(1 for o in outcomes if o.error is None)

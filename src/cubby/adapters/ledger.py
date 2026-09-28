@@ -11,6 +11,7 @@ Both are read by ``cubby status`` and ``cubby history``, never by the sort.
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import subprocess  # nosec B404 - ps, with a fixed argument list and a timeout
@@ -89,16 +90,28 @@ class PassMetrics:
 
     @classmethod
     def from_json(cls, data: Any) -> PassMetrics | None:
-        """The measures, or None when absent (a cubby before 0.3) or damaged."""
+        """The measures, or None when absent (a cubby before 0.3) or damaged.
+
+        Damaged includes what cubby never writes and ``status --json`` could
+        not print as valid JSON: a count that is not a non-negative integer, a
+        duration that is negative, infinite or not a number.
+        """
         try:
-            return cls(
-                seconds=float(data["seconds"]),
-                moved=int(data["moved"]),
-                failed=int(data["failed"]),
-                waiting=int(data["waiting"]),
-            )
-        except (KeyError, TypeError, ValueError):
+            seconds = data["seconds"]
+            moved, failed, waiting = data["moved"], data["failed"], data["waiting"]
+        except (KeyError, TypeError):
             return None
+        if not all(_is_count(v) for v in (moved, failed, waiting)) or not _is_duration(seconds):
+            return None
+        return cls(seconds=float(seconds), moved=moved, failed=failed, waiting=waiting)
+
+
+def _is_count(value: object) -> bool:
+    return type(value) is int and value >= 0
+
+
+def _is_duration(value: object) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool) and 0 <= value < math.inf
 
 
 @dataclass(frozen=True)
