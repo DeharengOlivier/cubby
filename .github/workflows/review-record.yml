@@ -1,0 +1,43 @@
+# A pull request merges only once its independent review record is posted on
+# it: a comment that starts with "## Independent review record". Branch
+# protection requires the "review record" status this sets on the head commit.
+#
+# It checks that the record exists, not who wrote it: with one maintainer the
+# record is posted from the same account (docs/READINESS.md section 2). It runs
+# no project code, and reads nothing but the pull request's comments.
+name: Review record
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created, edited, deleted]
+
+permissions:
+  statuses: write
+  pull-requests: read
+
+jobs:
+  record:
+    if: github.event_name == 'pull_request' || github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Set the review record status on the head commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          set -eu
+          sha=$(gh api "repos/$REPO/pulls/$PR" -q .head.sha)
+          found=$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
+            -q '.[] | select(.body | startswith("## Independent review record")) | .id' | head -n 1)
+          if [ -n "$found" ]; then
+            state=success; text="record posted (comment $found)"
+          else
+            state=failure; text="post the independent review record as a PR comment"
+          fi
+          gh api "repos/$REPO/statuses/$sha" -f state="$state" \
+            -f context="review record" -f description="$text" > /dev/null
+          echo "review record: $state ($text)"
