@@ -195,7 +195,7 @@ _NAME_DAYS = (  # (pattern, group of the year, of the month, of the day)
 )
 _NAME_MONTHS = (  # (pattern, group of the year, of the month)
     (re.compile(r"\b(20\d{2})[- ](0[1-9]|1[0-2])\b(?![-. ]?\d)"), 1, 2),  # 2026-08
-    (re.compile(r"(?<![\d.-])\b(0[1-9]|1[0-2])[- ](20\d{2})\b"), 2, 1),  # 08-2026
+    (re.compile(r"(?<![\d.])(?<!\d-)\b(0[1-9]|1[0-2])[- ](20\d{2})\b"), 2, 1),  # 08-2026
     (re.compile(rf"\b({_MONTHS_ALT})\.?[- ]+(20\d{{2}})\b", re.IGNORECASE), 2, 1),  # août 2026
 )
 
@@ -246,7 +246,11 @@ def invoice_date(name: str, text: str, fallback: date) -> InvoiceDate:
     """The invoice's date: from its content, else its name, else ``fallback``."""
     if text and _find_dates(text):
         return InvoiceDate(parse_invoice_date(text, fallback))
-    return name_date(name) or InvoiceDate(fallback, stated=False)
+    named = name_date(name)
+    # An invoice is not dated after it arrived: such a number is something else.
+    if named is not None and named.when <= fallback:
+        return named
+    return InvoiceDate(fallback, stated=False)
 
 
 def parse_invoice_date(text: str, fallback: date) -> date:

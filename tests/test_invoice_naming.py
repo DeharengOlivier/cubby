@@ -125,23 +125,57 @@ def _category_of(tmp_path, text: str, name: str = "3c0fe3ad.pdf") -> str:
     return Engine(config).classify(ref).category
 
 
-@pytest.mark.parametrize(
-    ("text", "category"),
-    [
-        # Found by review: an invoice named in a statement's transaction line.
-        ("Relevé de compte courant\nIBAN FR76 3000 4000\n"
-         "05/08 PRLV SEPA FREE MOBILE FACTURE 05/08/2026 19,99 EUR\n", "Bank-Statements"),
-        ("Contrat de prestation de services, entre les soussignés\nArticle 4. Paiement\n"
-         "La facture est payable sous 30 jours, soit avant le 31/01/2026.\n", "Legal"),
-        ("Invoice\nDate: 2026-07-14\nTotal due 42.00 EUR", "Invoices"),
-        ("ACME SARL\nFacture n. 1042\n\nMontant : 19,99 €", "Invoices"),
-        ("Facture Free Mobile du 05/08/2026", "Invoices"),  # a date alone
-        ("Facture Free Mobile, montant 19,99 EUR", "Invoices"),  # an amount alone
-        ("Invoice for services\nTotal: $19.99", "Invoices"),  # the currency first
-    ],
-)  # fmt: skip
-def test_content_names_an_invoice_only_near_the_top(tmp_path, text, category):
-    assert _category_of(tmp_path, text) == category
+#: Found by review: statements, contracts and other documents that mention an
+#: invoice, which the first version of the pattern filed as invoices.
+NOT_INVOICES = {
+    "statement, invoice in line 3": "Relevé de compte courant\nIBAN FR76 3000 4000\n"
+    "05/08 PRLV SEPA FREE MOBILE FACTURE 05/08/2026 19,99 EUR\n",
+    "statement, invoice in line 2": "Releve de compte\n05/08 PRLV SEPA FREE MOBILE FACTURE "
+    "05/08/2026 19,99 EUR\nsolde",
+    "statement in English": "Account statement\nDirect debit invoice Spotify 05/08/2026 10.99 EUR",
+    "statement, a payment": "Releve\nPaiement facture EDF 05/08/2026 64,20 EUR",
+    "one-line statement": "Votre releve  Solde 1 204,55 EUR  PRLV FREE MOBILE FACTURE "
+    "05/08/2026 19,99 EUR",
+    "bank export": "Date;Libelle;Montant\n05/08/2026;PRLV SEPA FREE MOBILE FACTURE 202608;-19,99\n",
+    "sheet, cells joined": "Releve de compte Date Libelle Montant 05/08/2026 PRLV FREE FACTURE "
+    "-19,99 EUR Solde 1 204,55 EUR",
+    "contract": "Contrat de prestation de services, entre les soussignés\nArticle 4. "
+    "Paiement\nLa facture est payable sous 30 jours, soit avant le 31/01/2026.\n",
+    "terms": "Conditions generales\nToute facture emise le 01/01/2026 est payable a 30 jours",
+    "agreement titled invoice": "Invoice terms and payment schedule\nThis agreement sets "
+    "the terms. Payment within 30 days of 01/01/2026.",
+    "quote": "DEVIS N 42\nConverti en facture le 05/09/2026\nTotal 1 200,00 EUR",
+    "payslip": "BULLETIN DE PAIE\nPeriode du 01/08/2026 au 31/08/2026\nNet a payer 2 100,00 EUR",
+    "release notes": "Invoice generator 2.1.10 released",
+    "email": "Hello,\ncould you send me the invoice for August? Thanks, 05/08/2026",
+}
+
+INVOICES = {
+    "title with a date": "Facture Free Mobile du 05/08/2026",
+    "title with an amount": "Facture Free Mobile, montant 19,99 EUR",
+    "the session's invoice": "Facture Free Mobile du 05/08/2026 montant 19,99 EUR",
+    "heading, then a date": "Invoice\nDate: 2026-07-14\nTotal due 42.00 EUR",
+    "company, then a numbered heading": "ACME SARL\nFacture n. 1042\n\nMontant : 19,99 €",
+    "a heading, the currency first": "Invoice #A-1042\nTotal: $19.99",
+    "a heading with n°": "Facture N° 2026-118\nÉmise le 03/06/2026",
+}
+
+
+@pytest.mark.parametrize("case", sorted(NOT_INVOICES))
+def test_a_document_that_mentions_an_invoice_is_not_one(tmp_path, case):
+    assert _category_of(tmp_path, NOT_INVOICES[case]) != "Invoices"
+
+
+@pytest.mark.parametrize("case", sorted(INVOICES))
+def test_an_invoice_titled_as_one_is_recognised_by_its_content(tmp_path, case):
+    assert _category_of(tmp_path, INVOICES[case]) == "Invoices"
+
+
+def test_statements_and_contracts_keep_their_own_category(tmp_path):
+    assert _category_of(tmp_path, NOT_INVOICES["statement, invoice in line 3"]) == (
+        "Bank-Statements"
+    )
+    assert _category_of(tmp_path, NOT_INVOICES["contract"]) == "Legal"
 
 
 @pytest.mark.parametrize(
@@ -226,3 +260,21 @@ def test_no_stopword_is_ever_a_vendor():
     named = [word for word in sorted(_STOPWORDS) if detect_vendor(f"{word} 3c0f.pdf", "", [])]
 
     assert named == []
+
+
+@pytest.mark.parametrize("name", ["Facture-2045-07 ovh.pdf", "ovh invoice 2099-12.pdf"])
+def test_a_name_date_after_the_download_is_not_the_invoice_date(name):
+    # Re-review: an invoice cannot be dated after it arrived.
+    placement = _place(name)
+
+    assert placement.subdir == "2026-09"
+    assert placement.new_name == "ovh facture.pdf"
+
+
+def test_a_month_and_year_joined_by_hyphens_are_read():
+    from cubby.domain.invoices import name_date
+
+    found = name_date("Invoice-08-2026-spotify.pdf")
+
+    assert found is not None
+    assert found.label() == "2026-08"

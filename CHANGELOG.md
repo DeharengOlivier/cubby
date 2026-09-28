@@ -95,8 +95,12 @@ All notable changes to this project are documented here. The format is based on
   file name (`Invoice-2026-08-spotify.pdf`, `Facture EDF août 2026.pdf`) is
   now used when the document has none, instead of the download date, and the
   download date is no longer written into the new name as if it were the
-  invoice's. The content stage recognises "facture" or "invoice" followed by
-  a date or an amount (`Facture Free Mobile du 05/08/2026 montant 19,99 EUR`),
+  invoice's; a name date later than the download is not taken. The content
+  stage recognises an invoice by its title: "facture" or "invoice" opening
+  one of the first two lines with a date or an amount on that line
+  (`Facture Free Mobile du 05/08/2026 montant 19,99 EUR`), or standing alone
+  as a heading (`Facture n° 1042`) with one below; a statement, a contract
+  or an email that only mentions an invoice keeps its own category,
   and `explain` says when it read a file's content and nothing matched
   (`content_chars` in `--json`). Found by an exploratory session.
   A config written by `cubby init` keeps its own copy of the categories: to
