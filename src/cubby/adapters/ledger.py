@@ -2,7 +2,8 @@
 
 The journal answers "how do I put it back?". The ledger answers "what did cubby
 do, and did it work?": one line per run that moved or failed something, with
-its counts and failures, and how many files a content converter broke on. The
+its counts and failures, and how many files lost their content to broken
+converters. The
 heartbeat is one small file the agent rewrites on every pass, so ``cubby
 status`` can tell a live agent from an installed one.
 
@@ -49,8 +50,9 @@ class RunRecord:
     moved: int
     failed: int
     failures: tuple[Failure, ...] = field(default_factory=tuple)
-    #: Files whose content a converter broke on (timeout, crash, non-zero
-    #: exit). They were still sorted, by name and type: not failed moves.
+    #: Files whose content was lost: the converters that tried broke (timeout,
+    #: crash, non-zero exit) and none gave text. They were still sorted, by name
+    #: and type: not failed moves.
     extraction_failures: int = 0
     version: str = __version__  # the cubby that made the run
 
@@ -68,18 +70,29 @@ class RunRecord:
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> RunRecord:
+        """The record ``data`` holds.
+
+        Raises:
+            KeyError, TypeError, ValueError: ``data`` is not a record cubby
+                writes, such as a count that is not a non-negative integer
+                (``status --json`` could not print it within its schema).
+        """
+        moved, failed = data["moved"], data["failed"]
+        extraction_failures = data.get("extraction_failures", 0)  # older records: 0
+        if not all(_is_count(v) for v in (moved, failed, extraction_failures)):
+            raise ValueError(f"a count is not a non-negative integer in run {data.get('run')!r}")
         return cls(
             run=str(data["run"]),
             mode=str(data["mode"]),
             source=str(data["source"]),
             started=str(data["started"]),
             finished=str(data["finished"]),
-            moved=int(data["moved"]),
-            failed=int(data["failed"]),
+            moved=moved,
+            failed=failed,
             failures=tuple(
                 Failure(str(f["file"]), str(f["error"])) for f in data.get("failures", [])
             ),
-            extraction_failures=int(data.get("extraction_failures", 0)),  # older records: 0
+            extraction_failures=extraction_failures,
             version=str(data.get("version", "unknown")),  # records from before 0.3
         )
 

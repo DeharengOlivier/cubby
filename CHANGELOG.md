@@ -11,23 +11,33 @@ All notable changes to this project are documented here. The format is based on
   unchanged, against the 2% budget in `docs/READINESS.md`.
 - A pull request cannot merge until its independent review record is posted
   on it (the required `review record` check).
-- The run ledger counts, per run, the files a converter broke on
-  (`extraction_failures`), apart from failed moves: such a file was sorted.
+- The run ledger counts, per run, the files whose content was lost to broken
+  converters (`extraction_failures`), apart from failed moves: such a file
+  was sorted, by name and type. A file another converter rescued (pypdf after
+  pdftotext, for example) is not counted.
   `cubby status` shows the 24-hour total when it is not zero (`content
   unreadable for N`), and `status --json` and `history --json` carry it
   (`last_run.extraction_failures`, `activity.extraction_failures`,
   `runs[].extraction_failures`). Older ledger records read as 0.
+- The `status` and `history` JSON Schemas require `extraction_failures`
+  (`last_run`, `activity`, `runs[]`): output from cubby 0.3 does not validate
+  against them.
 
 ### Fixed
 - A content converter that broke on a file (it timed out, crashed, ran out of
   memory or exited non-zero, `pdftotext` or the parser child for PDF, docx
   and xlsx alike) was indistinguishable from a file with no text: the file
   fell back to its name and type rules, as designed, with no trace. The
-  fallback is unchanged, and each such file now writes a WARNING log line with
-  the run id, the file, the converter and the kind of failure (`timeout`,
-  `exit`, `crash`, `error`). The parser child exits with status 3 and names the
+  fallback is unchanged, and a file left with no text this way now writes a
+  WARNING log line with the run id, the file, each converter that broke and
+  the kind of failure (`timeout`, `exit`, `crash`, `error`). A file whose
+  text a later converter still read is sorted by its content and not
+  reported. The parser child exits with status 3 and names the
   exception instead of printing nothing. A converter that is not installed is
   still not a failure (`cubby doctor` reports it).
+- A ledger record whose `moved`, `failed` or `extraction_failures` is not a
+  non-negative integer is skipped as damaged, like any other damaged line;
+  `status --json` printed it as it was, outside its own schema.
 
 ### Security
 - A file name can no longer drive the terminal. Control characters (C0,

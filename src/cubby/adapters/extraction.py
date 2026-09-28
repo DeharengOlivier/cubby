@@ -128,9 +128,20 @@ class Extraction:
     failures: tuple[ConverterFailure, ...] = ()
 
 
-def _printable(raw: str) -> str:
-    """The first non-blank line of ``raw``, printable and bounded."""
-    line = next((part.strip() for part in raw.splitlines() if part.strip()), "")
+def _summary(raw: str, file: Path | None = None) -> str:
+    """The line of ``raw`` that says why, printable and bounded.
+
+    That is its first non-blank line, except in a Python traceback, whose
+    first line says nothing and whose last names the exception. ``file`` is
+    written as its name alone: the log line already says which file it is, and
+    an absolute path would use up the detail.
+    """
+    lines = [part.strip() for part in raw.splitlines() if part.strip()]
+    if not lines:
+        return ""
+    line = lines[-1] if lines[0].startswith("Traceback (most recent call last)") else lines[0]
+    if file is not None:
+        line = line.replace(str(file), file.name)
     return "".join(c if c.isprintable() else "?" for c in line)[:_MAX_DETAIL]
 
 
@@ -141,7 +152,13 @@ def _signal_name(number: int) -> str:
         return f"signal {number}"
 
 
-def _run(cmd: list[str], failures: list[ConverterFailure], name: str | None = None) -> str:
+def _run(
+    cmd: list[str],
+    failures: list[ConverterFailure],
+    name: str | None = None,
+    *,
+    file: Path | None = None,
+) -> str:
     """Run ``cmd`` and return its stdout; a converter that broke is added to ``failures``.
 
     The command is a list, never a shell string, and its first element is an
@@ -149,7 +166,8 @@ def _run(cmd: list[str], failures: list[ConverterFailure], name: str | None = No
     the file name nor PATH can decide what gets executed. It runs from the
     filesystem root with a timeout and a memory ceiling, so a hostile document
     costs one timeout and cannot plant code in the working directory. ``name``
-    is how a failure names the converter (the executable's name by default).
+    is how a failure names the converter (the executable's name by default),
+    and ``file`` the file it read, shortened to its name in what a failure says.
     """
     converter = name or Path(cmd[0]).name
     try:
@@ -167,14 +185,14 @@ def _run(cmd: list[str], failures: list[ConverterFailure], name: str | None = No
         return ""
     except (OSError, subprocess.SubprocessError) as exc:
         # Found on PATH a moment ago, and yet it could not be run.
-        detail = _printable(f"{type(exc).__name__}: {exc}")
+        detail = _summary(f"{type(exc).__name__}: {exc}", file)
         failures.append(ConverterFailure(converter, "error", detail))
         return ""
     if result.returncode < 0:
         detail = f"killed by {_signal_name(-result.returncode)}"
         failures.append(ConverterFailure(converter, "crash", detail))
     elif result.returncode > 0:
-        said = _printable(result.stderr.decode("utf-8", "replace"))
+        said = _summary(result.stderr.decode("utf-8", "replace"), file)
         detail = f"status {result.returncode}" + (f", {said}" if said else "")
         failures.append(ConverterFailure(converter, "exit", detail))
     # Whatever a converter printed before failing is still text to classify on.
@@ -197,6 +215,7 @@ def _in_child(kind: str, path: Path, max_bytes: int, failures: list[ConverterFai
         [sys.executable, "-P", "-m", "cubby.adapters.parsers", kind, str(path), str(max_bytes)],
         failures,
         f"{kind} parser",
+        file=path,
     )
 
 
@@ -212,7 +231,10 @@ def _tool(name: str) -> str | None:
 
 def _from_pdf(path: Path, max_bytes: int, failures: list[ConverterFailure]) -> str:
     if pdftotext := _tool("pdftotext"):  # poppler, common on macOS and Linux
-        text = _run([pdftotext, "-l", "2", "-q", str(path), "-"], failures)
+        # -q stays although it leaves a failure without its reason: without it,
+        # poppler prints one line per bad byte, and a 5 MB crafted PDF made it
+        # write 300 MB to stderr, which capture_output would hold in memory.
+        text = _run([pdftotext, "-l", "2", "-q", str(path), "-"], failures, file=path)
         if text.strip():
             return text
     return _in_child("pdf", path, max_bytes, failures)
@@ -225,26 +247,26 @@ def _from_docx(path: Path, max_bytes: int, failures: list[ConverterFailure]) -> 
     # python-docx missing or the document unreadable by it: fall through to
     # the system converter, which is the whole point of a cascade.
     if textutil := _tool("textutil"):  # macOS native
-        return _run([textutil, "-convert", "txt", "-stdout", str(path)], failures)
+        return _run([textutil, "-convert", "txt", "-stdout", str(path)], failures, file=path)
     return text
 
 
 def _from_legacy_office(path: Path, failures: list[ConverterFailure]) -> str:
     if textutil := _tool("textutil"):  # macOS reads .doc/.rtf natively
-        return _run([textutil, "-convert", "txt", "-stdout", str(path)], failures)
+        return _run([textutil, "-convert", "txt", "-stdout", str(path)], failures, file=path)
     for name in ("antiword", "catdoc"):  # common on Linux
         if tool := _tool(name):
-            return _run([tool, str(path)], failures)
+            return _run([tool, str(path)], failures, file=path)
     return ""
 
 
-def _read_failed(exc: Exception) -> ConverterFailure:
-    return ConverterFailure("direct read", "error", _printable(f"{type(exc).__name__}: {exc}"))
+def _read_failed(exc: Exception, path: Path) -> ConverterFailure:
+    return ConverterFailure("direct read", "error", _summary(f"{type(exc).__name__}: {exc}", path))
 
 
 def _from_html(path: Path, max_bytes: int, failures: list[ConverterFailure]) -> str:
     if textutil := _tool("textutil"):
-        text = _run([textutil, "-convert", "txt", "-stdout", str(path)], failures)
+        text = _run([textutil, "-convert", "txt", "-stdout", str(path)], failures, file=path)
         if text.strip():
             return text
     try:
@@ -252,7 +274,7 @@ def _from_html(path: Path, max_bytes: int, failures: list[ConverterFailure]) -> 
             raw = handle.read(_raw_window(max_bytes))
         return html.unescape(_TAG_RE.sub(" ", raw))
     except Exception as exc:  # noqa: BLE001 - reported, and the file still sorts by name and type
-        failures.append(_read_failed(exc))
+        failures.append(_read_failed(exc, path))
         return ""
 
 
@@ -261,7 +283,7 @@ def _from_text(path: Path, max_bytes: int, failures: list[ConverterFailure]) -> 
         with path.open("r", encoding="utf-8", errors="ignore") as handle:
             return handle.read(max_bytes)
     except Exception as exc:  # noqa: BLE001 - reported, and the file still sorts by name and type
-        failures.append(_read_failed(exc))
+        failures.append(_read_failed(exc, path))
         return ""
 
 
@@ -283,8 +305,11 @@ def extract(path: Path, ext: str, max_bytes: int = 4000) -> Extraction:
     installed, every converter failed, or the file is larger than
     :data:`MAX_SOURCE_BYTES`. The engine then falls back to its filename and
     file-type stages, which is the designed behaviour for anything the content
-    stage cannot speak for. Only the converters that broke are in
-    ``failures``: a missing one, or a large file left unread, is not a failure.
+    stage cannot speak for.
+
+    ``failures`` is empty unless the text is: a file is reported only when its
+    content was lost. A converter that is missing, or a large file left
+    unread, is never a failure.
     """
     # Converters run from the filesystem root: a relative path would name
     # another file there, or none.
@@ -307,7 +332,15 @@ def extract(path: Path, ext: str, max_bytes: int = 4000) -> Extraction:
         text = _in_child("xlsx", path, max_bytes, failures)
     else:
         text = ""
-    return Extraction(text[:max_bytes], tuple(failures))
+    text = text[:max_bytes]
+    # The rule lives here, where "usable text" is decided, and not with the
+    # callers: a converter that broke but was rescued (pypdf after pdftotext,
+    # textutil after the docx parser, the direct html read after textutil, or
+    # text printed before a non-zero exit) lost nothing. The file is sorted by
+    # its content, so reporting it would say something false.
+    if text.strip():
+        return Extraction(text)
+    return Extraction(text, tuple(failures))
 
 
 def extract_text(path: Path, ext: str, max_bytes: int = 4000) -> str:
