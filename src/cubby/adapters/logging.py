@@ -1,6 +1,7 @@
 """The activity log: one JSON object per line, bounded in size.
 
-Lines carry a timestamp, a level and a message, as JSON so they can be filtered
+Lines carry a timestamp, a level, a message, the cubby version and, inside a
+pass, the run id, as JSON so they can be filtered
 (``jq 'select(.level != "INFO")'``) and read back by ``cubby status``. The file
 is read after something has gone wrong, and the one line that matters ("your
 files moved and the undo journal could not be written") must be findable among
@@ -14,11 +15,30 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
+from .. import __version__
 from . import state
+
+#: The run a log line belongs to, so it can be matched with the ledger and the
+#: journal (``jq 'select(.run == "...")'``). Set by :func:`run_context`.
+_current_run: ContextVar[str | None] = ContextVar("cubby_run", default=None)
+
+
+@contextmanager
+def run_context(run_id: str) -> Iterator[None]:
+    """Tag every log line written inside the block with ``run_id``."""
+    token = _current_run.set(run_id)
+    try:
+        yield
+    finally:
+        _current_run.reset(token)
+
 
 #: Past this size the log is rotated to ``cubby.log.1`` (one generation kept).
 MAX_BYTES = 1_000_000
@@ -64,7 +84,10 @@ def file_logger(path: Path | None = None, *, echo: bool = False) -> LevelLogger:
             "ts": datetime.now().isoformat(timespec="seconds"),
             "level": level,
             "msg": message,
+            "version": __version__,
         }
+        if (run := _current_run.get()) is not None:
+            record["run"] = run
         if echoing:
             try:
                 print(human_line(record), flush=True)
