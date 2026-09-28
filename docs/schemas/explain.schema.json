@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "cubby explain --json",
+  "description": "Where each file would go, the deciding rule, and why a run would leave it alone.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "strong-ext",
+              "name",
+              "content",
+              "type",
+              "unsorted"
+            ]
+          },
+          "rule": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "destination": {
+            "type": "string"
+          },
+          "renamed_to": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "skipped": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outside_source": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "category",
+          "destination",
+          "outside_source",
+          "path",
+          "renamed_to",
+          "rule",
+          "skipped",
+          "stage"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "items",
+    "version"
+  ],
+  "additionalProperties": false
+}

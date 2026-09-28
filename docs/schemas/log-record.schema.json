@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "cubby log --json (one record per line)",
+  "description": "A line of the agent log. Lines that were not JSON come back as {\"msg\": ...} only.",
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "string"
+    },
+    "level": {
+      "enum": [
+        "INFO",
+        "WARNING",
+        "ERROR"
+      ]
+    },
+    "msg": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "run": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "msg"
+  ],
+  "additionalProperties": true
+}
