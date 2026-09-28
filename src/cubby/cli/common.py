@@ -207,12 +207,12 @@ def kv(pal: Palette, key: str, value: Shown, width: int = 16) -> None:
     print(f"{pal.dim(shown(key).ljust(max(width, len(key) + 2)))}{value}")
 
 
-def format_features(pal: Palette, mapping: dict[str, bool]) -> str:
+def format_features(pal: Palette, mapping: dict[str, bool]) -> Shown:
     parts = [
         pal.green(f"{shown(name)} ok") if present else pal.dim(f"{shown(name)} -")
         for name, present in mapping.items()
     ]
-    return "  ".join(parts)
+    return Shown("  ".join(parts))
 
 
 def format_age(seconds: float) -> str:
