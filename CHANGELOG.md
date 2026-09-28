@@ -12,6 +12,10 @@ All notable changes to this project are documented here. The format is based on
   the last 24 hours: runs, moves, failures, and the failures grouped by kind
   of error (the file name blanked out), with the files and cubby versions
   that hit each. `--json` has them as `agent.last_pass` and `activity`.
+- `scripts/rebuild.sh` checks that the wheel and sdist are reproducible, and
+  with `--against SHA256SUMS` that a release matches its tagged source. CI
+  runs it on every pull request, the release workflow against the artifacts
+  it publishes (`SECURITY.md`, "Checking a release").
 - JSON Schemas for every `--json` output in `docs/schemas/` (`plan`, `status`,
   `history`, `explain`, `log-record`), checked against the real outputs by
   the test suite. The schemas allow fields added later within a version.
