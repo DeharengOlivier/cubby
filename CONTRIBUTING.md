@@ -65,3 +65,19 @@ must pass (lint, strict types, layering contracts, tests on macOS and Linux with
 90 % coverage of the changed lines, dependency and secret scanning) and the
 review conversation must be resolved. Administrators are not exempt.
 
+The required `review record` status also waits for the reviewer's record, a
+PR comment that starts with `## Independent review record` and names the
+commit the reviewer read, with its full SHA on a line of its own:
+
+```text
+## Independent review record
+
+Reviewed head: 0123456789abcdef0123456789abcdef01234567
+```
+
+The record counts only for that commit. A push after the review turns the
+status back to failure: post a short re-review record (the same heading,
+`(re-review)` after it if you like, and `Reviewed head:` naming the new
+head). Get the SHA with `gh pr view N --json headRefOid -q .headRefOid`.
+Only comments from the owner, members and collaborators count.
+
