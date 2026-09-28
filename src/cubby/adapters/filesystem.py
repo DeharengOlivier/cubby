@@ -224,6 +224,12 @@ class Moved:
 #: witness: the folder is the same while that file is still in it, unchanged.
 #: A folder with no file near its top (``_WITNESS_DEPTH``) records 0 and its
 #: own time.
+#:
+#: The limit: a folder deleted and made again by a program within the same
+#: clock tick as its witness was written can match on every field (the inodes
+#: come back, and the file time is coarser than a nanosecond: 45% of 2000
+#: immediate re-creations matched, measured on ext4). A person cannot be that
+#: fast; the tests of re-creation set the new file's time apart.
 Identity = tuple[int, int, int, int]
 
 
