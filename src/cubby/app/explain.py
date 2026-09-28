@@ -36,6 +36,9 @@ class Explanation:
     # into): then ``destination`` is only what the rules would say.
     sortable: bool = True
     error: str | None = None  # why a run would fail on it (a file where its folder goes)
+    # How much text was read from the file when its content was looked at and
+    # did not decide (0: nothing readable); None when the content was not read.
+    content_chars: int | None = None
 
 
 class PlannedPass:
@@ -71,6 +74,11 @@ def explain(path: Path, config: Config, planned: PlannedPass | None = None) -> E
     engine = Engine(config)
     ref = build_ref(path, settings.content_max_bytes)
     decision = engine.classify(ref)
+    content_read = (
+        settings.content_scan
+        and ref.is_file
+        and decision.stage in (Stage.TYPE, Stage.UNSORTED)
+    )
     placement = Sorter(config, engine).placement_for(path, ref, decision.category)
 
     source = settings.source.resolve()
@@ -101,4 +109,5 @@ def explain(path: Path, config: Config, planned: PlannedPass | None = None) -> E
         duplicate_of=duplicate,
         sortable=never is None,
         error=error,
+        content_chars=len(ref.text()) if content_read else None,
     )

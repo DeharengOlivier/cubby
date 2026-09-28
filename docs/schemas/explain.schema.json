@@ -64,10 +64,19 @@
               "string",
               "null"
             ]
+          },
+          "content_chars": {
+            "description": "Characters of text read from the file when its content was looked at and matched no pattern (0: nothing readable). Null when the content was not read.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
           }
         },
         "required": [
           "category",
+          "content_chars",
           "destination",
           "duplicate_of",
           "error",

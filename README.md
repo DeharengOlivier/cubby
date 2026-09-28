@@ -87,8 +87,10 @@ so in-progress downloads are never grabbed mid-write.
 
 Categories flagged with `date_folders` (the shipped `Invoices` and
 `Bank-Statements`) file each document into a **month/year subfolder** taken from
-the date printed on the document, falling back to the download date when none is
-readable. Invoices additionally get a clean name, `<vendor> facture <date>`:
+the date printed on the document, else a date in its file name
+(`Invoice-2026-08-spotify.pdf`), falling back to the download date when neither
+is readable. Invoices additionally get a clean name, `<vendor> facture <date>`,
+with no date when it would only be the download date (`spotify facture.pdf`):
 
 ```
 Invoices/
@@ -108,7 +110,8 @@ cubby run --month-style letters --month-lang en   # July 2026
 ```
 
 When cubby cannot confidently identify the vendor it keeps the original filename
-(it never guesses), and `cubby plan` previews every subfolder and rename before
+(it never guesses: generic words such as `invoices`, `your bill` or `scan` are
+not a vendor), and `cubby plan` previews every subfolder and rename before
 anything moves.
 
 ## How it works
