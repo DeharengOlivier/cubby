@@ -144,6 +144,14 @@ def test_log_escapes_a_line_that_is_not_json(capsys):
     assert SHOWN.replace("\\r\\n", "") in out
 
 
+@pytest.mark.parametrize("value", [0, False, ""])
+def test_a_log_line_keeps_a_falsy_message(value):
+    from cubby.adapters.logging import human_line
+
+    line = human_line({"ts": "2026-09-28T12:00:00", "level": "INFO", "msg": value})
+    assert line == f"2026-09-28T12:00:00  INFO    {value}"
+
+
 def test_status_escapes_hostile_failures(capsys):
     now = datetime.now().isoformat(timespec="seconds")
     Ledger().record(
