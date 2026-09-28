@@ -105,7 +105,8 @@ def cmd_history(args: argparse.Namespace) -> int:
 def cmd_log(args: argparse.Namespace) -> int:
     records = read_all()
     if not records:
-        print(palette().dim("No log yet: the agent writes one once it runs."))
+        if not args.json:  # --json prints no line at all: a script sees an empty list
+            print(palette().dim("No log yet: the agent writes one once it runs."))
         return EXIT_OK
     if args.run:
         records = [r for r in records if r.get("run") == args.run]

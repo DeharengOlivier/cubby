@@ -27,7 +27,9 @@
 in [`docs/schemas/`](schemas/) (`plan`, `status`, `history`, `explain`, and `log-record` for
 each line of `cubby log --json`), and the test suite checks the real outputs against them,
 so a field is not renamed or dropped by accident. The top-level `version` changes when a
-field is removed or changes meaning; new fields may be added within a version.
+field is removed or changes meaning. New fields may be added within a version: the
+published schemas allow them, and a consumer should ignore fields it does not know.
+`cubby log --json` prints one record per line, and nothing at all when there is no log yet.
 
 ## Common flags
 

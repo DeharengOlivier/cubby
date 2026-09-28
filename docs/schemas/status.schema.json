@@ -67,8 +67,7 @@
         "stale",
         "unit",
         "watching"
-      ],
-      "additionalProperties": false
+      ]
     },
     "paused": {
       "oneOf": [
@@ -95,8 +94,7 @@
             "damaged",
             "since",
             "until"
-          ],
-          "additionalProperties": false
+          ]
         }
       ]
     },
@@ -117,8 +115,7 @@
             "mode": {
               "enum": [
                 "run",
-                "watch",
-                "undo"
+                "watch"
               ]
             },
             "source": {
@@ -153,8 +150,7 @@
                 "required": [
                   "error",
                   "file"
-                ],
-                "additionalProperties": false
+                ]
               }
             },
             "version": {
@@ -180,8 +176,7 @@
             "status",
             "v",
             "version"
-          ],
-          "additionalProperties": false
+          ]
         }
       ]
     },
@@ -196,6 +191,5 @@
     "log",
     "paused",
     "version"
-  ],
-  "additionalProperties": false
+  ]
 }

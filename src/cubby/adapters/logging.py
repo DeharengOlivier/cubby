@@ -130,10 +130,21 @@ def read_all(path: Path | None = None) -> list[dict[str, str]]:
     return [_parse(line) for line in state.read_lines(rotated) + newer]
 
 
+#: The levels cubby writes; a record with another is not one of cubby's.
+LEVELS = ("INFO", "WARNING", "ERROR")
+
+
 def _parse(line: str) -> dict[str, str]:
-    """A log line as a record; a line that is not a JSON object is kept as text."""
+    """A log line as a record.
+
+    The service manager appends the agent's own output to the same file, so a
+    line can be anything. Only cubby's records (a string ``msg`` and a known
+    level) are taken as records; any other line is kept whole, as text.
+    """
     try:
         data = json.loads(line)
     except json.JSONDecodeError:
         data = None
-    return data if isinstance(data, dict) else {"msg": line}
+    if isinstance(data, dict) and isinstance(data.get("msg"), str) and data.get("level") in LEVELS:
+        return data
+    return {"msg": line}

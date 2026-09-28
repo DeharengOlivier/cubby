@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "cubby log --json (one record per line)",
-  "description": "A line of the agent log. Lines that were not JSON come back as {\"msg\": ...} only.",
+  "description": "A line of the agent log. A line cubby did not write (output captured by the service manager, a traceback) comes back as {\"msg\": \"<the line>\"} only.",
   "type": "object",
   "properties": {
     "ts": {
@@ -26,6 +26,5 @@
   },
   "required": [
     "msg"
-  ],
-  "additionalProperties": true
+  ]
 }

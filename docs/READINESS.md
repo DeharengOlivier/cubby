@@ -90,7 +90,7 @@ containers, infrastructure, secrets.
 | SEC-13-003 unused dependencies | P0 | PASS | no runtime dependency; `extract` extras each imported by `adapters/parsers.py`; dev group tools each run by CI or `make` | each release |
 | SEC-13-004, 005 | P0 | PASS | PyPI only; Dependabot for uv and actions | each release |
 | SEC-13-006 no abandoned critical dependency | P0 | PASS | `pypdf` 6.19.0 (2026-09), `python-docx` 1.2.0 (2025-06); `openpyxl` 3.1.5 (2024-06) is the oldest, optional and sandboxed: see section 4 | each release |
-| SEC-13-007 new dependency reviewed | P0 | PASS | `hatchling` pin reviewed in PR #4; `fastjsonschema` 2.22.2 (dev group only, tests): BSD-3-Clause, no runtime dependencies, released 2026-08-15, reviewed in PR #8 | each PR |
+| SEC-13-007 new dependency reviewed | P0 | PASS | `hatchling` pin reviewed in PR #4; `fastjsonschema` 2.22.2 (dev group only, tests): BSD-3-Clause, no runtime dependencies (unlike `jsonschema`, which brings a Rust extension through `rpds-py`), released 2026-08-15, reviewed in PR #8 | each PR |
 | SEC-13-008, 009 | P0 | PASS | `permissions: contents: read` default; every action pinned by commit SHA | each release |
 | SEC-13-010 | P0 | N/A | no container | - |
 | SEC-14-001, 002 | P0 | PASS | branch protection (section 2); review records on every PR | each release |
