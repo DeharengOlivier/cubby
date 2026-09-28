@@ -4,10 +4,17 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
-from ..adapters.filesystem import build_ref, is_eligible, iter_candidates, move_into
+from ..adapters.filesystem import (
+    build_ref,
+    duplicate_in,
+    iter_candidates,
+    move_into,
+    not_yet_reason,
+)
 from ..adapters.journal import Entry, Journal, new_run_id
 from ..adapters.ledger import Failure, Ledger, RunRecord, now_iso
 from ..adapters.logging import run_context
@@ -46,7 +53,7 @@ def _never() -> bool:
     return False
 
 
-def _ignore(_: Path) -> None:
+def _ignore(_: Path, __: str) -> None:
     return None
 
 
@@ -123,12 +130,16 @@ class Sorter:
             subdir=placement.subdir,
             renamed_to=placement.new_name,
         )
+        folder = settings.source / decision.category / placement.subdir
         if not apply:
+            if settings.dedupe:  # what the run would do: delete a byte-identical duplicate
+                name = placement.new_name or path.name
+                return replace(outcome, duplicate_of=duplicate_in(path, folder, name))
             return outcome
 
         moved = move_into(
             path,
-            settings.source / decision.category / placement.subdir,
+            folder,
             root=settings.source,
             dedupe=settings.dedupe,
             rename_to=placement.new_name,
@@ -144,6 +155,8 @@ class Sorter:
                 f"put it back without checking it is still the file this run moved"
             )
         result = outcome.moved(moved.destination, journaled=journaled)
+        if moved.op == "dedupe":
+            result = replace(result, duplicate_of=moved.destination)
         # The move and its journal entry are done; a lost log line changes neither.
         with contextlib.suppress(OSError):
             where = _shown(moved.destination, self.source)
@@ -174,20 +187,21 @@ class Sorter:
         respect_age: bool = True,
         stop: Callable[[], bool] = _never,
         run_id: str | None = None,
-        on_waiting: Callable[[Path], None] = _ignore,
+        on_waiting: Callable[[Path, str], None] = _ignore,
     ) -> list[SortOutcome]:
         """Classify every candidate once.
 
         When ``apply`` is true, eligible files are moved, each move is journaled
         as it happens, and a file that cannot be moved is reported in its
         outcome's ``error`` without stopping the others. When ``respect_age`` is
-        false (used by ``plan``), age and in-progress checks are ignored so the
-        caller sees the full picture of the folder as it stands. ``stop`` is
+        false (used by ``plan``), the age is ignored so the caller sees the
+        folder as it will be sorted once everything has settled; an in-progress
+        download is still left alone. ``stop`` is
         checked before each file, so a stop request ends the pass between two
         files, never in the middle of one. ``run_id`` names the pass in the
         journal, the ledger and the log; a fresh one is made when omitted.
         ``on_waiting`` is called with each file left for a later pass because
-        it has not settled yet.
+        it has not settled yet, and why.
         """
         run_id = run_id or new_run_id()
         started = now_iso()
@@ -215,14 +229,14 @@ class Sorter:
         respect_age: bool,
         stop: Callable[[], bool],
         run_id: str,
-        on_waiting: Callable[[Path], None],
+        on_waiting: Callable[[Path, str], None],
     ) -> None:
         settings = self._config.settings
         for path in iter_candidates(settings, self._config.managed_dirs):
             if stop():
                 break
-            if respect_age and not is_eligible(path, settings):
-                on_waiting(path)
+            if reason := not_yet_reason(path, settings, ignore_age=not respect_age):
+                on_waiting(path, reason)
                 continue
             try:
                 outcomes.append(self._outcome(path, apply=apply, run_id=run_id, seq=len(outcomes)))

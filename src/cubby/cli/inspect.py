@@ -38,24 +38,32 @@ def _explanation_json(item: Explanation) -> dict[str, Any]:
         "renamed_to": item.renamed_to,
         "skipped": item.skipped,
         "outside_source": item.outside,
+        "duplicate_of": str(item.duplicate_of) if item.duplicate_of else None,
     }
 
 
 def _print_explanation(pal: Palette, item: Explanation, source: Path) -> None:
     print(pal.bold(str(item.path)))
-    try:
-        shown = item.destination.relative_to(source)
-    except ValueError:
-        shown = item.destination
-    kv(pal, "  goes to", pal.accent(str(shown)))
+    # What a run does comes first; where the file would go otherwise, after.
+    stays = "not in the watched folder: a run would not see it" if item.outside else item.skipped
+    if stays:
+        kv(pal, "  stays where it is", pal.yellow(stays))
+    shown = _near(item.destination, source)
+    if item.duplicate_of is not None and not stays:
+        kv(pal, "  deleted", pal.accent(f"as a duplicate of {_near(item.duplicate_of, source)}"))
+    else:
+        kv(pal, "  would go to" if stays else "  goes to", pal.accent(shown))
     rule = f"{item.rule}  ({item.stage.value} stage)" if item.rule else "no rule matched"
     kv(pal, "  decided by", rule)
     if item.renamed_to:
         kv(pal, "  renamed", item.renamed_to)
-    if item.outside:
-        kv(pal, "  note", pal.yellow("not in the watched folder: a run would not see it"))
-    elif item.skipped:
-        kv(pal, "  left alone", pal.yellow(item.skipped))
+
+
+def _near(path: Path, folder: Path) -> str:
+    try:
+        return str(path.relative_to(folder))
+    except ValueError:
+        return str(path)
 
 
 def cmd_explain(args: argparse.Namespace) -> int:

@@ -181,7 +181,7 @@ def test_a_pass_counts_the_files_still_settling(tmp_path):
     waiting: list[Path] = []
 
     outcomes = Sorter(config_for(tmp_path, delay=3600)).sort_once(
-        apply=True, on_waiting=waiting.append
+        apply=True, on_waiting=lambda path, _: waiting.append(path)
     )
 
     assert [o.name for o in outcomes] == ["settled.txt"]
@@ -196,7 +196,7 @@ class _Sorter:
 
     def sort_once(self, *, apply, stop=None, run_id=None, on_waiting=None):
         for i in range(self._waiting):
-            on_waiting(self.source / f"w{i}")
+            on_waiting(self.source / f"w{i}", "too recent")
         return self._outcomes
 
 

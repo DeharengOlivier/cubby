@@ -202,7 +202,8 @@ def positive_duration(value: str) -> float:
 
 
 def kv(pal: Palette, key: str, value: str) -> None:
-    print(f"{pal.dim(key.ljust(16))}{value}")
+    # A key longer than the column still gets two spaces before its value.
+    print(f"{pal.dim(key.ljust(max(16, len(key) + 2)))}{value}")
 
 
 def format_features(pal: Palette, mapping: dict[str, bool]) -> str:

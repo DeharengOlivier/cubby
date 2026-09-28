@@ -68,6 +68,15 @@ All notable changes to this project are documented here. The format is based on
   had been moved or deleted since the run; it now counts them and exits 1,
   as the exit codes say. A file restored under another name because its name
   was taken says so (`restored notes.txt as notes (1).txt`).
+- The previews now show what a run does. With `dedupe = true`, `plan`,
+  `explain` and the run summary announced a move for a file the run then
+  deleted as a duplicate; they now list it under "Would delete as duplicates"
+  / "Deleted as duplicates" (`duplicate_of` in `--json`). `plan` no longer
+  lists downloads still in progress as going to `_Unsorted`. `plan` and `run`
+  list what they left alone and why (`left_alone` in `--json`), and name a
+  file standing where a category folder goes (`blocked`). `explain` says
+  first whether a file stays where it is, then where it would go. Found by an
+  exploratory session.
 - A regular file named like a folder cubby sorts into (`_Unsorted`, a
   category, or a month folder inside one) made every move into that folder
   fail with `[Errno 17] File exists`. The file is still left alone, and the

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..adapters.filesystem import build_ref, candidate_skip_reason, not_yet_reason
+from ..adapters.filesystem import build_ref, candidate_skip_reason, duplicate_in, not_yet_reason
 from ..domain.category import Config
 from ..domain.engine import Engine
 from ..domain.file_ref import Stage
@@ -24,6 +24,7 @@ class Explanation:
     renamed_to: str | None
     skipped: str | None  # why a run would leave it alone, if it would
     outside: bool  # the file is not in the watched folder
+    duplicate_of: Path | None = None  # with dedupe: the filed copy it would be deleted for
 
 
 def explain(path: Path, config: Config) -> Explanation:
@@ -48,13 +49,16 @@ def explain(path: Path, config: Config) -> Explanation:
         path, settings
     )
     name = placement.new_name or path.name
+    folder = settings.source / decision.category / placement.subdir
+    duplicate = duplicate_in(path, folder, name) if settings.dedupe and path.is_file() else None
     return Explanation(
         path=path,
         category=decision.category,
         stage=decision.stage,
         rule=decision.rule,
-        destination=settings.source / decision.category / placement.subdir / name,
+        destination=folder / name,
         renamed_to=placement.new_name,
         skipped=skipped,
         outside=outside,
+        duplicate_of=duplicate,
     )
