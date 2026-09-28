@@ -20,7 +20,7 @@ from typing import Protocol
 from ..adapters.journal import new_run_id
 from ..adapters.ledger import Ledger
 from ..adapters.lock import Busy, exclusive
-from ..adapters.logging import run_context
+from ..adapters.logging import Level, run_context
 from .report import SortOutcome
 from .sorter import Sorter, describe_error
 
@@ -34,14 +34,14 @@ _MAX_ALERTED = 1000
 
 
 class LevelLog(Protocol):
-    def __call__(self, message: str, *, level: str = "INFO") -> None: ...
+    def __call__(self, message: str, *, level: Level = "INFO") -> None: ...
 
 
 def _never() -> bool:
     return False
 
 
-def _quiet(message: str, *, level: str = "INFO") -> None:
+def _quiet(message: str, *, level: Level = "INFO") -> None:
     return None
 
 

@@ -30,6 +30,8 @@ so a field is not renamed or dropped by accident. The top-level `version` change
 field is removed or changes meaning. New fields may be added within a version: the
 published schemas allow them, and a consumer should ignore fields it does not know.
 `cubby log --json` prints one record per line, and nothing at all when there is no log yet.
+A line cubby did not write (output the service manager captured, such as a traceback) comes
+back as `{"msg": "<the line>"}` and, having no level, is listed by `cubby log --warnings`.
 
 ## Common flags
 
