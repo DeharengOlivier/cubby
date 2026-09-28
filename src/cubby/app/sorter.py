@@ -28,7 +28,7 @@ from ..adapters.logging import run_context
 from ..domain.category import Category, Config
 from ..domain.engine import Engine
 from ..domain.file_ref import FileRef
-from ..domain.invoices import Placement, plan_placement
+from ..domain.invoices import Placement, is_month_folder, plan_placement
 from .report import SortOutcome
 
 Logger = Callable[[str], None]
@@ -144,9 +144,15 @@ class Sorter:
         printed date to file it by month.
         """
         rules = self._by_name.get(category)
-        if rules is None or not rules.date_folders or not ref.is_file:
+        if rules is None or not rules.date_folders:
             return Placement(subdir="")
         settings = self._config.settings
+        if not ref.is_file:
+            # A folder named like a month folder would become the month folder
+            # later invoices are filed into, and mix with them: it is marked.
+            if is_month_folder(ref.name, settings.month_style, settings.month_lang):
+                return Placement(subdir="", new_name=f"{ref.name} (folder)")
+            return Placement(subdir="")
         text = ref.text() if settings.content_scan else ""
         return plan_placement(
             name=ref.name,

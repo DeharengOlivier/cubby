@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from cubby.adapters import state
-from cubby.cli import EXIT_OK, main
+from cubby.cli import EXIT_OK, build_parser, main
 from cubby.cli import agent as cli_agent
 
 
@@ -118,7 +118,9 @@ def test_install_without_flags_bakes_no_flags(tmp_path, fake_service):
 def test_install_bakes_no_content_into_the_agent(fake_service):
     assert main(["install", "--no-content"]) == EXIT_OK
 
-    assert "--no-content" in fake_service.spec.program_args
+    baked = fake_service.spec.program_args
+    watch_args = build_parser().parse_args(baked[baked.index("watch") :])
+    assert watch_args.no_content is True
 
 
 def test_install_without_no_content_leaves_content_scanning_on(fake_service):
@@ -252,3 +254,13 @@ def test_watch_stops_after_the_pass_in_progress_on_sigterm(tmp_path, monkeypatch
 
     assert passes == [1]
     assert signal.getsignal(signal.SIGTERM) is before
+
+
+def test_doctor_lists_every_converter_extraction_uses(monkeypatch, capsys):
+    monkeypatch.setattr(cli_agent.shutil, "which", lambda name: None)
+
+    assert main(["doctor"]) == EXIT_OK
+
+    out = capsys.readouterr().out
+    for tool in ("pdftotext", "textutil", "antiword", "catdoc"):
+        assert tool in out
