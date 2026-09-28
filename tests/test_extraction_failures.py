@@ -576,6 +576,25 @@ def test_whitespace_is_not_a_rescue(monkeypatch, tmp_path, only_pdftotext):
     assert failure.kind == "exit"
 
 
+def test_blank_text_after_a_failure_is_no_rescue_for_any_converter(monkeypatch, tmp_path):
+    # antiword's blank output reaches extract() as it is (the pdf path drops
+    # blank text itself), so this pins extract()'s own strip().
+    antiword = "/usr/bin/antiword"
+    monkeypatch.setattr(
+        extraction.shutil, "which", lambda name: antiword if name == "antiword" else None
+    )
+    monkeypatch.setattr(
+        extraction.subprocess,
+        "run",
+        lambda cmd, *a, **k: subprocess.CompletedProcess(cmd, 1, b" \n", b"broken"),
+    )
+
+    result = extract(aged_file(tmp_path, "memo.doc", "x"), "doc")
+
+    assert result.text.strip() == ""
+    assert [f.converter for f in result.failures] == ["antiword"]
+
+
 # --- round 2: what a failure says ------------------------------------------------
 
 
