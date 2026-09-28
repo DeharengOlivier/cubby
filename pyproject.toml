@@ -160,5 +160,6 @@ only_mutate = [
 ]
 # The end-to-end journey runs cubby in a child process, outside the mutants.
 pytest_add_cli_args = ["--deselect", "tests/test_agent_journey.py"]
-# Tests of the shell scripts run them from the checkout next to the tests.
-also_copy = ["uninstall.sh", "scripts"]
+# Tests of the shell scripts run them from the checkout next to the tests, and
+# the JSON contract tests read the published schemas.
+also_copy = ["uninstall.sh", "scripts", "docs/schemas"]

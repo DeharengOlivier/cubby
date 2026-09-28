@@ -272,3 +272,15 @@ def test_explain_says_a_file_bound_for_a_blocked_folder_would_fail(tmp_path, cap
     assert "would fail" in text
     assert "a file named Documents is in the way" in text
     assert "a file named Documents is in the way" in json.loads(raw)["items"][0]["error"]
+
+
+def test_the_reason_for_a_file_with_a_folder_name_is_exact(tmp_path):
+    # Mutation round 8: the reason was only checked as a substring.
+    from cubby.adapters.filesystem import candidate_skip_reason
+
+    aged_file(tmp_path, "Documents", content="a plain file")
+    config = config_for(tmp_path)
+
+    assert candidate_skip_reason(tmp_path / "Documents", config.settings, config.managed_dirs) == (
+        "a file with the name of a folder cubby files into: rename or move it"
+    )
