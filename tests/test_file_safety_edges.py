@@ -388,3 +388,37 @@ def test_undo_last_run_passes_its_log_on(tmp_path):
     lines: list[str] = []
     assert undo_last_run(journal, log=lines.append) == 1
     assert lines == ["restored a.txt"]
+
+
+def test_a_move_whose_cleanup_also_fails_raises_the_first_error_and_names_the_link(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "a.txt"
+    source.write_text("x")
+    destination = tmp_path / "Documents" / "a.txt"
+    destination.parent.mkdir()
+    real_unlink = Path.unlink
+
+    def refuse(self, missing_ok=False):
+        if self in (source, destination):
+            raise PermissionError(13, "Permission denied", str(self))
+        real_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", refuse)
+
+    with pytest.raises(PermissionError) as info:
+        move_no_clobber(source, destination)
+
+    assert info.value.filename == str(source)
+    assert any(str(destination) in note for note in info.value.__notes__)
+
+
+def test_compaction_that_drops_nothing_does_not_rewrite_the_file(tmp_path, monkeypatch):
+    journal = Journal(tmp_path / "j.jsonl")
+    journal.record(Entry("r", 0, "move", Path("/d/a"), Path("/d/X/a")))  # pending: stays
+    monkeypatch.setattr(journal_module, "MAX_BYTES", 1)
+    inode = journal.path.stat().st_ino
+
+    journal.compact()
+
+    assert journal.path.stat().st_ino == inode
