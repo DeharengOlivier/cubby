@@ -10,6 +10,15 @@ import pytest
 from cubby.domain.category import Category, Config, Settings
 from cubby.domain.file_ref import FileRef
 
+# HOME and the XDG folders point at a session folder for the whole run, and the
+# session fails if the real home's cubby state changed: isolation that holds
+# even when the code under test ignores CUBBY_STATE_DIR (tests/test_state_isolation.py).
+from tests.real_state_guard import (  # noqa: F401 (pytest hooks, found by name)
+    pytest_configure,
+    pytest_sessionfinish,
+    pytest_unconfigure,
+)
+
 # The isolation below uses its own MonkeyPatch, not the shared `monkeypatch`
 # fixture: a test calling `monkeypatch.undo()` would otherwise undo it too, and
 # the rest of that test would write to the developer's real state folder (it

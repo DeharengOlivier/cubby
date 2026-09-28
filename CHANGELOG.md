@@ -16,6 +16,19 @@ All notable changes to this project are documented here. The format is based on
   default branch's copy of its workflow, so editing that workflow in a pull
   request no longer changes how the pull request is judged.
 
+### Fixed
+- The test suite could write to the real state folder of whoever ran it: a
+  mutated `log_path()` that ignored the per-test `CUBBY_STATE_DIR` put two
+  "a line from the test suite" lines in the maintainer's
+  `~/.local/state/cubby/cubby.log`, and the check meant to catch it only
+  looked for temp paths in those files. The suite now points `HOME` and the
+  XDG folders at a session folder before any test runs, and fails the whole
+  run, naming the files, when anything under the real home's cubby state,
+  config, log or agent unit appeared, changed or disappeared. `make mutation`
+  also runs under a throwaway `HOME`. Tests only: the installed cubby is
+  unchanged.
+
+
 ## [0.4.0] - 2026-09-28
 
 ### Added
