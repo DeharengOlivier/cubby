@@ -321,7 +321,9 @@ def _identity(value: object) -> Identity | None:
     if (
         isinstance(value, list)
         and len(value) == _IDENTITY_PARTS
-        and all(type(part) is int and part >= 0 for part in value)
+        and all(type(part) is int for part in value)
+        # Numbers are never negative, a time can be (a date before 1970).
+        and all(part >= 0 for part in value[:3])
     ):
         return value[0], value[1], value[2], value[3]
     return None

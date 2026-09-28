@@ -182,10 +182,11 @@ class Moved:
 #: A folder (or a macOS bundle) cannot use its own size and time: they change
 #: whenever something inside does, which Finder does just by opening it. Its
 #: inode is not enough either, since a folder deleted and made again can get
-#: the same one (measured on ext4). Instead of size and time, a folder records
-#: the inode and time of one entry inside it, its witness: the folder is the
-#: same while that entry is still in it. An empty folder records 0 and its own
-#: time.
+#: the same one (measured on ext4), and so can its subfolders. Instead of size
+#: and time, a folder records the inode and time of one file inside it, its
+#: witness: the folder is the same while that file is still in it, unchanged.
+#: A folder with no file near its top (``_WITNESS_DEPTH``) records 0 and its
+#: own time.
 Identity = tuple[int, int, int, int]
 
 
@@ -203,19 +204,46 @@ def identity(path: Path) -> Identity | None:
     return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns
 
 
+#: How deep, and through how many entries, a folder's witness is looked for.
+_WITNESS_DEPTH = 3
+_WITNESS_SCAN = 10_000
+
+
+def _files_near_top(folder: Path) -> Iterator[os.stat_result]:
+    """The files of ``folder``, level by level and by name within a folder,
+    down to ``_WITNESS_DEPTH`` levels and ``_WITNESS_SCAN`` entries. Hidden
+    entries (``.DS_Store``, which Finder rewrites) are left out.
+
+    Raises:
+        OSError: A folder could not be listed.
+    """
+    level, scanned = [folder], 0
+    for _ in range(_WITNESS_DEPTH):
+        below: list[Path] = []
+        for current in level:
+            with os.scandir(current) as found:
+                entries = sorted(
+                    (entry for entry in found if not entry.name.startswith(".")),
+                    key=lambda entry: entry.name,
+                )
+            for entry in entries:
+                scanned += 1
+                if scanned > _WITNESS_SCAN:
+                    return
+                if entry.is_file(follow_symlinks=False):
+                    yield entry.stat(follow_symlinks=False)
+                elif entry.is_dir(follow_symlinks=False):
+                    below.append(Path(entry.path))
+        level = below
+
+
 def _witness(folder: Path) -> os.stat_result | None:
-    """The entry of ``folder`` that stands for it: its first file by name, else
-    its first entry, hidden ones (``.DS_Store``) left out; None when empty.
+    """The file that stands for ``folder``: the first near its top, else None.
 
     Raises:
         OSError: The folder could not be listed.
     """
-    with os.scandir(folder) as entries:
-        visible = sorted(
-            (entry for entry in entries if not entry.name.startswith(".")),
-            key=lambda entry: (not entry.is_file(follow_symlinks=False), entry.name),
-        )
-    return visible[0].stat(follow_symlinks=False) if visible else None
+    return next(_files_near_top(folder), None)
 
 
 def same_file(path: Path, recorded: Identity) -> bool:
@@ -232,13 +260,9 @@ def same_file(path: Path, recorded: Identity) -> bool:
         return False
     if not stat.S_ISDIR(info.st_mode):
         return (info.st_size, info.st_mtime_ns) == recorded[2:]
-    if recorded[2] == 0:  # empty when it was moved
+    if recorded[2] == 0:  # no file near its top when it was moved
         return info.st_mtime_ns == recorded[3]
-    with os.scandir(path) as entries:
-        return any(
-            (found.st_ino, found.st_mtime_ns) == recorded[2:]
-            for found in (entry.stat(follow_symlinks=False) for entry in entries)
-        )
+    return any((found.st_ino, found.st_mtime_ns) == recorded[2:] for found in _files_near_top(path))
 
 
 #: How many times a name may be taken under us before the move gives up.
