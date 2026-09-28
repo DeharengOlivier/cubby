@@ -299,8 +299,23 @@ def test_compaction_drops_lines_that_belong_to_no_run(tmp_path, monkeypatch):
     assert [r.run_id for r in journal.runs()] == ["r"]
 
 
+def test_compaction_keeps_a_version_2_line_that_also_carries_moves(tmp_path, monkeypatch):
+    # Review of the mutation rounds: such a line is read as a version 2 move
+    # still to undo, so compaction must key it the same way and keep it.
+    journal = Journal(tmp_path / "j.jsonl")
+    journal.record(Entry("old", 0, "move", Path("/d/a"), Path("/d/X/a")))
+    with journal.path.open("a", encoding="utf-8") as handle:
+        record = {"v": 2, "run": "r", "seq": 0, "op": "move", "from": "/d/b", "to": "/d/X/b"}
+        handle.write(json.dumps({**record, "moves": []}) + "\n")
+    monkeypatch.setattr(journal_module, "MAX_BYTES", 1)
+
+    journal.compact()
+
+    assert [(r.run_id, len(r.pending)) for r in journal.runs()] == [("old", 1), ("r", 1)]
+
+
 def test_compaction_drops_an_object_line_that_names_no_run(tmp_path, monkeypatch):
-    # Mutation round 9: a JSON object without "run" was never compacted over;
+    # Mutation round 8: a JSON object without "run" was never compacted over;
     # reading its run unguarded raised KeyError and stopped the compaction.
     journal = Journal(tmp_path / "j.jsonl")
     journal.record(Entry("r", 0, "move", Path("/d/a"), Path("/d/X/a")))
