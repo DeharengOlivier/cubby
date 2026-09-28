@@ -36,7 +36,7 @@ All notable changes to this project are documented here. The format is based on
   filled, empty; it now removes a folder it emptied (an empty one only).
   A file that could not be moved was reported as a raw Python exception with
   two absolute paths; it now reads `PermissionError: Permission denied:
-  fresh.pdf -> Documents/fresh.pdf (check that cubby may write there)`, paths
+  fresh.pdf -> Documents/fresh.pdf (check cubby's permissions there)`, paths
   relative to the sorted folder. The docs say that a folder in the watched
   folder is moved whole into `_Unsorted`, and how to keep it. Found by an
   exploratory session.

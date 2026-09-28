@@ -374,7 +374,9 @@ def _make_folder(folder: Path, root: Path) -> None:
             raise exc from None  # the search failed: the real error is the useful one
         if blocker is None:
             raise
-        raise type(exc)(exc.errno, in_the_way(blocker, root), str(blocker)) from exc
+        error = type(exc)(exc.errno, in_the_way(blocker, root), str(blocker))
+        setattr(error, "names_its_file", True)  # noqa: B010 - an attribute OSError lacks; see describe_error
+        raise error from exc
 
 
 def in_the_way(blocker: Path, root: Path) -> str:

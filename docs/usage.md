@@ -5,7 +5,7 @@
 | Command           | What it does                                              |
 |-------------------|----------------------------------------------------------|
 | `cubby plan`      | Preview the full mapping of the folder. Moves nothing and ignores the age delay, so you see every settled and unsettled file; downloads still in progress are listed as left alone, duplicates `dedupe` would delete are listed apart, and a file standing where a category folder goes is named. `cubby run` ends with the same sections. |
-| `cubby run`       | Sort the folder once. Only files older than `--delay` are moved. A folder in the watched folder (other than those cubby files into) is moved whole into `_Unsorted`, its content unsorted; add its name to `ignore` to keep it where it is. |
+| `cubby run`       | Sort the folder once. Only files older than `--delay` are moved. A folder in the watched folder (other than those cubby files into, and hidden ones) is moved whole into `_Unsorted`, its content unsorted; add its name to `ignore` to keep it where it is. |
 | `cubby watch`     | Run the sort loop in the foreground. Ctrl-C to stop.     |
 | `cubby undo`      | Reverse the most recent run, manual or agent, restoring files to where they were. `--run ID` picks an older run. A file moved or deleted since the run, or replaced or changed since, is left alone and named; undo then exits 1. |
 | `cubby explain FILE...` | Say where each file would go, which rule decides (`name matches 'invoice'`, `extension .dmg`...), the rename, and why a run would leave it alone (ignored, in progress, too recent) or fail on it. It answers for a run now, so a file too recent stays; `plan` ignores the age and shows the folder once everything has settled. Moves nothing. `--json`. |

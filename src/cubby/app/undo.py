@@ -50,10 +50,13 @@ def _restore(entry: Entry) -> str:
 def _remove_emptied(folder: Path, top: Path) -> None:
     """Remove ``folder`` and its parents below ``top`` while they are empty.
 
-    The run made these folders (a category, a month) to file into; once undo
-    has taken everything back out, they go too. ``rmdir`` removes an empty
-    folder only, so nothing the user put there can be lost, and ``top``, the
-    folder the file came from, always stays.
+    These are the folders the run filed into (a category, a month); once undo
+    has taken everything back out, they go too, even one that was already
+    there, empty, before the run. ``rmdir`` removes an empty folder only, so
+    nothing anyone put there can be lost, and ``top``, the folder the file came
+    from, always stays, as does anything outside it. A folder that cannot be
+    removed is left: an empty folder is untidy, not a reason to fail the undo
+    of a file that is already back.
     """
     while folder != top and folder.is_relative_to(top):
         try:
