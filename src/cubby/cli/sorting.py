@@ -8,6 +8,7 @@ import signal
 import sys
 import threading
 
+from ..adapters.filesystem import blocked_folders
 from ..adapters.journal import Journal
 from ..adapters.ledger import Ledger
 from ..adapters.lock import exclusive
@@ -15,7 +16,7 @@ from ..adapters.logging import file_logger
 from ..adapters.notify import notifier
 from ..adapters.pause import clear_pause, current_pause, set_pause
 from ..adapters.ui import banner
-from ..app.report import SortOutcome, render_json, render_plan
+from ..app.report import LeftAlone, SortOutcome, render_json, render_plan
 from ..app.sorter import Sorter
 from ..app.undo import undo_run
 from ..app.watcher import StopRequest, Watcher
@@ -30,22 +31,32 @@ from .common import (
 )
 
 
-def _print_outcomes(outcomes: list[SortOutcome], *, applied: bool) -> None:
+def _print_outcomes(
+    outcomes: list[SortOutcome], *, applied: bool, left_alone: list[LeftAlone], blocked: list[str]
+) -> None:
     pal = palette()
     if pal.enabled:
         print(banner(pal))
-    print(render_plan(outcomes, applied=applied, palette=pal))
+    print(
+        render_plan(outcomes, applied=applied, palette=pal, left_alone=left_alone, blocked=blocked)
+    )
 
 
 def cmd_plan(args: argparse.Namespace) -> int:
     config = load_from_args(args)
     if source_error(config, args):
         return EXIT_FAILED
-    outcomes = Sorter(config).sort_once(apply=False, respect_age=False)
+    left_alone: list[LeftAlone] = []
+    outcomes = Sorter(config).sort_once(
+        apply=False,
+        respect_age=False,
+        on_waiting=lambda path, reason: left_alone.append((path.name, reason)),
+    )
+    blocked = blocked_folders(config.settings, config.managed_dirs)
     if getattr(args, "json", False):
-        print(render_json(outcomes, applied=False))
+        print(render_json(outcomes, applied=False, left_alone=left_alone, blocked=blocked))
         return EXIT_OK
-    _print_outcomes(outcomes, applied=False)
+    _print_outcomes(outcomes, applied=False, left_alone=left_alone, blocked=blocked)
     return EXIT_OK
 
 
@@ -65,9 +76,13 @@ def cmd_run(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
     sorter = Sorter(config, log=log, warn=warn, journal=Journal(), ledger=Ledger())
+    left_alone: list[LeftAlone] = []
     with exclusive():
-        outcomes = sorter.sort_once(apply=True)
-    _print_outcomes(outcomes, applied=True)
+        outcomes = sorter.sort_once(
+            apply=True, on_waiting=lambda path, reason: left_alone.append((path.name, reason))
+        )
+    blocked = blocked_folders(config.settings, config.managed_dirs)
+    _print_outcomes(outcomes, applied=True, left_alone=left_alone, blocked=blocked)
     return EXIT_FAILED if any(o.needs_attention for o in outcomes) else EXIT_OK
 
 

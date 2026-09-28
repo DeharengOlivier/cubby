@@ -50,6 +50,8 @@ def candidate_skip_reason(path: Path, settings: Settings, managed: frozenset[str
     if path.name.startswith("."):
         return "hidden file"
     if path.name in managed or path.name == settings.unsorted_dir:
+        if os.path.lexists(path) and not path.is_dir():
+            return "a file with the name of a folder cubby files into: rename or move it"
         return "a folder cubby files into"
     if pattern := ignored_by(path.name, settings.ignore):
         return f"ignored by pattern {pattern!r}"
@@ -66,16 +68,35 @@ def iter_candidates(settings: Settings, managed: frozenset[str] = frozenset()) -
             yield entry
 
 
-def not_yet_reason(path: Path, settings: Settings, now: float | None = None) -> str | None:
+def blocked_folders(settings: Settings, managed: frozenset[str]) -> list[str]:
+    """Names of the source folder where a folder cubby files into is, but not as a folder.
+
+    Every file bound for such a folder fails to move until the entry is renamed
+    or moved, so previews name it before a run fails on it.
+    """
+    names = sorted({*managed, settings.unsorted_dir})
+    return [
+        name
+        for name in names
+        if os.path.lexists(settings.source / name) and not (settings.source / name).is_dir()
+    ]
+
+
+def not_yet_reason(
+    path: Path, settings: Settings, now: float | None = None, *, ignore_age: bool = False
+) -> str | None:
     """Why ``path`` is not settled enough to move yet, or None if it is.
 
     A file is settled when it is not an in-progress download and its most
     recent change is older than ``settings.delay`` (so a file still being
-    written is left alone).
+    written is left alone). ``ignore_age`` keeps only the in-progress rule, for
+    a plan of the folder as it will be once everything has settled.
     """
     ext = path.suffix.lower().lstrip(".")
     if ext in settings.skip_ext:
         return f"download in progress (.{ext})"
+    if ignore_age:
+        return None
     try:
         mtime = path.stat().st_mtime
     except OSError as exc:
@@ -381,6 +402,14 @@ def _file_in_the_way(folder: Path, root: Path) -> Path | None:
     return blocker
 
 
+def duplicate_in(path: Path, folder: Path, name: str) -> Path | None:
+    """``folder / name`` when it holds the same bytes as ``path``, else None."""
+    same_name = folder / name
+    if same_name.exists() and files_identical(path, same_name):
+        return same_name
+    return None
+
+
 def move_into(
     path: Path,
     category_dir: Path,
@@ -406,8 +435,8 @@ def move_into(
     # Check before creating anything: a refused move must leave no trace.
     resolve_inside(root, category_dir)
     _make_folder(category_dir, root)
-    same_name = category_dir / target_name
-    if dedupe and same_name.exists() and files_identical(path, same_name):
+    same_name = duplicate_in(path, category_dir, target_name) if dedupe else None
+    if same_name is not None:
         path.unlink()
         return Moved(same_name, "dedupe", identity(same_name))
     for _ in range(_MAX_NAME_RACES):

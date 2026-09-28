@@ -150,7 +150,7 @@ class Watcher:
     def _sort_pass(self, run_id: str) -> int:
         waiting = 0
 
-        def count_waiting(_: object) -> None:
+        def count_waiting(_: object, __: str) -> None:
             nonlocal waiting
             waiting += 1
 

@@ -50,11 +50,19 @@
           },
           "outside_source": {
             "type": "boolean"
+          },
+          "duplicate_of": {
+            "description": "With dedupe: the filed copy this file would be deleted for. Null otherwise.",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
           "category",
           "destination",
+          "duplicate_of",
           "outside_source",
           "path",
           "renamed_to",

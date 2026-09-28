@@ -77,10 +77,18 @@
           },
           "journaled": {
             "type": "boolean"
+          },
+          "duplicate_of": {
+            "description": "With dedupe: the byte-identical file already filed, for which this entry is (or would be) deleted instead of moved. Null for a move.",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
           "category",
+          "duplicate_of",
           "error",
           "journaled",
           "moved_to",
@@ -92,13 +100,41 @@
           "subdir"
         ]
       }
+    },
+    "left_alone": {
+      "description": "Entries not sorted this time, with why: a download in progress, or (run only) too recent.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "reason"
+        ]
+      }
+    },
+    "blocked": {
+      "description": "Names where a folder cubby files into should be, held by a file: files for that folder cannot be sorted until it is renamed or moved.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "required": [
     "applied",
+    "blocked",
     "count",
     "failed",
     "items",
+    "left_alone",
     "version"
   ]
 }

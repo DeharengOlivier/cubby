@@ -166,6 +166,24 @@ def test_plan(downloads, capsys):
     assert {item["stage"] for item in payload["items"]} >= {"name", "type"}
 
 
+def test_plan_with_duplicates_downloads_in_progress_and_a_blocked_folder(tmp_path, capsys):
+    aged_file(tmp_path / "Documents", "a.txt", content="SAME")
+    aged_file(tmp_path, "a.txt", content="SAME")
+    aged_file(tmp_path, "b.iso.part")
+    aged_file(tmp_path, "_Unsorted", content="a file in the way")
+    config = tmp_path.parent / "dedupe.toml"
+    config.write_text("[settings]\ndedupe = true\n", encoding="utf-8")
+
+    payload = _json_of(
+        capsys, ["plan", "--config", str(config), "--source", str(tmp_path), "--json"]
+    )
+
+    _validator("plan")(payload)
+    assert payload["items"][0]["duplicate_of"]
+    assert payload["left_alone"][0]["name"] == "b.iso.part"
+    assert payload["blocked"] == ["_Unsorted"]
+
+
 @needs_permissions
 def test_history_with_a_partial_run_and_a_partly_undone_one(downloads, capsys, monkeypatch):
     real_move = sorter_module.move_into

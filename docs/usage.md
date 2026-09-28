@@ -4,7 +4,7 @@
 
 | Command           | What it does                                              |
 |-------------------|----------------------------------------------------------|
-| `cubby plan`      | Preview the full mapping of the folder. Moves nothing and ignores the age delay, so you see every file. |
+| `cubby plan`      | Preview the full mapping of the folder. Moves nothing and ignores the age delay, so you see every settled and unsettled file; downloads still in progress are listed as left alone, duplicates `dedupe` would delete are listed apart, and a file standing where a category folder goes is named. `cubby run` ends with the same sections. |
 | `cubby run`       | Sort the folder once. Only files older than `--delay` are moved. |
 | `cubby watch`     | Run the sort loop in the foreground. Ctrl-C to stop.     |
 | `cubby undo`      | Reverse the most recent run, manual or agent, restoring files to where they were. `--run ID` picks an older run. A file moved or deleted since the run, or replaced or changed since, is left alone and named; undo then exits 1. |
@@ -57,7 +57,9 @@ cubby status          # is it running, and what did it do last?
 
 ## Safety
 
-- Files are **moved**, never deleted. Name collisions get `(1)`, `(2)` suffixes.
+- Files are **moved**, never deleted, unless you turn on `dedupe`: then a file byte-identical
+  to one already filed under the same name is deleted, `plan` and the run summary say so,
+  and `cubby undo` brings it back. Name collisions get `(1)`, `(2)` suffixes.
 - In-progress downloads (`.crdownload`, `.part`, ...) and files younger than
   `--delay` are skipped.
 - Cubby never re-scans its own category folders, so sorting is idempotent.
