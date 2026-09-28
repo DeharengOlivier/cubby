@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from ..adapters.journal import Journal, Run
+from ..adapters.journal import Journal
 from ..adapters.ledger import Ledger, RunRecord
 
 #: ``undoable``: nothing undone yet. ``partly undone``: some moves were put
@@ -23,12 +23,6 @@ class RunSummary:
     @property
     def undone(self) -> bool:
         return self.undo == "undone"
-
-
-def undo_state(run: Run | None) -> UndoState:
-    if run is None:
-        return "unknown"
-    return undo_state_of(len(run.entries), len(run.pending))
 
 
 def undo_state_of(moves: int, pending: int) -> UndoState:

@@ -44,9 +44,15 @@ Reading the undo journal, which `cubby history` and `cubby undo` do, measured se
 Before, every command built an entry, with two `Path` objects, for each of the 200 000 moves
 (65% of the time, per the profile). Now each line is validated once into plain fields;
 `history` only counts them, and `undo` builds the entries of the one run it reverts. A
-property test checks that the fast reads answer exactly what the full read answers, damaged
-lines included (`tests/test_journal_reads.py`). The probe writes the journal directly, then
-times `recent_runs`, `Journal.last_pending_run` and `Journal.run` in one process.
+property test checks that every read answers exactly what the reader of 0.2.0 answered,
+damaged lines included, against a frozen copy of that reader (`tests/test_journal_reads.py`,
+`tests/journal_reference.py`). The probe writes the journal directly, then times
+`recent_runs`, `Journal.last_pending_run` and `Journal.run` in one process.
+
+Peak memory (`tracemalloc`) on the same journal: `cubby undo` 200 MB before, 126 MB after;
+`cubby undo --run ID` 200 MB before, 89 MB after. The full read (`Journal.runs`, which no
+command uses any more) went from 200 MB to 254 MB, as it now holds the raw fields before
+building the entries.
 
 ## What the numbers say
 
