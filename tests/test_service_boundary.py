@@ -14,13 +14,13 @@ from pathlib import Path
 
 import pytest
 
-from cubby import cli
 from cubby.adapters.service import ServiceError, ServiceSpec, get_service
 from cubby.adapters.service import launchd as launchd_mod
 from cubby.adapters.service import systemd as systemd_mod
 from cubby.adapters.service.launchd import LaunchdService
 from cubby.adapters.service.systemd import SystemdService
 from cubby.cli import EXIT_FAILED, main
+from cubby.cli import agent as cli_agent
 
 
 class FakeManager:
@@ -144,7 +144,7 @@ def test_cli_install_reports_a_refusal_and_exits_non_zero(unit_dirs, tmp_path, m
     source = tmp_path / "Downloads"
     source.mkdir()
     monkeypatch.setattr("subprocess.run", FakeManager(fail_on="enable"))
-    monkeypatch.setattr(cli, "get_service", SystemdService)
+    monkeypatch.setattr(cli_agent, "get_service", SystemdService)
 
     assert main(["install", "--source", str(source)]) == EXIT_FAILED
 
@@ -170,7 +170,7 @@ def test_no_service_manager_is_a_clear_error(monkeypatch, capsys, tmp_path):
     source = tmp_path / "Downloads"
     source.mkdir()
     monkeypatch.setattr("cubby.adapters.service.factory.detect_service", lambda: None)
-    monkeypatch.setattr(cli, "get_service", get_service)
+    monkeypatch.setattr(cli_agent, "get_service", get_service)
 
     assert main(["install", "--source", str(source)]) == EXIT_FAILED
     assert "no supported service manager" in capsys.readouterr().err

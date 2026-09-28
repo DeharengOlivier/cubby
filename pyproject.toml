@@ -67,6 +67,7 @@ select = [
     "BLE",  # blind except: every broad catch must say why (noqa with a reason)
     "S",    # bandit rules, in the editor as well as in CI
     "PL",   # pylint subset: complexity and argument budgets
+    "C90",  # McCabe complexity, held at 10 (CODING-RULES code shape budget)
     "RUF",
 ]
 ignore = [
@@ -74,6 +75,9 @@ ignore = [
     "S603",     # subprocess without shell: the safe form, see [tool.bandit]
     "S607",     # partial path: we resolve absolute paths with shutil.which
 ]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S108", "PLR0913", "PLC0415"]

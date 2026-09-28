@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pytest
 
-from cubby import cli
 from cubby.adapters import ledger as ledger_module
 from cubby.adapters.ledger import Failure, Ledger, RunRecord
 from cubby.adapters.lock import Busy, exclusive
@@ -23,6 +22,8 @@ from cubby.app import sorter as sorter_module
 from cubby.app.sorter import Sorter
 from cubby.app.watcher import Watcher
 from cubby.cli import EXIT_FAILED, EXIT_OK, main
+from cubby.cli import agent as cli_agent
+from cubby.cli import sorting as cli_sorting
 from cubby.domain.category import Category, Config, Settings
 
 
@@ -305,7 +306,7 @@ class Agent:
 
 
 def _status(monkeypatch, capsys, agent: Agent | None, *extra: str) -> tuple[int, str]:
-    monkeypatch.setattr(cli, "detect_service", lambda: agent)
+    monkeypatch.setattr(cli_agent, "detect_service", lambda: agent)
     code = main(["status", *extra])
     return code, capsys.readouterr().out
 
@@ -410,7 +411,7 @@ def test_a_busy_lock_is_reported_by_run(tmp_path, monkeypatch, capsys):
     def busy(**kwargs):
         raise Busy("another cubby process is sorting or undoing")
 
-    monkeypatch.setattr(cli, "exclusive", busy)
+    monkeypatch.setattr(cli_sorting, "exclusive", busy)
 
     code = main(["run", "--source", str(tmp_path), "--delay", "0"])
 

@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pytest
 
-from cubby import cli
 from cubby.adapters import extraction
 from cubby.adapters import journal as journal_module
 from cubby.adapters.journal import Entry, Journal
@@ -29,6 +28,8 @@ from cubby.adapters.service.systemd import SystemdService
 from cubby.app.sorter import Sorter
 from cubby.app.undo import undo_run
 from cubby.cli import EXIT_FAILED, EXIT_OK, main
+from cubby.cli import agent as cli_agent
+from cubby.cli import sorting as cli_sorting
 from cubby.domain.category import Category, Config, Settings
 
 # --- 1. a downloaded .py must never run --------------------------------------
@@ -225,7 +226,7 @@ def test_install_bakes_the_state_folder_and_waits_for_the_source(tmp_path, monke
             captured["spec"] = spec
             return tmp_path / "unit"
 
-    monkeypatch.setattr(cli, "get_service", Recording)
+    monkeypatch.setattr(cli_agent, "get_service", Recording)
     assert main(["install", "--source", str(source)]) == EXIT_OK
 
     spec = captured["spec"]
@@ -254,7 +255,7 @@ def test_status_flags_an_agent_that_never_completed_a_pass(tmp_path, monkeypatch
         def unit_path(self, label):
             return unit
 
-    monkeypatch.setattr(cli, "detect_service", Agent)
+    monkeypatch.setattr(cli_agent, "detect_service", Agent)
     assert Ledger().heartbeat() is None
 
     assert main(["status"]) == EXIT_FAILED
@@ -287,12 +288,12 @@ def test_the_agent_waits_for_a_missing_source_instead_of_exiting(tmp_path, monke
     missing = tmp_path / "Drive"
     runs: list[int] = []
 
-    class OneCycle(cli.Watcher):
+    class OneCycle(cli_sorting.Watcher):
         def run(self, **_):
             runs.append(1)
             return super().run(max_cycles=1)
 
-    monkeypatch.setattr(cli, "Watcher", OneCycle)
+    monkeypatch.setattr(cli_sorting, "Watcher", OneCycle)
 
     assert main(["watch", "--source", str(missing), "--wait-for-source"]) == EXIT_OK
     assert runs == [1]

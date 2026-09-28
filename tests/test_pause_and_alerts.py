@@ -70,7 +70,7 @@ def test_a_damaged_pause_file_still_pauses(content):
 
 
 def test_status_reports_the_pause(capsys, monkeypatch):
-    monkeypatch.setattr("cubby.cli.detect_service", lambda: None)
+    monkeypatch.setattr("cubby.cli.agent.detect_service", lambda: None)
     set_pause(None)
 
     main(["status", "--json"])
@@ -309,14 +309,14 @@ def test_doctor_can_send_a_test_notification(monkeypatch, tmp_path, capsys):
     def fake_notifier(enabled, *, warn):
         return sent.append
 
-    monkeypatch.setattr("cubby.cli.notifier", fake_notifier)
+    monkeypatch.setattr("cubby.cli.agent.notifier", fake_notifier)
     assert main(["doctor", "--source", str(tmp_path), "--notify"]) == EXIT_OK
     assert sent == ["Test notification: cubby can reach you."]
 
     def broken_notifier(enabled, *, warn):
         return lambda message: warn("no notification tool (osascript or notify-send) found")
 
-    monkeypatch.setattr("cubby.cli.notifier", broken_notifier)
+    monkeypatch.setattr("cubby.cli.agent.notifier", broken_notifier)
     assert main(["doctor", "--source", str(tmp_path), "--notify"]) == EXIT_FAILED
     assert "notification test failed" in capsys.readouterr().err
 
