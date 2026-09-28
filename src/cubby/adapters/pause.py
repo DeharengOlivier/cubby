@@ -100,7 +100,7 @@ def current_pause(now: float | None = None) -> Pause | None:
 def _parse(raw: str) -> Pause:
     """The pause a file records; anything cubby did not write is a damaged one."""
     try:
-        data = json.loads(raw)
+        data = state.parse_json(raw)
         since, until = data["since"], data["until"]
     except (ValueError, KeyError, TypeError):  # JSONDecodeError is a ValueError
         return _DAMAGED

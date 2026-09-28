@@ -210,7 +210,7 @@ class Ledger:
         records: list[RunRecord] = []
         for line in reversed(state.read_lines(self.runs_path)):
             try:
-                data = json.loads(line)
+                data = state.parse_json(line)
                 if data.get("v") != VERSION:
                     continue
                 records.append(RunRecord.from_json(data))
@@ -239,7 +239,7 @@ class Ledger:
     def heartbeat(self) -> Heartbeat | None:
         """The agent's last heartbeat, or None if there is none (or it is unreadable)."""
         try:
-            data = json.loads(self.heartbeat_path.read_text("utf-8"))
+            data = state.parse_json(self.heartbeat_path.read_text("utf-8"))
             return Heartbeat(
                 at=datetime.fromisoformat(data["at"]),
                 pid=int(data["pid"]),
