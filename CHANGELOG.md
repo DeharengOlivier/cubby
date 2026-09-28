@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-28
+
+Upgrading: the config is now read strictly (see Changed); run `cubby doctor`
+after upgrading, then `cubby install` again to refresh the agent unit.
+
 ### Added (features)
 - `cubby explain FILE...`: where each file would go, the rule that decides it,
   the rename, and why a run would leave it alone. Moves nothing. `--json`.
@@ -151,5 +156,6 @@ All notable changes to this project are documented here. The format is based on
 - Portable `install.sh` / `uninstall.sh`.
 - Test suite covering the engine, adapters, use cases and CLI, plus a fuzz test.
 
-[Unreleased]: https://github.com/DeharengOlivier/cubby/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/DeharengOlivier/cubby/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/DeharengOlivier/cubby/releases/tag/v0.2.0
 [0.1.0]: https://github.com/DeharengOlivier/cubby/releases/tag/v0.1.0

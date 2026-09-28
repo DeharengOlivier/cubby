@@ -1,7 +1,7 @@
 # Readiness register: cubby
 
 Standards version: 2026-09-25.1 (`CODING-RULES.md`, `SECURITY-CHECKLIST.md`).
-Last reviewed: 2026-09-28 by the maintainer (Olivier Dehareng), at release 0.2.0 (candidate).
+Last reviewed: 2026-09-28 by the maintainer (Olivier Dehareng), at release 0.2.0.
 
 This file is the project's single record of its level, its baseline and the status of every
 applicable control (CODING-RULES section 14, SECURITY-CHECKLIST SEC-GOV-01). Update the rows a
@@ -131,4 +131,4 @@ containers, infrastructure, secrets.
 
 | Date | Release tag | Gate status | Open blockers |
 |---|---|---|---|
-| 2026-09-28 | v0.2.0 (candidate) | BLOCKED | SEC-14-003 NOT_VERIFIED (maintainer to confirm 2FA) |
+| 2026-09-28 | v0.2.0 | BLOCKED | SEC-14-003 NOT_VERIFIED (maintainer to confirm 2FA). Released for the maintainer's own use; every other applicable P0 PASS or N/A |
