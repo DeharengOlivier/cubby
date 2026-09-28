@@ -6,17 +6,6 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-### Fixed
-- A content converter that broke on a file (it timed out, crashed, ran out of
-  memory or exited non-zero, `pdftotext` or the parser child for PDF, docx
-  and xlsx alike) was indistinguishable from a file with no text: the file
-  fell back to its name and type rules, as designed, with no trace. The
-  fallback is unchanged, and each such file now writes a WARNING log line with
-  the run id, the file, the converter and the kind of failure (`timeout`,
-  `exit`, `crash`, `error`). The parser child exits with status 3 and names the
-  exception instead of printing nothing. A converter that is not installed is
-  still not a failure (`cubby doctor` reports it).
-
 ### Added
 - `make flaky-rate` measures how often CI fails on a commit that later passes
   unchanged, against the 2% budget in `docs/READINESS.md`.
@@ -28,6 +17,17 @@ All notable changes to this project are documented here. The format is based on
   unreadable for N`), and `status --json` and `history --json` carry it
   (`last_run.extraction_failures`, `activity.extraction_failures`,
   `runs[].extraction_failures`). Older ledger records read as 0.
+
+### Fixed
+- A content converter that broke on a file (it timed out, crashed, ran out of
+  memory or exited non-zero, `pdftotext` or the parser child for PDF, docx
+  and xlsx alike) was indistinguishable from a file with no text: the file
+  fell back to its name and type rules, as designed, with no trace. The
+  fallback is unchanged, and each such file now writes a WARNING log line with
+  the run id, the file, the converter and the kind of failure (`timeout`,
+  `exit`, `crash`, `error`). The parser child exits with status 3 and names the
+  exception instead of printing nothing. A converter that is not installed is
+  still not a failure (`cubby doctor` reports it).
 
 ### Security
 - A file name can no longer drive the terminal. Control characters (C0,
