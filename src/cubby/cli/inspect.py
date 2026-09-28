@@ -17,7 +17,7 @@ from ..adapters.journal import Journal
 from ..adapters.ledger import Ledger
 from ..adapters.logging import human_line, read_all
 from ..adapters.ui import Palette
-from ..app.explain import Explanation, explain
+from ..app.explain import Explanation, PlannedPass, explain
 from ..app.history import recent_runs
 from .common import (
     EXIT_FAILED,
@@ -39,6 +39,7 @@ def _explanation_json(item: Explanation) -> dict[str, Any]:
         "skipped": item.skipped,
         "outside_source": item.outside,
         "duplicate_of": str(item.duplicate_of) if item.duplicate_of else None,
+        "error": item.error,
     }
 
 
@@ -49,7 +50,9 @@ def _print_explanation(pal: Palette, item: Explanation, source: Path) -> None:
     if stays:
         kv(pal, "  stays where it is", pal.yellow(stays), _WIDTH)
     shown = _near(item.destination, source)
-    if item.duplicate_of is not None and not stays:
+    if item.error is not None and not stays:
+        kv(pal, "  would fail", pal.yellow(item.error), _WIDTH)
+    elif item.duplicate_of is not None and not stays:
         where = f"as a duplicate of {_near(item.duplicate_of, source)}"
         kv(pal, "  deleted", pal.accent(where), _WIDTH)
     elif not stays:
@@ -77,9 +80,10 @@ def cmd_explain(args: argparse.Namespace) -> int:
     config = load_from_args(args)
     items: list[Explanation] = []
     missing = False
+    planned = PlannedPass(config)
     for raw in args.files:
         try:
-            items.append(explain(Path(raw).expanduser(), config))
+            items.append(explain(Path(raw).expanduser(), config, planned))
         except FileNotFoundError:
             print(f"cubby: no such file: {raw}", file=sys.stderr)
             missing = True

@@ -57,12 +57,20 @@
               "string",
               "null"
             ]
+          },
+          "error": {
+            "description": "Why a run would fail on this file (a file stands where its folder goes). Null otherwise.",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
           "category",
           "destination",
           "duplicate_of",
+          "error",
           "outside_source",
           "path",
           "renamed_to",

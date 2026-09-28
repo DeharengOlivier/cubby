@@ -233,3 +233,42 @@ def test_the_run_says_where_to_see_every_file_it_left_alone(tmp_path, capsys):
     _, text = _cli(capsys, "run", "--source", str(tmp_path))
 
     assert "and 2 more; 'cubby explain FILE' says why for any file" in text
+
+
+# --- from the re-review ----------------------------------------------------------
+
+
+def test_explain_runs_one_plan_pass_for_all_the_files_it_is_given(tmp_path, capsys, monkeypatch):
+    # Found by re-review: one pass per file made 'explain ~/Downloads/*' take minutes.
+    from cubby.app.sorter import Sorter
+
+    for i in range(5):
+        aged_file(tmp_path, f"f{i}.txt", content=str(i))
+    passes: list[bool] = []
+    real = Sorter.sort_once
+
+    def counted(self, **kwargs):
+        passes.append(kwargs["apply"])
+        return real(self, **kwargs)
+
+    monkeypatch.setattr(Sorter, "sort_once", counted)
+    config = _config_file(tmp_path, dedupe=True)
+
+    _cli(capsys, "explain", "--config", config, "--source", str(tmp_path),
+         *(str(tmp_path / f"f{i}.txt") for i in range(5)))  # fmt: skip
+
+    assert passes == [False]
+
+
+def test_explain_says_a_file_bound_for_a_blocked_folder_would_fail(tmp_path, capsys):
+    aged_file(tmp_path, "Documents", content="a plain file")
+    aged_file(tmp_path, "notes.txt")
+
+    _, text = _cli(capsys, "explain", "--source", str(tmp_path), str(tmp_path / "notes.txt"))
+    _, raw = _cli(capsys, "explain", "--source", str(tmp_path), "--json",
+                  str(tmp_path / "notes.txt"))  # fmt: skip
+
+    assert "goes to" not in text
+    assert "would fail" in text
+    assert "a file named Documents is in the way" in text
+    assert "a file named Documents is in the way" in json.loads(raw)["items"][0]["error"]
