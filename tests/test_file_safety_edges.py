@@ -299,6 +299,21 @@ def test_compaction_drops_lines_that_belong_to_no_run(tmp_path, monkeypatch):
     assert [r.run_id for r in journal.runs()] == ["r"]
 
 
+def test_compaction_drops_an_object_line_that_names_no_run(tmp_path, monkeypatch):
+    # Mutation round 9: a JSON object without "run" was never compacted over;
+    # reading its run unguarded raised KeyError and stopped the compaction.
+    journal = Journal(tmp_path / "j.jsonl")
+    journal.record(Entry("r", 0, "move", Path("/d/a"), Path("/d/X/a")))
+    with journal.path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps({"v": 2, "seq": 0, "op": "move"}) + "\n")
+    monkeypatch.setattr(journal_module, "MAX_BYTES", 1)
+
+    journal.compact()
+
+    assert journal.path.read_text(encoding="utf-8").count("\n") == 1
+    assert [r.run_id for r in journal.runs()] == ["r"]
+
+
 # --- undo -----------------------------------------------------------------------
 
 

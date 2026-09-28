@@ -25,6 +25,11 @@ audit:
 
 mutation:
 	uv run --locked mutmut run
+	@# A run whose baseline fails checks no mutant and reports nothing: fail it.
+	@if uv run --locked mutmut results | grep -q 'not checked'; then \
+		echo "mutation: some mutants were not checked (did the baseline test run fail?)" >&2; \
+		exit 1; \
+	fi
 
 clean:
 	rm -rf .pytest_cache .ruff_cache .mypy_cache .locked.txt mutants **/__pycache__ *.egg-info build dist
