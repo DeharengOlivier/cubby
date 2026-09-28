@@ -42,16 +42,16 @@ like `FAIL` for a P0), `N/A` (with the reason the surface does not exist).
 | Critical-journey end-to-end tests in CI | PASS | `test_agent_journey.py` (agent as a real process: sort, history, SIGTERM, undo), `test_pause_and_alerts.py::test_the_real_agent_stops_at_a_pause_and_sorts_after_resume` | each release |
 | Property or model-based tests where required | PASS | `test_properties.py` (Hypothesis): durations, names, destinations, journal round trip, dates, config, model-based sort then undo | each release |
 | Mutation testing, targeted | PASS | `docs/audits/2026-09-28-mutation.md`: journal, filesystem, undo, naming at 97.5%, survivors reviewed | when those modules change |
-| Structured logs, error tracking | PASS | JSON-lines log with levels, rotated at 1 MB (`adapters/logging.py`); per-run ledger with failures; `cubby status` | each release |
+| Structured logs, error tracking | PASS | JSON-lines log with levels, the cubby version on every line and the run id on every line of a pass (the id of the ledger and the journal, `test_run_correlation.py`), rotated at 1 MB; per-run ledger with failures and version; `cubby status`, `cubby log --run ID` | each release |
 | Metrics for service health | PASS | heartbeat per pass and last-run counts, read by `cubby status` (exit 1 when unhealthy) | each release |
 | Alert delivered to a named human; heartbeat checked | NOT_VERIFIED | desktop notification on unsortable file, failed pass, missing folder (`adapters/notify.py`, tested with fakes); delivery on the maintainer's Mac not yet observed: run `cubby doctor --notify` | at install on each machine |
 | Reproducible build: frozen lockfiles, one toolchain | PASS | `uv.lock` honored with `--locked` everywhere; build backend pinned by hash (`build-constraints.txt`) | each release |
 | Versioned releases: tag and changelog | PASS | `CHANGELOG.md`, tags, `release.yml` (tag on main, version match, SHA256SUMS) | each release |
-| Rollback rehearsed | PASS | 0.2 to 0.1.0 and back in a throwaway HOME, 2026-09-28; results in `docs/RUNBOOK.md` section 4 | each release |
+| Rollback rehearsed | PASS | 0.2 to 0.1.0 and back in a throwaway HOME, 2026-09-28, repeated by two independent operator drills (`docs/audits/2026-09-28-runbook-drill*.md`); results in `docs/RUNBOOK.md` section 4 | each release |
 | Backups 3-2-1; restore drilled | N/A | cubby stores no data of its own worth backing up; the user's files stay on their disk and in their own backups; the journal is recovery metadata, bounded and rebuilt by use | - |
 | Load test of capacity-sensitive paths | PASS | `benchmarks/` to 20 000 files (audit 1) | when the scan path changes |
 | Feature disable capability for high-impact features | PASS | `cubby pause` (tested against a real agent process), `dedupe` and `vendor_rename` off by config, `cubby uninstall` | each release |
-| Incident response: owner, runbook, rehearsal | PASS | owner above; `docs/RUNBOOK.md` (stop, keep evidence, undo, roll back, remove, report); rollback rehearsed | each release |
+| Incident response: owner, runbook, rehearsal | PASS | owner above, reachable through a private advisory (`SECURITY.md`); `docs/RUNBOOK.md` (stop, keep evidence, undo, roll back, remove, damaged state, report) executed end to end twice by operator agents in a throwaway home, 2026-09-28, every defect fixed (`docs/audits/2026-09-28-runbook-drill*.md`) | each release |
 | Second person able to deploy, roll back and restore | N/A | recommended at L2; single-maintainer project, runbook written so anyone can follow it | - |
 | Human pentest | N/A | not required at L2 without money or third-party data | - |
 
@@ -99,7 +99,7 @@ containers, infrastructure, secrets.
 | SEC-14-005, 006, 007, 008, 010 | P0 | PASS | scanning enabled; PR and release history; read-only token; the only write job publishes a release from a tag on `main` | each release |
 | SEC-14-009 | P0 | N/A | no staging or production environment | - |
 | SEC-15, 16, 17-001 to 009 | P0 | N/A | no infrastructure, browser surface or database | - |
-| SEC-17-010, 011, 013, 014 personal data | P0 | PASS | only paths are recorded, classified in the threat model; files 0600 in a 0700 folder; journal bounded (5 MB, 200 runs), log rotated at 1 MB | each release |
+| SEC-17-010, 011, 013, 014 personal data | P0 | PASS | only paths are recorded, classified in the threat model; files 0600 in a 0700 folder; journal compacted past 5 MB to the 200 most recent runs plus whatever can still be undone, log rotated at 1 MB | each release |
 | SEC-17-018 third-party processors | P0 | N/A | no data leaves the machine | - |
 | SEC-18-002, 004, 005 bounded operations | P0 | PASS | size ceiling, text window, parser child timeout (15 s) and memory limit (1 GB on Linux; macOS does not enforce `RLIMIT_AS`, the timeout still bounds it), service calls time out (30 s) | each release |
 | SEC-18 application-level DoS | P0 | PASS | a crafted document cannot stall the agent (`test_review_pr2.py`, `test_extraction_bounds.py`); a failing file never stops a pass | each release |
