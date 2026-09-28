@@ -393,6 +393,17 @@ def month_folder(d: date, style: str = "numeric", lang: str = "fr") -> str:
     return f"{d.year:04d}-{d.month:02d}"
 
 
+def is_month_folder(name: str, style: str = "numeric", lang: str = "fr") -> bool:
+    """Whether ``name`` is one :func:`month_folder` could give, in that style."""
+    if style == "letters":
+        months = _EN_MONTHS if lang == "en" else _FR_MONTHS
+        month, _, year = name.casefold().rpartition(" ")
+        return (
+            year.isdigit() and len(year) == 4 and month in {m.casefold() for m in months.values()}
+        )
+    return re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", name) is not None
+
+
 def invoice_filename(vendor: str, d: date | InvoiceDate, ext: str) -> str:
     """``spotify facture 2026-07-07.pdf`` from its parts.
 

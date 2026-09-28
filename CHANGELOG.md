@@ -27,7 +27,8 @@ All notable changes to this project are documented here. The format is based on
 - A folder whose name matches an invoice rule was renamed and filed like an
   invoice: `invoice-archive` became `Invoices/2026-09/archive facture`. A
   folder matched by its name is now moved whole under its own name, at the
-  category's root. `docs/usage.md` wrongly said every folder goes to
+  category's root (`2026-09 (folder)` when its name is a month folder's, so
+  later invoices are never filed into it). `docs/usage.md` wrongly said every folder goes to
   `_Unsorted`; only a folder no rule names does.
 - `cubby install --no-content` was accepted but not passed on to the agent,
   which went on reading file contents. The agent now runs with it.
