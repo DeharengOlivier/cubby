@@ -33,9 +33,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -84,7 +84,7 @@ def summarize(samples: Iterable[float]) -> dict[str, Any]:
     n = len(ordered)
     summary: dict[str, Any] = {"n": n}
     for p in PERCENTILES:
-        summary[f"p{p}"] = ordered[math.ceil(p / 100 * n) - 1]
+        summary[f"p{p}"] = ordered[-(-p * n // 100) - 1]  # rank ceil(p n / 100), in integers
     summary["max"] = ordered[-1]
     return summary
 
@@ -97,7 +97,9 @@ class _StampedSorter(Sorter):
 
     stamps: list[int]
 
-    def sort_pass(self, **kwargs: Any) -> Any:  # type: ignore[override]
+    def sort_pass(self, **kwargs: Any) -> Any:
+        if "on_outcome" not in kwargs:
+            raise RuntimeError("the agent no longer hands on_outcome to sort_pass by keyword")
         hand_on = kwargs.pop("on_outcome")
 
         def stamped(outcome: Any) -> None:
@@ -129,7 +131,9 @@ def measure_pass(n: int) -> dict[str, Any]:
         left = agent.run(max_cycles=1)
         idle_ns = time.perf_counter_ns() - started
         if moved != n or left or len(stamps) != n:
-            raise RuntimeError(f"expected {n} moved and 0 left; got {moved}, {left}")
+            raise RuntimeError(
+                f"expected {n} moved, 0 left and {n} stamps; got {moved}, {left} and {len(stamps)}"
+            )
         return {
             "pass_ns": pass_ns,
             "idle_ns": idle_ns,
@@ -182,7 +186,8 @@ def build_state(root: Path, files: int, ledger_runs: int, journal_entries: int) 
     """
     source = _folder_of(files, root)
     (root / "config.toml").write_text(
-        f'[settings]\nsource = "{source}"\ndelay = "0s"\ncontent_scan = false\n',
+        # A JSON string is a valid TOML basic string, escapes included.
+        f'[settings]\nsource = {json.dumps(str(source))}\ndelay = "0s"\ncontent_scan = false\n',
         encoding="utf-8",
     )
     state = root / "state"
@@ -210,7 +215,7 @@ def build_state(root: Path, files: int, ledger_runs: int, journal_entries: int) 
     return source
 
 
-def _timed_cli(args: list[str], env: dict[str, str], ok: tuple[int, ...] = (0,)) -> int:
+def _timed_cli(args: list[str], env: dict[str, str]) -> int:
     started = time.perf_counter_ns()
     completed = subprocess.run(
         [sys.executable, "-m", "cubby", *args],
@@ -221,7 +226,7 @@ def _timed_cli(args: list[str], env: dict[str, str], ok: tuple[int, ...] = (0,))
         check=False,
     )
     elapsed = time.perf_counter_ns() - started
-    if completed.returncode not in ok:
+    if completed.returncode != 0:
         raise RuntimeError(
             f"cubby {' '.join(args)} exited {completed.returncode}: {completed.stderr[-2000:]}"
         )
@@ -273,14 +278,22 @@ def _filesystem_of(folder: Path) -> str:
     """The type of the mount holding ``folder`` (Linux; "unknown" elsewhere)."""
     best, kind = "", "unknown"
     try:
-        mounts = Path("/proc/mounts").read_text(encoding="utf-8").splitlines()
+        mounts = _read_mounts().splitlines()
     except OSError:
         return kind
     for line in mounts:
         fields = line.split()
-        if len(fields) > 2 and str(folder).startswith(fields[1]) and len(fields[1]) > len(best):
-            best, kind = fields[1], fields[2]
+        if len(fields) < 3:
+            continue
+        # /proc/mounts writes a space in a mount point as \040 (octal escapes).
+        point = re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), fields[1])
+        if folder.is_relative_to(point) and len(point) > len(best):
+            best, kind = point, fields[2]
     return f"{kind} ({best})"
+
+
+def _read_mounts() -> str:
+    return Path("/proc/mounts").read_text(encoding="utf-8")
 
 
 def _commit() -> str:

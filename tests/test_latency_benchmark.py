@@ -104,3 +104,24 @@ def test_a_tiny_run_reports_every_path_with_its_conditions(tmp_path):
         "cubby",
         "state",
     }
+
+
+def test_every_child_runs_in_the_sandbox(latency, tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_STATE_HOME", "/somewhere/real/state")
+    monkeypatch.setenv("XDG_CONFIG_HOME", "/somewhere/real/config")
+    monkeypatch.setenv("CUBBY_LOG", "/somewhere/real/log")
+
+    env = latency.sandbox_env(tmp_path)
+
+    for key in ("HOME", "TMPDIR", "CUBBY_STATE_DIR", "CUBBY_CONFIG"):
+        assert Path(env[key]).is_relative_to(tmp_path), key
+    assert Path(env["HOME"]).is_dir()
+    assert not [key for key in env if key.startswith("XDG_")]
+    assert {k for k in env if k.startswith("CUBBY_")} == {"CUBBY_STATE_DIR", "CUBBY_CONFIG"}
+
+
+def test_a_mount_counts_only_at_a_path_boundary(latency, monkeypatch):
+    mounts = "/dev/a / ext4 rw 0 0\n/dev/b /tm tmpfs rw 0 0\n/dev/c /tmp\\040x xfs rw 0 0\n"
+    monkeypatch.setattr(latency, "_read_mounts", lambda: mounts)
+    assert latency._filesystem_of(Path("/tmp/cubby-latency-1")) == "ext4 (/)"
+    assert latency._filesystem_of(Path("/tmp x/cubby")) == "xfs (/tmp x)"
