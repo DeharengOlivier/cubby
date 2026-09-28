@@ -51,8 +51,8 @@ that source and nothing else (needs git and [uv](https://docs.astral.sh/uv/)):
 
 ```sh
 git clone https://github.com/DeharengOlivier/cubby.git && cd cubby
-git checkout v0.3.0
-gh release download v0.3.0 -p SHA256SUMS    # or download it from the release page
+git checkout v0.4.0
+gh release download v0.4.0 -p SHA256SUMS    # or download it from the release page
 scripts/rebuild.sh --against SHA256SUMS
 ```
 

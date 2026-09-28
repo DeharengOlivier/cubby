@@ -146,13 +146,20 @@ Later versions leave one name.
 
 ### From 0.4 to 0.3
 
-Follow the steps below with `@v0.3.0`; the recorded options pass unchanged to 0.3's
-`cubby install`, which has the same flags. Compatibility, measured in the rollback rehearsal
-of 2026-09-28 (0.4 to 0.3 and back, in a throwaway home,
-`docs/audits/2026-09-28-rollback-0.4.md`): 0.3 reads the config 0.4 writes, lists, sorts and
-undoes 0.4's runs, and 0.4 reads 0.3's runs back. One difference: on macOS a 0.3 agent logs to
-its state folder (`~/.local/state/cubby/cubby.log`), not to `~/Library/Logs/cubby.log`, so while
-it runs, `cubby log` from 0.3 shows only what launchd captured; read the state folder's log.
+Follow the steps below with `@v0.3.0`; 0.3's `cubby install` accepts the recorded options
+(no flag was added in 0.4). Compatibility, measured in the rollback rehearsal of 2026-09-28
+(0.4 to 0.3 and back, in a throwaway home, `docs/audits/2026-09-28-rollback-0.4.md`): 0.3
+reads the config 0.4 writes, lists, sorts and undoes 0.4's runs, and 0.4 reads 0.3's runs
+back. What a rollback gives up, from the 0.4 changelog rather than the rehearsal:
+
+- `--no-content` is accepted by 0.3's `cubby install` but not passed on to the agent, which
+  reads file contents again. Set `content_scan = false` in the config file instead, which 0.3
+  honours.
+- File names are shown raw again in the terminal and in notifications (SEC-08-004), and a
+  folder named like an invoice is renamed and filed as one.
+- On macOS a 0.3 agent logs to its state folder (`~/.local/state/cubby/cubby.log`), not to
+  `~/Library/Logs/cubby.log`, so while it runs `cubby log` from 0.3 shows only what launchd
+  captured; read the state folder's log. This follows from the code (#27), not verified on a Mac.
 
 ### From 0.3 to 0.2
 
