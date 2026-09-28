@@ -199,7 +199,11 @@ def _tree(root: Path) -> dict[str, bytes]:
 @FS
 @given(
     files=st.dictionaries(
-        file_names.map(lambda s: s + ".txt") | file_names.map(lambda s: s + ".png") | file_names,
+        # A file named like a folder cubby creates blocks it, and the moves into
+        # it fail on purpose (tests/test_file_in_folder_path.py).
+        (
+            file_names.map(lambda s: s + ".txt") | file_names.map(lambda s: s + ".png") | file_names
+        ).filter(lambda s: s not in {"Invoices", "Images", "Documents", "_Unsorted"}),
         st.binary(max_size=8),
         min_size=1,
         max_size=12,
