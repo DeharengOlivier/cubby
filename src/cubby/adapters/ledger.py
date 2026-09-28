@@ -79,11 +79,35 @@ class RunRecord:
 
 
 @dataclass(frozen=True)
+class PassMetrics:
+    """What the agent's last pass cost and left behind."""
+
+    seconds: float
+    moved: int
+    failed: int
+    waiting: int  # files seen that had not settled yet: the backlog of the next passes
+
+    @classmethod
+    def from_json(cls, data: Any) -> PassMetrics | None:
+        """The measures, or None when absent (a cubby before 0.3) or damaged."""
+        try:
+            return cls(
+                seconds=float(data["seconds"]),
+                moved=int(data["moved"]),
+                failed=int(data["failed"]),
+                waiting=int(data["waiting"]),
+            )
+        except (KeyError, TypeError, ValueError):
+            return None
+
+
+@dataclass(frozen=True)
 class Heartbeat:
     at: datetime
     pid: int
     source: str
     interval: float
+    last_pass: PassMetrics | None = None  # None after a pause, or from an older cubby
 
     def age_seconds(self, now: datetime | None = None) -> float:
         return ((now or datetime.now()) - self.at).total_seconds()
@@ -183,8 +207,8 @@ class Ledger:
                 break
         return records
 
-    def beat(self, source: Path, interval: float) -> None:
-        """Record that the agent completed a pass just now.
+    def beat(self, source: Path, interval: float, last_pass: PassMetrics | None = None) -> None:
+        """Record that the agent completed a pass (measured by ``last_pass``) just now.
 
         Raises:
             OSError: The heartbeat could not be written.
@@ -195,6 +219,7 @@ class Ledger:
             "pid": os.getpid(),
             "source": str(source),
             "interval": interval,
+            "last_pass": asdict(last_pass) if last_pass else None,
         }
         state.replace_text(self.heartbeat_path, json.dumps(payload) + "\n")
 
@@ -207,6 +232,7 @@ class Ledger:
                 pid=int(data["pid"]),
                 source=str(data["source"]),
                 interval=float(data["interval"]),
+                last_pass=PassMetrics.from_json(data.get("last_pass")),
             )
         except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
             # Absent or unreadable: either way there is no heartbeat to report.

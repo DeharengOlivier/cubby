@@ -55,10 +55,46 @@
             "string",
             "null"
           ]
+        },
+        "last_pass": {
+          "description": "The agent's last pass: its duration in seconds, the files it moved and failed, and those still settling. Null after a pause or from a cubby before 0.3.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "seconds": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "moved": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "failed": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "waiting": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "failed",
+                "moved",
+                "seconds",
+                "waiting"
+              ]
+            }
+          ]
         }
       },
       "required": [
         "installed",
+        "last_pass",
         "last_pass_age",
         "live_pid",
         "manager",
@@ -182,9 +218,81 @@
     },
     "log": {
       "type": "string"
+    },
+    "activity": {
+      "description": "Runs recorded in the last `hours` hours, with their failures grouped by kind of error (the quoted file name blanked out), the most frequent first.",
+      "type": "object",
+      "properties": {
+        "hours": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "runs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "moved": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "runs": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "last_seen": {
+                "type": "string"
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "versions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "count",
+              "files",
+              "kind",
+              "last_seen",
+              "runs",
+              "versions"
+            ]
+          }
+        }
+      },
+      "required": [
+        "errors",
+        "failed",
+        "hours",
+        "moved",
+        "runs"
+      ]
     }
   },
   "required": [
+    "activity",
     "agent",
     "healthy",
     "last_run",

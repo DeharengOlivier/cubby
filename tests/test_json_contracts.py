@@ -19,7 +19,7 @@ import fastjsonschema
 import pytest
 
 from cubby.adapters import state
-from cubby.adapters.ledger import Ledger, RunRecord
+from cubby.adapters.ledger import Ledger, PassMetrics, RunRecord
 from cubby.adapters.logging import LEVELS, file_logger, run_context
 from cubby.adapters.pause import pause_path, set_pause
 from cubby.adapters.service.launchd import LaunchdService
@@ -244,18 +244,20 @@ def test_status_after_a_run_with_failures(downloads, capsys, monkeypatch):
     _validator("status")(payload)
     assert payload["last_run"]["status"] == "partial"
     assert payload["last_run"]["failures"][0]["error"]
+    assert payload["activity"]["errors"][0]["kind"].startswith("PermissionError")
 
 
 def test_status_with_a_surviving_agent(capsys, monkeypatch):
     monkeypatch.setattr(cli_agent, "detect_service", lambda: None)
     with process_named_cubby_watch() as pid:
         monkeypatch.setattr("os.getpid", lambda: pid)
-        Ledger().beat(Path("/d"), 30.0)
+        Ledger().beat(Path("/d"), 30.0, PassMetrics(seconds=0.5, moved=1, failed=0, waiting=2))
 
         payload = _json_of(capsys, ["status", "--json"])
 
     _validator("status")(payload)
     assert payload["agent"]["live_pid"] == pid
+    assert payload["agent"]["last_pass"]["waiting"] == 2
 
 
 def test_explain_inside_and_outside_the_folder(downloads, tmp_path, capsys):

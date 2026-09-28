@@ -18,7 +18,7 @@ from collections.abc import Callable
 from typing import Protocol
 
 from ..adapters.journal import new_run_id
-from ..adapters.ledger import Ledger
+from ..adapters.ledger import Ledger, PassMetrics
 from ..adapters.lock import Busy, exclusive
 from ..adapters.logging import Level, run_context
 from .report import SortOutcome
@@ -96,6 +96,7 @@ class Watcher:
         lock_timeout: float = 30.0,
         paused: Paused = _not_paused,
         alert: Alert = _no_alert,
+        clock: Callable[[], float] = time.monotonic,
     ):
         self._sorter = sorter
         self._interval = interval
@@ -110,6 +111,7 @@ class Watcher:
         self._alert = alert
         self._failing = False
         self._alerted: set[str] = set()
+        self._clock = clock
 
     def run(self, *, stop: Stop = _never, max_cycles: int | None = None) -> int:
         """Run the poll loop. Returns the number of items sorted in total.
@@ -128,6 +130,8 @@ class Watcher:
             if stop():
                 break
             self._sleep(self._interval)
+            if stop():  # a stop that woke the sleep: no new pass after it
+                break
         return total
 
     def _cycle(self) -> int:
@@ -144,11 +148,14 @@ class Watcher:
             return self._sort_pass(run_id)
 
     def _sort_pass(self, run_id: str) -> int:
+        waiting: list[object] = []
         try:
             with exclusive(timeout=self._lock_timeout):
+                started = self._clock()
                 outcomes = self._sorter.sort_once(
-                    apply=True, stop=self._stop_or_pause, run_id=run_id
+                    apply=True, stop=self._stop_or_pause, run_id=run_id, on_waiting=waiting.append
                 )
+                seconds = self._clock() - started
         except Busy as exc:
             self._log(f"pass skipped: {exc}", level="WARNING")
             return 0
@@ -161,7 +168,14 @@ class Watcher:
             return 0
         self._failing = False
         self._announce(outcomes)
-        self._beat()
+        self._beat(
+            PassMetrics(
+                seconds=round(seconds, 3),
+                moved=sum(1 for o in outcomes if o.moved_to is not None),
+                failed=sum(1 for o in outcomes if o.error is not None),
+                waiting=len(waiting),
+            )
+        )
         return sum(1 for o in outcomes if o.error is None)
 
     def _pause_reason(self) -> str | None:
@@ -196,11 +210,11 @@ class Watcher:
         self._source_missing = not present
         return present
 
-    def _beat(self) -> None:
+    def _beat(self, last_pass: PassMetrics | None = None) -> None:
         if self._ledger is None:
             return
         try:
-            self._ledger.beat(self._sorter.source, self._interval)
+            self._ledger.beat(self._sorter.source, self._interval, last_pass)
         except OSError as exc:
             self._log(f"could not write the heartbeat ({exc})", level="WARNING")
 
