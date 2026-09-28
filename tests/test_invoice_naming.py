@@ -109,3 +109,120 @@ def test_explain_says_the_content_was_read_and_matched_nothing(tmp_path, capsys)
 
     assert "read (19 characters), no content pattern matched" in text
     assert [item["content_chars"] for item in items] == [19, None]  # the name decided
+
+
+# --- from the review of this change ---------------------------------------------
+
+
+def _category_of(tmp_path, text: str, name: str = "3c0fe3ad.pdf") -> str:
+    from cubby.adapters.config import load_config
+    from cubby.domain.engine import Engine
+    from cubby.domain.file_ref import FileRef
+
+    config = load_config(user_path=None, overrides={"settings": {"source": str(tmp_path)}})
+    stem = name.rsplit(".", 1)[0]
+    ref = FileRef(name=name, stem=stem, ext="pdf", read_text=lambda: text)
+    return Engine(config).classify(ref).category
+
+
+@pytest.mark.parametrize(
+    ("text", "category"),
+    [
+        # Found by review: an invoice named in a statement's transaction line.
+        ("Relevé de compte courant\nIBAN FR76 3000 4000\n"
+         "05/08 PRLV SEPA FREE MOBILE FACTURE 05/08/2026 19,99 EUR\n", "Bank-Statements"),
+        ("Contrat de prestation de services, entre les soussignés\nArticle 4. Paiement\n"
+         "La facture est payable sous 30 jours, soit avant le 31/01/2026.\n", "Legal"),
+        ("Invoice\nDate: 2026-07-14\nTotal due 42.00 EUR", "Invoices"),
+        ("ACME SARL\nFacture n. 1042\n\nMontant : 19,99 €", "Invoices"),
+        ("Facture Free Mobile du 05/08/2026", "Invoices"),  # a date alone
+        ("Facture Free Mobile, montant 19,99 EUR", "Invoices"),  # an amount alone
+        ("Invoice for services\nTotal: $19.99", "Invoices"),  # the currency first
+    ],
+)  # fmt: skip
+def test_content_names_an_invoice_only_near_the_top(tmp_path, text, category):
+    assert _category_of(tmp_path, text) == category
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["Receipt 2-3-45.pdf", "Invoice 06.12.34.56.78.pdf", "Setup 2024.3 invoice.pdf",
+     "facture 2026-08-1234.pdf"],
+)  # fmt: skip
+def test_numbers_that_are_not_a_date_give_none(name):
+    from cubby.domain.invoices import name_date
+
+    assert name_date(name) is None
+
+
+@pytest.mark.parametrize(
+    ("name", "label"),
+    [
+        ("invoice_2026_07_15 ovh.pdf", "2026-07-15"),
+        ("ovh invoice 20260715.pdf", "2026-07-15"),
+        ("ovh facture 07-2026.pdf", "2026-07"),
+        ("ovh facture 2026-07-01 and 2026-08-01.pdf", "2026-07-01"),  # the first one
+    ],
+)
+def test_common_name_date_formats_are_read(name, label):
+    from cubby.domain.invoices import name_date
+
+    found = name_date(name)
+    assert found is not None
+    assert found.label() == label
+
+
+def test_content_without_a_date_leaves_the_name_date(tmp_path):
+    placement = _place("Invoice-2026-08-spotify.pdf", "Thank you for your order")
+
+    assert placement.subdir == "2026-08"
+
+
+def test_explain_reads_a_file_given_by_a_relative_path(tmp_path, monkeypatch, capsys):
+    # Found by review: converters run from /, so a relative path found nothing.
+    from cubby.adapters import extraction
+
+    seen: list[str] = []
+    monkeypatch.setattr(extraction, "_from_pdf", lambda path, _: seen.append(str(path)) or "")
+    (tmp_path / "a.pdf").write_bytes(b"%PDF-1.4")
+    monkeypatch.chdir(tmp_path)
+    from cubby.cli import main
+
+    main(["explain", "--source", str(tmp_path), "a.pdf"])
+
+    assert seen == [str(tmp_path / "a.pdf")]
+
+
+def test_explain_says_nothing_about_content_it_never_tried_to_read(tmp_path, capsys):
+    from cubby.cli import main
+
+    (tmp_path / "blob.xyz").write_bytes(b"\x00\x01")
+
+    main(["explain", "--source", str(tmp_path), "--json", str(tmp_path / "blob.xyz")])
+
+    import json
+
+    assert json.loads(capsys.readouterr().out)["items"][0]["content_chars"] is None
+
+
+def test_explain_says_when_a_readable_type_gave_no_text(tmp_path, capsys):
+    import json
+
+    from cubby.cli import main
+
+    (tmp_path / "empty.txt").write_text("", encoding="utf-8")
+
+    main(["explain", "--source", str(tmp_path), str(tmp_path / "empty.txt")])
+    text = capsys.readouterr().out
+    main(["explain", "--source", str(tmp_path), "--json", str(tmp_path / "empty.txt")])
+
+    assert "no text could be read from it" in text
+    assert json.loads(capsys.readouterr().out)["items"][0]["content_chars"] == 0
+
+
+def test_no_stopword_is_ever_a_vendor():
+    from cubby.domain.invoices import _STOPWORDS
+
+    named = [word for word in sorted(_STOPWORDS) if detect_vendor(f"{word} 3c0f.pdf", "", [])]
+
+    assert named == []

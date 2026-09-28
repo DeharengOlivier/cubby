@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..adapters.extraction import can_read
 from ..adapters.filesystem import (
     build_ref,
     candidate_skip_reason,
@@ -74,11 +75,8 @@ def explain(path: Path, config: Config, planned: PlannedPass | None = None) -> E
     engine = Engine(config)
     ref = build_ref(path, settings.content_max_bytes)
     decision = engine.classify(ref)
-    content_read = (
-        settings.content_scan
-        and ref.is_file
-        and decision.stage in (Stage.TYPE, Stage.UNSORTED)
-    )
+    # Whether the content stage looked at a text it could read, and it did not decide.
+    content_read = ref.text_read and can_read(ref.ext) and decision.stage is not Stage.CONTENT
     placement = Sorter(config, engine).placement_for(path, ref, decision.category)
 
     source = settings.source.resolve()
