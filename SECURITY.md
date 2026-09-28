@@ -53,8 +53,14 @@ that source and nothing else (needs git and [uv](https://docs.astral.sh/uv/)):
 git clone https://github.com/DeharengOlivier/cubby.git && cd cubby
 git checkout v0.3.0
 gh release download v0.3.0 -p SHA256SUMS    # or download it from the release page
-scripts/rebuild.sh --against SHA256SUMS     # from main's scripts/ for releases before 0.3.0
+scripts/rebuild.sh --against SHA256SUMS
 ```
+
+Releases before 0.3.0 have no `scripts/rebuild.sh`: check out the tag, then run
+the script from main, `git show main:scripts/rebuild.sh | sh -s -- --against SHA256SUMS`.
+
+Then check the files you downloaded against the same sums, in the folder that
+holds them: `sha256sum -c SHA256SUMS` (on macOS, `shasum -a 256 -c SHA256SUMS`).
 
 CI runs the same script on every pull request (two builds in different
 environments must be identical), and the release workflow runs it against the
