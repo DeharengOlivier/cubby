@@ -9,6 +9,7 @@ from .. import state
 from .base import (
     DEFAULT_LABEL,
     STOP_TIMEOUT,
+    STOPPING_TIMEOUT,
     Service,
     ServiceError,
     ServiceSpec,
@@ -59,7 +60,8 @@ class LaunchdService(Service):
 
         # Unload first so a reinstall picks up changes. Failing to unload an
         # agent that was not loaded is expected and not an error.
-        run_manager(["launchctl", "unload", str(path)])
+        # Stops a running agent before the new one loads: it waits like uninstall.
+        run_manager(["launchctl", "unload", str(path)], timeout=STOPPING_TIMEOUT)
         require_success(["launchctl", "load", "-w", str(path)])
         # `launchctl load` exits 0 on many failures; believe `list`, not `load`.
         if not wait_until(lambda: self.is_running(spec.label), _START_TIMEOUT):
@@ -75,7 +77,7 @@ class LaunchdService(Service):
             return False
         # An agent that is installed but not loaded unloads with an error;
         # the file is still ours to remove.
-        run_manager(["launchctl", "unload", "-w", str(path)])
+        run_manager(["launchctl", "unload", "-w", str(path)], timeout=STOPPING_TIMEOUT)
         if self.is_running(label):
             # The plist stays, so the manual unload in the runbook can name it.
             raise ServiceError(f"{label} is still running after unload")

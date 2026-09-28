@@ -135,10 +135,9 @@ class Sorter:
         result = outcome.moved(moved.destination, journaled=journaled)
         # The move and its journal entry are done; a lost log line changes neither.
         with contextlib.suppress(OSError):
-            self._log(
-                f"[{decision.category}] ({decision.stage.value}) {path.name} -> "
-                f"{_shown(moved.destination, self.source)}"
-            )
+            where = _shown(moved.destination, self.source)
+            done = f"deleted, duplicate of {where}" if moved.op == "dedupe" else f"-> {where}"
+            self._log(f"[{decision.category}] ({decision.stage.value}) {path.name} {done}")
         return result
 
     def _journal_move(self, entry: Entry) -> bool:
@@ -158,7 +157,12 @@ class Sorter:
         return True
 
     def sort_once(
-        self, *, apply: bool, respect_age: bool = True, stop: Callable[[], bool] = _never
+        self,
+        *,
+        apply: bool,
+        respect_age: bool = True,
+        stop: Callable[[], bool] = _never,
+        run_id: str | None = None,
     ) -> list[SortOutcome]:
         """Classify every candidate once.
 
@@ -168,9 +172,10 @@ class Sorter:
         false (used by ``plan``), age and in-progress checks are ignored so the
         caller sees the full picture of the folder as it stands. ``stop`` is
         checked before each file, so a stop request ends the pass between two
-        files, never in the middle of one.
+        files, never in the middle of one. ``run_id`` names the pass in the
+        journal, the ledger and the log; a fresh one is made when omitted.
         """
-        run_id = new_run_id()
+        run_id = run_id or new_run_id()
         started = now_iso()
         outcomes: list[SortOutcome] = []
         with run_context(run_id):

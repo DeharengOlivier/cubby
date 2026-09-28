@@ -110,7 +110,9 @@ def cmd_log(args: argparse.Namespace) -> int:
     if args.run:
         records = [r for r in records if r.get("run") == args.run]
     if args.warnings:
-        records = [r for r in records if r.get("level", "INFO") != "INFO"]
+        # A line with no level is not cubby's own (a traceback the service
+        # manager captured): shown, since it is rarely good news.
+        records = [r for r in records if r.get("level") != "INFO"]
     for record in records[-args.lines :]:
         print(json.dumps(record) if args.json else human_line(record))
     return EXIT_OK

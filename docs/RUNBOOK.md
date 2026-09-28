@@ -5,8 +5,9 @@ What to do, in order, when cubby does something it should not. Owner: the mainta
 [private advisory](https://github.com/DeharengOlivier/cubby/security/advisories/new) (see
 `SECURITY.md`). Every command below runs as the user who installed cubby; none needs root.
 
-This runbook was last executed end to end on 2026-09-28, in a throwaway home with a faked
-service manager: `docs/audits/2026-09-28-runbook-drill.md`.
+This runbook was executed end to end twice on 2026-09-28, by operators working from it
+alone, in a throwaway home with a faked service manager; each defect they found was fixed:
+`docs/audits/2026-09-28-runbook-drill.md` and `docs/audits/2026-09-28-runbook-drill-2.md`.
 
 `STATE` below is the state folder: `${CUBBY_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/cubby}`
 (`cubby doctor` prints it).
@@ -25,7 +26,7 @@ The agent stays running (its heartbeat shows it alive) but skips every pass unti
 
 ```sh
 cubby uninstall          # stops the agent, checks it stopped, removes its launchd/systemd unit
-cubby status             # must say "not installed", with no "still sorting (pid N)"
+cubby status             # must say "not installed", not "... cubby (pid N) is still sorting"
 pgrep -fa 'cubby watch'  # must print nothing (on macOS: pgrep -fl)
 ```
 
@@ -89,7 +90,7 @@ What undo does with each file of the run:
   for those lines and move such files back by hand, if they still exist somewhere.
 - **Pending**: restoring failed with an error (a permission, a full disk). Undo prints
   `pending (cannot restore NAME): <error>` (`skip (cannot restore ...)` in 0.2.0), exits 1,
-  and the run shows as `partly undone`. Fix the cause and run `cubby undo --run ID` again; a
+  and the run shows as `partly undone` (or still `undoable` if nothing of it was restored). Fix the cause and run `cubby undo --run ID` again; a
   failed attempt changes nothing, so the retry is safe.
 - A deduplicated file is restored as a copy of the one that was kept.
 
@@ -106,7 +107,8 @@ means the journal was lost or could not be written (`cubby log --warnings` shows
 - Move its files back by hand. Each line of `cubby log --run ID` reads
   `[Category] (reason) old-name -> where/it/went`, relative to the sorted folder (`watching`
   in `cubby status`); move each file from the right-hand path back to that folder under its
-  old name. (cubby 0.2.0 and older log only the old name: look for the file in the category
+  old name. A line `old-name deleted, duplicate of where/it/is` is a duplicate `dedupe`
+  removed: copy that file back under the old name only if you want the duplicate again. (cubby 0.2.0 and older log only the old name: look for the file in the category
   folder and its month subfolders, possibly renamed `name (1).ext`, and check its content.)
 
 **In cubby 0.2.0 and 0.1**, a move that failed after linking the file (a read-only folder, during
@@ -169,7 +171,7 @@ its pause and takes away its journal.
 
 ```sh
 cubby uninstall              # must exit 0; if not, follow section 1 and start again
-cubby status                 # must say "not installed", with no "still sorting (pid N)"
+cubby status                 # must say "not installed", not "... cubby (pid N) is still sorting"
 ```
 
 Only then:
@@ -181,9 +183,11 @@ rm -rf "${CUBBY_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/cubby}" ~/.loca
 rm -rf ~/cubby-evidence-*    # once the incident is closed: section 2's copies list your downloads
 ```
 
-From a checkout, `./uninstall.sh` runs `cubby uninstall` and removes the program; it stops
-without removing anything when the agent cannot be stopped (from 0.3.0; earlier scripts
-removed the CLI anyway). Sorted files stay where they are; cubby never deletes a file except
+From a checkout, `./uninstall.sh` runs `cubby uninstall` and removes the program. From 0.3.0
+it stops without removing anything when `cubby uninstall` reports that the agent could not be
+stopped (exit 1), and removes a broken install whose `cubby` cannot even start, with a
+warning; `./uninstall.sh --force` removes cubby in every case. Earlier scripts removed the CLI
+even when the agent was still running. Sorted files stay where they are; cubby never deletes a file except
 an opt-in, byte-identical duplicate (`dedupe = true`), and that is journaled.
 
 ## 6. A state file is damaged

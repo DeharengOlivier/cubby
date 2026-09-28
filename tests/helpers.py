@@ -4,7 +4,11 @@ made once here instead of in every file that needs a small configuration."""
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -33,3 +37,16 @@ def aged_file(folder: Path, name: str, content: str = "x", age: float = 10_000) 
     past = time.time() - age
     os.utime(path, (past, past))
     return path
+
+
+@contextmanager
+def process_named_cubby_watch() -> Iterator[int]:
+    """A live process whose command line reads like a cubby agent's; yields its pid."""
+    process = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(60)", "cubby", "watch"]
+    )
+    try:
+        yield process.pid
+    finally:
+        process.kill()
+        process.wait(timeout=10)

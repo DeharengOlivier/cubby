@@ -17,8 +17,10 @@ import time
 from collections.abc import Callable
 from typing import Protocol
 
+from ..adapters.journal import new_run_id
 from ..adapters.ledger import Ledger
 from ..adapters.lock import Busy, exclusive
+from ..adapters.logging import run_context
 from .report import SortOutcome
 from .sorter import Sorter, describe_error
 
@@ -135,9 +137,18 @@ class Watcher:
             return 0
         if not self._source_present():
             return 0
+        # The pass's run id tags every line it logs, including the summary and
+        # a failure logged here, so `cubby log --run ID` shows the whole pass.
+        run_id = new_run_id()
+        with run_context(run_id):
+            return self._sort_pass(run_id)
+
+    def _sort_pass(self, run_id: str) -> int:
         try:
             with exclusive(timeout=self._lock_timeout):
-                outcomes = self._sorter.sort_once(apply=True, stop=self._stop_or_pause)
+                outcomes = self._sorter.sort_once(
+                    apply=True, stop=self._stop_or_pause, run_id=run_id
+                )
         except Busy as exc:
             self._log(f"pass skipped: {exc}", level="WARNING")
             return 0

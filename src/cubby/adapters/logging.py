@@ -57,7 +57,8 @@ class LevelLogger(Protocol):
 
 def human_line(record: dict[str, str]) -> str:
     """A log record as a person reads it."""
-    return f"{record.get('ts', '?')}  {record.get('level', '?'):<7} {record.get('msg', '')}"
+    ts, level, msg = (record.get(key) for key in ("ts", "level", "msg"))
+    return f"{ts or '?'}  {level or '?'!s:<7} {'' if msg is None else msg}"
 
 
 def _rotate(path: Path) -> None:
@@ -123,7 +124,10 @@ def read_all(path: Path | None = None) -> list[dict[str, str]]:
     """
     current = path or state.log_path()
     rotated = current.with_name(current.name + ".1")
-    return [_parse(line) for line in state.read_lines(rotated) + state.read_lines(current)]
+    # The current file first: a rotation between the two reads then shows its
+    # lines twice, where the other order would lose them.
+    newer = state.read_lines(current)
+    return [_parse(line) for line in state.read_lines(rotated) + newer]
 
 
 def _parse(line: str) -> dict[str, str]:

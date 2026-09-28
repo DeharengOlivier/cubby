@@ -11,7 +11,9 @@ All notable changes to this project are documented here. The format is based on
   with `--run ID` (one pass), `--warnings`, `-n N` and `--json`.
 - Every log line names the cubby `version` that wrote it, and each line written
   during a pass names its `run` id; a move's line ends with where the file
-  went (`notes.txt -> Documents/notes (1).txt`). The run id is the one
+  went (`notes.txt -> Documents/notes (1).txt`), or that it was a deleted
+  duplicate; the summary and failure lines of an agent pass carry its run id
+  too. The run id is the one
   `cubby history`, `cubby undo --run` and the ledger use. Ledger records carry
   the version too; older records read as `unknown`.
 
@@ -27,9 +29,14 @@ All notable changes to this project are documented here. The format is based on
   to compact it and dropped nothing: 12 s per idle pass after 200 000 files.
   Compaction now waits until the journal has doubled. Measured in
   `docs/PERFORMANCE.md`.
-- `cubby uninstall` exits 1, with the `kill` command, when a cubby process
-  still beats after the service manager said it stopped; `uninstall.sh` no
-  longer removes the CLI when the agent could not be stopped.
+- `cubby uninstall` exits 1, with the `kill` command, when a `cubby watch`
+  process still beats after the service manager said it stopped (a pid reused
+  by another program is not mistaken for it). `uninstall.sh` no longer removes
+  the CLI when the agent could not be stopped, still removes a broken install
+  whose `cubby` cannot start, and takes `--force`.
+- The commands that stop the agent (`systemctl disable --now` and `restart`,
+  `launchctl unload`) wait 90 s, longer than the 60 s the agent is given to
+  finish its file, instead of 30 s.
 - An undo entry that could not be restored is printed as `pending`, with the
   `cubby undo --run ID` that retries it, instead of `skip`.
 - The runbook, executed by an operator in a throwaway home, had seven false
