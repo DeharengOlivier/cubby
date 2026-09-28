@@ -138,6 +138,11 @@ class Sorter:
         journaled = self._journal_move(
             Entry(run_id, seq, moved.op, path, moved.destination, moved.ident)
         )
+        if journaled and moved.ident is None:
+            self._warn(
+                f"could not read {moved.destination} after the move; 'cubby undo' will "
+                f"put it back without checking it is still the file this run moved"
+            )
         result = outcome.moved(moved.destination, journaled=journaled)
         # The move and its journal entry are done; a lost log line changes neither.
         with contextlib.suppress(OSError):

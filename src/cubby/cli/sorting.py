@@ -82,9 +82,15 @@ def cmd_undo(args: argparse.Namespace) -> int:
             return EXIT_FAILED
     print(f"Restored {result.restored} file(s).")
     if result.gone:
-        print(f"  {result.gone} no longer where the run put it (moved or deleted since).")
+        print(
+            f"cubby: {result.gone} no longer where the run put it (moved or deleted since).",
+            file=sys.stderr,
+        )
     if result.replaced:
-        print(f"  {result.replaced} changed or replaced since the run, left in place.")
+        print(
+            f"cubby: {result.replaced} changed or replaced since the run, left in place.",
+            file=sys.stderr,
+        )
     if result.failed:
         print(
             f"cubby: {len(result.failed)} file(s) could not be restored and stay pending; "

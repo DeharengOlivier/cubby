@@ -422,3 +422,32 @@ def test_compaction_that_drops_nothing_does_not_rewrite_the_file(tmp_path, monke
     journal.compact()
 
     assert journal.path.stat().st_ino == inode
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads through any permission")
+def test_two_unreadable_files_of_the_same_size_are_not_identical(tmp_path):
+    # Found by review: both digests were None, and None == None.
+    a = tmp_path / "a.txt"
+    b = tmp_path / "b.txt"
+    a.write_text("AAAA", encoding="utf-8")
+    b.write_text("BBBB", encoding="utf-8")
+    a.chmod(0o000)
+    b.chmod(0o000)
+    try:
+        assert files_identical(a, b) is False
+    finally:
+        a.chmod(0o644)
+        b.chmod(0o644)
+
+
+def test_a_filed_link_to_the_source_is_not_its_duplicate(tmp_path):
+    # Found by review: dedupe deleted the only copy and kept a broken link.
+    source = tmp_path / "r.txt"
+    source.write_text("only copy", encoding="utf-8")
+    (tmp_path / "Documents").mkdir()
+    (tmp_path / "Documents" / "r.txt").symlink_to(source)
+
+    moved = move_into(source, tmp_path / "Documents", root=tmp_path, dedupe=True)
+
+    assert moved.op == "move"
+    assert moved.destination.read_text("utf-8") == "only copy"
