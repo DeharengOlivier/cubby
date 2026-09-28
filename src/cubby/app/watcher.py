@@ -21,7 +21,7 @@ from ..adapters.journal import new_run_id
 from ..adapters.ledger import Ledger, PassMetrics
 from ..adapters.lock import Busy, exclusive
 from ..adapters.logging import Level, run_context
-from .report import SortOutcome
+from .report import PassTally, SortOutcome
 from .sorter import Sorter, describe_error
 
 Sleep = Callable[[float], None]
@@ -31,6 +31,8 @@ Alert = Callable[[str], None]
 
 #: How many failed file names are remembered, so each is announced once.
 _MAX_ALERTED = 1000
+#: How many of the newly failing files an alert names before counting the rest.
+_NAMED_IN_AN_ALERT = 3
 
 
 class LevelLog(Protocol):
@@ -154,11 +156,17 @@ class Watcher:
             nonlocal waiting
             waiting += 1
 
+        failing = _FailingFiles(self._alerted)
         try:
             with exclusive(timeout=self._lock_timeout):
                 started = self._clock()
-                outcomes = self._sorter.sort_once(
-                    apply=True, stop=self._stop_or_pause, run_id=run_id, on_waiting=count_waiting
+                # Counted, not kept: the agent's pass holds no outcome per file.
+                tally = self._sorter.sort_pass(
+                    apply=True,
+                    on_outcome=failing.add,
+                    stop=self._stop_or_pause,
+                    run_id=run_id,
+                    on_waiting=count_waiting,
                 )
                 seconds = self._clock() - started
         except Busy as exc:
@@ -172,16 +180,16 @@ class Watcher:
             self._failing = True
             return 0
         self._failing = False
-        self._announce(outcomes)
+        self._announce(tally, failing)
         self._beat(
             PassMetrics(
                 seconds=round(seconds, 3),
-                moved=sum(1 for o in outcomes if o.moved_to is not None),
-                failed=sum(1 for o in outcomes if o.error is not None),
+                moved=tally.moved,
+                failed=tally.failed,
                 waiting=waiting,
             )
         )
-        return sum(1 for o in outcomes if o.error is None)
+        return tally.sorted
 
     def _pause_reason(self) -> str | None:
         """The pause in force. A check that fails counts as a pause (fail closed)."""
@@ -223,23 +231,48 @@ class Watcher:
         except OSError as exc:
             self._log(f"could not write the heartbeat ({exc})", level="WARNING")
 
-    def _announce(self, outcomes: list[SortOutcome]) -> None:
-        sorted_count = sum(1 for o in outcomes if o.error is None)
-        failed = len(outcomes) - sorted_count
-        if sorted_count:
-            self._log(f"sorted {sorted_count} item(s)")
-        if failed:
-            self._log(f"{failed} item(s) could not be sorted", level="WARNING")
-        self._alert_new_failures(outcomes)
+    def _announce(self, tally: PassTally, failing: _FailingFiles) -> None:
+        if tally.sorted:
+            self._log(f"sorted {tally.sorted} item(s)")
+        if tally.failed:
+            self._log(f"{tally.failed} item(s) could not be sorted", level="WARNING")
+        self._alert_new_failures(failing)
 
-    def _alert_new_failures(self, outcomes: list[SortOutcome]) -> None:
+    def _alert_new_failures(self, failing: _FailingFiles) -> None:
         """Announce each file that cannot be sorted once, not at every pass."""
-        failing = [o.name for o in outcomes if o.error]
-        new = [name for name in failing if name not in self._alerted]
         # Remember only what fails now: a file that recovers and fails again
         # is announced again, and the set never outgrows one pass.
-        self._alerted = set(failing[:_MAX_ALERTED])
-        if not new:
+        self._alerted = set(failing.remembered)
+        if not failing.new:
             return
-        shown = ", ".join(new[:3]) + (f" and {len(new) - 3} more" if len(new) > 3 else "")
-        self._alert(f"Could not sort {shown}. See 'cubby status'.")
+        shown = ", ".join(failing.first_new)
+        more = failing.new - len(failing.first_new)
+        self._alert(
+            f"Could not sort {shown}{f' and {more} more' if more else ''}. See 'cubby status'."
+        )
+
+
+class _FailingFiles:
+    """The files a pass could not sort, as far as alerts need them, gathered as they fail.
+
+    What the watcher did with the list of every failed outcome, without the
+    list: the first :data:`_MAX_ALERTED` names to remember, how many names were
+    not announced at the previous pass, and the first of them to name.
+    """
+
+    def __init__(self, announced: set[str]) -> None:
+        self._announced = announced
+        self.remembered: list[str] = []
+        self.new = 0
+        self.first_new: list[str] = []
+
+    def add(self, outcome: SortOutcome) -> None:
+        if not outcome.error:
+            return
+        name = outcome.name
+        if len(self.remembered) < _MAX_ALERTED:
+            self.remembered.append(name)
+        if name not in self._announced:
+            self.new += 1
+            if len(self.first_new) < _NAMED_IN_AN_ALERT:
+                self.first_new.append(name)

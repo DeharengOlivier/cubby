@@ -22,7 +22,7 @@ from cubby.app.sorter import Sorter
 from cubby.app.watcher import StopRequest, Watcher
 from cubby.cli import agent as cli_agent
 from cubby.cli import main
-from tests.helpers import aged_file, config_for
+from tests.helpers import PassesFromSortOnce, aged_file, config_for
 
 NOW = datetime(2026, 9, 28, 12, 0, 0)
 
@@ -188,7 +188,7 @@ def test_a_pass_counts_the_files_still_settling(tmp_path):
     assert sorted(p.name for p in waiting) == ["also-fresh.txt", "fresh.txt"]
 
 
-class _Sorter:
+class _Sorter(PassesFromSortOnce):
     def __init__(self, source: Path, outcomes, waiting: int):
         self.source = source
         self._outcomes = outcomes

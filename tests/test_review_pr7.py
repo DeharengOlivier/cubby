@@ -19,7 +19,7 @@ from cubby.app.sorter import Sorter
 from cubby.app.watcher import Watcher
 from cubby.cli import agent as cli_agent
 from cubby.cli import main
-from tests.helpers import config_for, process_named_cubby_watch
+from tests.helpers import PassesFromSortOnce, config_for, process_named_cubby_watch
 
 # --- major 1: the clean-up of a failed move never removes the file's last name --
 
@@ -235,7 +235,7 @@ def test_the_summary_and_failure_lines_of_a_pass_carry_its_run_id(tmp_path):
 
 
 def test_a_pass_that_fails_logs_the_failure_under_its_run_id(tmp_path):
-    class Failing:
+    class Failing(PassesFromSortOnce):
         source = tmp_path
 
         def sort_once(self, *, apply, stop=None, run_id=None, on_waiting=None):

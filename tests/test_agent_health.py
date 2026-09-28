@@ -203,7 +203,7 @@ def test_a_pass_that_raises_is_logged_and_the_next_pass_runs(tmp_path, monkeypat
     source.mkdir()
     sorter = Sorter(config_for(source))
     calls = {"n": 0}
-    real = sorter.sort_once
+    real = sorter.sort_pass  # the pass the agent runs
 
     def flaky(**kwargs):
         calls["n"] += 1
@@ -211,7 +211,7 @@ def test_a_pass_that_raises_is_logged_and_the_next_pass_runs(tmp_path, monkeypat
             raise RuntimeError("a bug")
         return real(**kwargs)
 
-    monkeypatch.setattr(sorter, "sort_once", flaky)
+    monkeypatch.setattr(sorter, "sort_pass", flaky)
     log = Recorder()
 
     Watcher(sorter, interval=0, sleep=lambda _: None, log=log).run(max_cycles=2)

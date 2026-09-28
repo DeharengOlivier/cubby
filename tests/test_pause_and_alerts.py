@@ -21,6 +21,7 @@ from cubby.adapters.pause import clear_pause, current_pause, pause_path, set_pau
 from cubby.app.report import SortOutcome
 from cubby.app.watcher import Watcher
 from cubby.cli import EXIT_FAILED, EXIT_OK, main
+from tests.helpers import PassesFromSortOnce
 
 # --- the switch ----------------------------------------------------------------
 
@@ -95,7 +96,7 @@ def test_a_manual_run_while_paused_proceeds_and_says_so(tmp_path, capsys):
 # --- the agent honours it ------------------------------------------------------
 
 
-class FakeSorter:
+class FakeSorter(PassesFromSortOnce):
     def __init__(self, source: Path, outcomes=None, error: Exception | None = None):
         self.source = source
         self.passes = 0

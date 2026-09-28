@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from cubby.app.report import PassTally, SortOutcome
 from cubby.domain.category import Category, Config, Settings
 
 #: The smallest useful rule set: every ``.txt`` file is a document.
@@ -50,3 +51,21 @@ def process_named_cubby_watch() -> Iterator[int]:
     finally:
         process.kill()
         process.wait(timeout=10)
+
+
+class PassesFromSortOnce:
+    """For a fake sorter that returns a list from ``sort_once``: the pass the agent calls.
+
+    The agent calls ``Sorter.sort_pass``, which hands each outcome on and returns
+    their counts; this plays the fake's list through it the same way.
+    """
+
+    def sort_once(self, **options: Any) -> list[SortOutcome]:
+        raise NotImplementedError
+
+    def sort_pass(self, *, on_outcome: Any, **options: Any) -> PassTally:
+        tally = PassTally()
+        for outcome in self.sort_once(**options):
+            tally.add(outcome)
+            on_outcome(outcome)
+        return tally

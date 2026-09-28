@@ -13,6 +13,7 @@ from cubby.app.sorter import Sorter
 from cubby.app.watcher import Watcher
 from cubby.cli import EXIT_OK, main
 from cubby.domain.category import Category, Config, Settings
+from tests.helpers import PassesFromSortOnce
 
 # --- 1. no pause file can crash the agent; every odd one pauses --------------
 
@@ -42,7 +43,7 @@ def test_an_odd_pause_file_pauses_and_is_described(content, capsys, monkeypatch)
 
 
 def test_a_pause_check_that_raises_counts_as_paused(tmp_path):
-    class Sorter_:
+    class Sorter_(PassesFromSortOnce):
         source = tmp_path
         passes = 0
 
@@ -92,7 +93,7 @@ def test_a_file_failing_again_after_recovering_is_announced_again(tmp_path):
     failing = [SortOutcome.failed(tmp_path / "x.pdf", "Permission denied")]
     rounds = iter([failing, [], failing])
 
-    class Sorter_:
+    class Sorter_(PassesFromSortOnce):
         source = tmp_path
 
         def sort_once(self, **_):
