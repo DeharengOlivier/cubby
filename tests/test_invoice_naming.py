@@ -278,3 +278,45 @@ def test_a_month_and_year_joined_by_hyphens_are_read():
 
     assert found is not None
     assert found.label() == "2026-08"
+
+
+# --- from the second re-review --------------------------------------------------
+
+
+@pytest.mark.parametrize("blank", [" ", "\t", "\n", " \n"])
+def test_a_text_opening_with_blanks_is_classified_in_linear_time(tmp_path, blank):
+    # Re-review 2: the title patterns backtracked quadratically on a long run
+    # of blanks (2 s for 4000 spaces, 20 s with a larger content_max_bytes).
+    import time
+
+    text = blank * (20_000 // len(blank)) + "hello"
+    started = time.perf_counter()
+    _category_of(tmp_path, text)
+
+    assert time.perf_counter() - started < 0.5
+
+
+@pytest.mark.parametrize(
+    ("text", "category"),
+    [
+        ("Releve de compte\nFacture carte du 05/08/2026 CARREFOUR 42,10 EUR\nsolde",
+         "Bank-Statements"),
+        ("FACTURE CARTE 05/08/2026 42,10 EUR  Relevé de compte  solde 1 204,55 EUR",
+         "Bank-Statements"),
+        ("Invoice\nThis agreement between the parties, dated 01/01/2026, sets the terms.", "Legal"),
+    ],
+)  # fmt: skip
+def test_another_category_named_by_the_content_comes_first(tmp_path, text, category):
+    # Re-review 2: a title-like "facture" line took these from their category.
+    assert _category_of(tmp_path, text) == category
+
+
+@pytest.mark.parametrize("name", ["INV-2026-0815.pdf", "FA-102938.pdf", "FACT_2026_118.pdf"])
+def test_an_invoice_number_prefix_is_not_a_vendor(name):
+    assert detect_vendor(name, "", []) is None
+
+
+def test_an_invoice_number_is_not_a_month():
+    from cubby.domain.invoices import name_date
+
+    assert name_date("INV-12-2025-0042.pdf") is None

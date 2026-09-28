@@ -46,13 +46,17 @@ name_patterns = [
 content_patterns = [
     "num[ée]ro de facture", "invoice number", "payment confirmation",
     "montant (?:total|à payer|du)", "amount due", "total due", "\\bvat\\b.*total",
-    # The word alone is not enough: statements, contracts and emails mention
-    # invoices too. It must open one of the document's first two lines, as its
-    # title does, and be followed on that line by a date or an amount
+]
+late_content_patterns = [
+    # Tried after every category's content_patterns, so a statement or a
+    # contract that mentions an invoice keeps its category. The word alone is
+    # not enough: emails and notes mention invoices too. It must open one of
+    # the document's first two lines, as its title does, and be followed on
+    # that line by a date or an amount
     # ("Facture Free Mobile du 05/08/2026"), or stand alone as a heading
     # ("Facture n° 1042", "Invoice #A-17") with a date or an amount below.
-    '\A\s*(?:[^\n]*\n)?[ \t]*(?:facture|invoice)\b[^\n]{0,80}?(?:\b\d{1,2}[/.-]\d{1,2}[/.-](?:19|20)\d{2}\b|\b20\d{2}-\d{2}-\d{2}\b|\d[\d ]*[,.]\d{2} ?(?:€|eur\b|usd\b|\$)|(?:€|\$|\beur\b|\busd\b) ?\d[\d ]*[,.]\d{2})',
-    '\A\s*(?:[^\n]*\n)?[ \t]*(?:facture|invoice)[ \t]*(?:(?:n[°o]?\.?|no\.?|\#|number|num[ée]ro)[ \t]*[\w/-]+)?[ \t]*\n[\s\S]{0,300}?(?:\b\d{1,2}[/.-]\d{1,2}[/.-](?:19|20)\d{2}\b|\b20\d{2}-\d{2}-\d{2}\b|\d[\d ]*[,.]\d{2} ?(?:€|eur\b|usd\b|\$)|(?:€|\$|\beur\b|\busd\b) ?\d[\d ]*[,.]\d{2})',
+    '\A\s*+(?:[^\n]*+\n)?[ \t]*+(?:facture|invoice)\b[^\n]{0,80}?(?:\b\d{1,2}[/.-]\d{1,2}[/.-](?:19|20)\d{2}\b|\b20\d{2}-\d{2}-\d{2}\b|\d[\d ]*[,.]\d{2} ?(?:€|eur\b|usd\b|\$)|(?:€|\$|\beur\b|\busd\b) ?\d[\d ]*[,.]\d{2})',
+    '\A\s*+(?:[^\n]*+\n)?[ \t]*+(?:facture|invoice)[ \t]*(?:(?:n[°o]?\.?|no\.?|\#|number|num[ée]ro)[ \t]*[\w/-]+)?[ \t]*\n[\s\S]{0,300}?(?:\b\d{1,2}[/.-]\d{1,2}[/.-](?:19|20)\d{2}\b|\b20\d{2}-\d{2}-\d{2}\b|\d[\d ]*[,.]\d{2} ?(?:€|eur\b|usd\b|\$)|(?:€|\$|\beur\b|\busd\b) ?\d[\d ]*[,.]\d{2})',
 ]
 
 [[category]]

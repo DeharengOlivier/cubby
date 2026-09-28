@@ -195,7 +195,7 @@ _NAME_DAYS = (  # (pattern, group of the year, of the month, of the day)
 )
 _NAME_MONTHS = (  # (pattern, group of the year, of the month)
     (re.compile(r"\b(20\d{2})[- ](0[1-9]|1[0-2])\b(?![-. ]?\d)"), 1, 2),  # 2026-08
-    (re.compile(r"(?<![\d.])(?<!\d-)\b(0[1-9]|1[0-2])[- ](20\d{2})\b"), 2, 1),  # 08-2026
+    (re.compile(r"(?<![\d.])(?<!\d-)\b(0[1-9]|1[0-2])[- ](20\d{2})\b(?![-. ]?\d)"), 2, 1),
     (re.compile(rf"\b({_MONTHS_ALT})\.?[- ]+(20\d{{2}})\b", re.IGNORECASE), 2, 1),  # août 2026
 )
 
@@ -308,6 +308,12 @@ _STOPWORDS = frozenset(
         "for",
         # Plurals and words that say what the file is, not who sent it.
         "invoices",
+        # Invoice number prefixes (INV-2026-0815, FA-102938).
+        "inv",
+        "fa",
+        "fac",
+        "fact",
+        "fct",
         "receipts",
         "reçus",
         "recus",

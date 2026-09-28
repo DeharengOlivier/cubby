@@ -100,11 +100,14 @@ All notable changes to this project are documented here. The format is based on
   one of the first two lines with a date or an amount on that line
   (`Facture Free Mobile du 05/08/2026 montant 19,99 EUR`), or standing alone
   as a heading (`Facture n° 1042`) with one below; a statement, a contract
-  or an email that only mentions an invoice keeps its own category,
+  or an email that only mentions an invoice keeps its own category (these
+  title patterns are a new `late_content_patterns` key, tried only when no
+  category's `content_patterns` match), an invoice number prefix
+  (`INV-2026-0815`, `FA-102938`) is neither a vendor nor a month,
   and `explain` says when it read a file's content and nothing matched
   (`content_chars` in `--json`). Found by an exploratory session.
   A config written by `cubby init` keeps its own copy of the categories: to
-  get the new Invoices content pattern, copy it from the packaged defaults
+  get the new Invoices `late_content_patterns`, copy them from the packaged defaults
   (`cubby init --path /tmp/cubby-defaults.toml` writes them).
 - A regular file named like a folder cubby sorts into (`_Unsorted`, a
   category, or a month folder inside one) made every move into that folder

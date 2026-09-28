@@ -21,7 +21,8 @@ class Category:
     """A destination folder and the rules that route files to it.
 
     A category can participate in several stages of the cascade at once:
-    ``name_patterns`` feed stage 1, ``content_patterns`` stage 2 and
+    ``name_patterns`` feed stage 1, ``content_patterns`` (then
+    ``late_content_patterns``) stage 2 and
     ``extensions`` stage 3. When ``strong_ext`` is set, its extensions become
     decisive at stage 0 (a ``.dmg`` is an installer whatever its name).
     """
@@ -29,6 +30,10 @@ class Category:
     name: str
     name_patterns: tuple[str, ...] = ()
     content_patterns: tuple[str, ...] = ()
+    # Stage 2 as well, but tried only once no category's content_patterns
+    # matched: for a broad sign ("Facture" as a title) that a statement or a
+    # contract can carry too, and whose own patterns must then win.
+    late_content_patterns: tuple[str, ...] = ()
     extensions: frozenset[str] = frozenset()
     strong_ext: bool = False
     date_folders: bool = False  # file into a month/year subfolder (invoices, statements)
