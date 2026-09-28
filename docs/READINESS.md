@@ -66,7 +66,7 @@ containers, infrastructure, secrets.
 |---|---|---|---|---|
 | SEC-GOV-01 | P0 | PASS | this register, 2026-09-28 | each release |
 | SEC-GOV-02 | P0 | PASS | tests use temp folders and a per-test `CUBBY_STATE_DIR` (`conftest.py`), no network, fake service managers; mutation and property runs local only | each release |
-| SEC-GATE-01 | P0 | PASS | `pip-audit --strict` over the exported lock including the `extract` extras, bandit, gitleaks: CI job "Dependency and code scanning" green on the release 0.4.0 pull request | each release |
+| SEC-GATE-01 | P0 | PASS | `pip-audit --strict` over the exported lock including the `extract` extras, bandit, gitleaks: CI job "Dependency and code scanning" green on the release 0.4.0 pull request (#28) | each release |
 | SEC-01-001 to 007 | P0 | PASS | `docs/THREAT-MODEL.md` | release adding an entry point, parser or side effect |
 | SEC-04, 05, 06 (authn, authz, sessions) | P0 | N/A | no accounts, roles or sessions; runs as the local user with OS permissions | - |
 | SEC-05-006 least privilege | P0 | PASS | user agent (launchd `LaunchAgents`, systemd `--user`), no root, no sudo in `install.sh` | each release |

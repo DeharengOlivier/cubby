@@ -8,7 +8,7 @@
 # anyone checks a release was built from the tagged source.
 #
 #   scripts/rebuild.sh
-#   git checkout v0.3.0 && gh release download v0.3.0 -p SHA256SUMS
+#   git checkout v0.4.0 && gh release download v0.4.0 -p SHA256SUMS
 #   scripts/rebuild.sh --against SHA256SUMS
 set -eu
 # shellcheck disable=SC3040
