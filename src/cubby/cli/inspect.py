@@ -110,6 +110,9 @@ def cmd_log(args: argparse.Namespace) -> int:
         return EXIT_OK
     if args.run:
         records = [r for r in records if r.get("run") == args.run]
+        if not records:
+            print(f"cubby: no log line for run {args.run!r}; see 'cubby history'", file=sys.stderr)
+            return EXIT_FAILED
     if args.warnings:
         # A line with no level is not cubby's own (a traceback the service
         # manager captured): shown, since it is rarely good news.

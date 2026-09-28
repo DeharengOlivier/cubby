@@ -19,6 +19,7 @@ from .common import (
     EXIT_OK,
     at_least_one,
     config_path_of,
+    duration_text,
     palette,
     positive_duration,
 )
@@ -32,8 +33,10 @@ Subcommands: TypeAlias = "argparse._SubParsersAction[argparse.ArgumentParser]"
 def _add_common_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config", help="path to a config file")
     parser.add_argument("--source", help="folder to sort (default: from config)")
-    parser.add_argument("--delay", help="min age before moving a file, e.g. 1m, 30s")
-    parser.add_argument("--interval", help="watch poll interval, e.g. 30s")
+    parser.add_argument(
+        "--delay", type=duration_text, help="min age before moving a file, e.g. 1m, 30s"
+    )
+    parser.add_argument("--interval", type=duration_text, help="watch poll interval, e.g. 30s")
     parser.add_argument("--no-content", action="store_true", help="disable content scanning")
     parser.add_argument(
         "--month-style",

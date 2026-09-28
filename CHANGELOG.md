@@ -32,6 +32,16 @@ All notable changes to this project are documented here. The format is based on
   the version too; older records read as `unknown`.
 
 ### Fixed
+- Small CLI defects found by an exploratory session: `watch -v` now echoes
+  when its output is not a terminal; `--source` pointing at a folder cubby
+  files into (`~/Downloads/Documents`) is refused instead of nesting
+  `Documents/Documents`; `status` says `last watched` once nothing is
+  sorting; `doctor` says when no notification tool can show an alert; a
+  missing source says whether it came from `--source` or a config file;
+  `log --run` with an unknown id says so and exits 1; a bad `--delay` or
+  `--interval` names the flag (exit 2); two categories with one name are
+  refused. The config file is also looked for in
+  `$XDG_CONFIG_HOME/cubby/config.toml`, where `cubby init` then writes it.
 - A regular file named like a folder cubby sorts into (`_Unsorted`, a
   category, or a month folder inside one) made every move into that folder
   fail with `[Errno 17] File exists`. The file is still left alone, and the

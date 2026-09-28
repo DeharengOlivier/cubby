@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import __version__
+from ..adapters import notify as notify_module
 from ..adapters import state
 from ..adapters.config import (
     find_user_config,
@@ -74,7 +75,7 @@ def _program_args(args: argparse.Namespace) -> list[str]:
 
 def cmd_install(args: argparse.Namespace) -> int:
     config = load_from_args(args)
-    if source_error(config):
+    if source_error(config, args):
         return EXIT_FAILED
     service = get_service()
     log_path = state.log_path()
@@ -213,7 +214,9 @@ def _print_status(
     if agent["unit"]:
         kv(pal, "agent file", agent["unit"])
     if agent["watching"]:
-        kv(pal, "watching", agent["watching"])
+        # The heartbeat outlives the process: only a live one is watching now.
+        live = agent["live_pid"] or agent["running"]
+        kv(pal, "watching" if live else "last watched", agent["watching"])
     if pause:
         kv(pal, "paused", pal.yellow(pause.describe() + ": no file is moved"))
     kv(pal, "last pass", _last_pass_text(pal, agent))
@@ -277,6 +280,17 @@ def _measures_text(pal: Palette, measures: dict[str, Any]) -> str:
     return ", ".join(parts)
 
 
+def _notifications_text(pal: Palette, enabled: bool) -> str:
+    if not enabled:
+        return pal.dim("off (notify = false)")
+    if notify_module.command("cubby") is None:
+        return pal.yellow(
+            "on, but no notification tool (osascript or notify-send) found: "
+            "problems go to the log only"
+        )
+    return "on"
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     pal = palette()
     config = load_from_args(args)
@@ -299,7 +313,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     kv(pal, "extract tools", format_features(pal, tools))
     kv(pal, "extract libs", format_features(pal, libs))
     kv(pal, "parsable", pal.dim(", ".join(sorted(PARSABLE))))
-    kv(pal, "notifications", "on" if config.settings.notify else pal.dim("off (notify = false)"))
+    kv(pal, "notifications", _notifications_text(pal, config.settings.notify))
     if getattr(args, "notify", False):
         return _test_notification(pal)
     return 0
