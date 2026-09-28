@@ -192,14 +192,18 @@ percentile: `python benchmarks/latency.py` (defaults below), smoke-tested by
   file of the folder; `status` finds no agent installed.
 - Percentiles are nearest-rank. Below 100 samples a p99 is the maximum (the rank rounds up
   to the last sample): the p99 of the passes and of the commands is their slowest run, and
-  only the move row has a p99 of its own.
+  only the move row has a p99 of its own. The p95 of those rows rests on few samples too: it
+  is the 2nd slowest of 30 (rank 29) and the 3rd slowest of 50 (rank 48).
 - Every child runs with `HOME`, `CUBBY_STATE_DIR`, `CUBBY_CONFIG` and `TMPDIR` in a
   throwaway folder, and without any `XDG_*` or other `CUBBY_*` variable.
 - Conditions, as the script records them: AMD EPYC (12 vCPU), 47 GB RAM, Linux 6.8.0,
-  Python 3.11.16, ext4, cubby 0.4.0 at `8634d6e` (the "-dirty" the script printed was this
-  changelog entry being written during the run, no code), 2026-09-28. The machine was
-  shared: load average 21 to 27 (1, 5 and 15 minutes) across both runs, on 12 CPUs. Two
-  full runs, one after the other (7 min 40 s each).
+  Python 3.11.16, ext4, cubby 0.4.0 at `cc8614b`, 2026-09-28. The runs were made at
+  `8634d6e`, the same commit before it was rebased onto main: `src/` and `benchmarks/` are
+  identical in both (the script printed `8634d6e-dirty`: this changelog entry was being
+  written during the run, no code). The machine was shared: load average 21.0 to 25.9 in
+  run 1 and 22.7 to 26.9 in run 2 (1, 5 and 15 minutes, before and after), on 12 CPUs. Two
+  full runs, one after the other; run 1 took 7 min 40 s, the duration of run 2 was not
+  recorded.
 
 **Budgets**, at p95, set before measuring:
 
@@ -235,9 +239,9 @@ run, as a check of how much the load moves it:
   16 to 25 ms and a slowest of 125 to 217 ms, on files that are all alike. A whole pass of
   1 000 files stays under 3 s at p99, and the steady state under 50 ms.
 - Interpreter start and imports are most of an interactive command: `--version` alone is
-  230 to 320 ms at the median, `status` and `explain` add 20 to 100 ms to it.
+  230 to 320 ms at the median, `status` and `explain` add 16 to 99 ms to it at the median.
 - Load moves the tails a lot: the same code measured a p95 up to 1.7 times higher in the
-  second run (load 25 to 27 instead of 21 to 26). A budget met in one run and missed in the
+  second run (load 22.7 to 26.9 instead of 21.0 to 25.9). A budget met in one run and missed in the
   other would be a noisy verdict; the two missed below are missed in both.
 
 **Findings** (measured, not optimized here):
@@ -247,15 +251,28 @@ run, as a check of how much the load moves it:
   What `history` adds is reading the whole 10.4 MB journal to tell which runs are undone:
   the "Reading a large journal" limit below, now with its percentiles.
 - **`cubby run` of 1 000 files is 2.7 times the agent's pass over the same number** (median
-  3.62 s against 1.32 s) and misses its 5 s budget (p95 5.68 and 6.60 s). Two measurements
-  say where the difference goes:
-  - with the journal emptied before each run, 10 alternating runs each: median 2.98 s
-    against 3.90 s with the full journal. About 0.9 s is the journal;
-  - one `cubby run` under `cProfile` (whose overhead inflates everything, 8.4 s in all):
-    journal compaction 2.3 s, one read of its 51 000 lines that parses each twice (once
-    for its run, once for its fields: 102 000 parses), to keep them all, since every move
-    is still undoable; the log line written per move 0.86 s;
-    the moves themselves 3.1 s.
+  3.62 s against 1.32 s) and misses its 5 s budget (p95 5.68 and 6.60 s). The probe
+  `python benchmarks/run_journal_cost.py` (defaults: the same state, 10 rounds), run once
+  at `4da2bb2` in a throwaway `HOME`, load 31.6 before and 24.2 after, says where the
+  difference goes. Its output, whole:
+
+  ```text
+  cubby run of 1000 files, journal of 50000 moves (10.4 MB), 10 rounds:
+    journal as built: median 5.92 s, slowest 7.28 s
+    journal removed: median 4.37 s, slowest 5.70 s
+  one cubby run under cProfile, cumulative:
+    the pass (sort_pass): 5.62 s
+    journal compaction (Journal.compact): 1.99 s
+    the moves (move_into): 1.79 s
+    the log line per move (logging.log): 0.58 s
+  ```
+
+  The load was higher than during the latency runs, so every figure is higher than in the
+  table above; compare them to each other. The journal adds 1.55 s at the median, and
+  compaction is about a third of the profiled pass: one read of the 51 000 lines that
+  parses each twice (once for its run, once for its fields), to keep them all, since every
+  move is still undoable. The log line written per move (which the agent rows above leave
+  out) is a tenth.
 
   The compaction is the one that is not the file's own cost. The agent tries it again only
   once the journal has doubled since its last attempt (section "A defect this benchmark
