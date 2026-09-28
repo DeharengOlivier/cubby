@@ -45,5 +45,7 @@ should be read before it is used, exactly like a shell script.
 
 ## Reporting a vulnerability
 
-Please open a private security advisory on GitHub, or email the maintainer.
+Open a private security advisory at
+<https://github.com/DeharengOlivier/cubby/security/advisories/new>; it reaches the
+maintainer, [@DeharengOlivier](https://github.com/DeharengOlivier), and nobody else.
 Do not file public issues for security reports. We aim to respond within a week.
