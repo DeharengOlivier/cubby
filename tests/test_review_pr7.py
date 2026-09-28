@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import errno
 import json
-import os
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -20,7 +19,7 @@ from cubby.app.sorter import Sorter
 from cubby.app.watcher import Watcher
 from cubby.cli import agent as cli_agent
 from cubby.cli import main
-from tests.helpers import config_for
+from tests.helpers import config_for, process_named_cubby_watch
 
 # --- major 1: the clean-up of a failed move never removes the file's last name --
 
@@ -66,6 +65,39 @@ def test_a_source_replaced_by_another_file_keeps_ours_at_the_destination(tmp_pat
 
     assert destination.read_text() == "ours"
     assert source.read_text() == "theirs"
+
+
+def test_a_move_that_cannot_check_its_source_after_a_failed_delete_fails_loudly(
+    tmp_path, monkeypatch
+):
+    # Re-review of PR 7: any error from the check was read as "the source is
+    # gone", so a transient error reported a move that had left two names.
+    source = tmp_path / "a.txt"
+    source.write_text("x")
+    destination = tmp_path / "Documents" / "a.txt"
+    destination.parent.mkdir()
+    real_unlink, real_stat = Path.unlink, Path.stat
+    failing = {"now": False}
+
+    def refuse_unlink(self, missing_ok=False):
+        if self == source:
+            failing["now"] = True  # from here on, the source cannot be examined
+            raise OSError(errno.EIO, "Input/output error", str(self))
+        real_unlink(self, missing_ok=missing_ok)
+
+    def refuse_stat(self, *, follow_symlinks=True):
+        if failing["now"] and self == source:
+            raise OSError(errno.EIO, "Input/output error", str(self))
+        return real_stat(self, follow_symlinks=follow_symlinks)
+
+    monkeypatch.setattr(Path, "unlink", refuse_unlink)
+    monkeypatch.setattr(Path, "stat", refuse_stat)
+
+    with pytest.raises(OSError, match="Input/output error") as info:
+        move_no_clobber(source, destination)
+
+    assert info.value.errno == errno.EIO
+    assert failing["now"]  # raised by the delete, not before the link
 
 
 # --- major 2: uninstall.sh can still remove a broken install --------------------
@@ -145,14 +177,18 @@ class _Uninstalled:
         return True
 
 
-@pytest.mark.parametrize(
-    ("pid", "age"), [(os.getpid(), 3600), (2**22 + 12345, 0)], ids=["stale", "dead"]
-)
-def test_uninstall_succeeds_when_the_last_heartbeat_is_stale_or_its_process_gone(
-    monkeypatch, pid, age
-):
+def test_uninstall_succeeds_when_the_last_heartbeat_is_stale(monkeypatch):
     monkeypatch.setattr(cli_agent, "detect_service", _Uninstalled)
-    _beat(pid, age=age)
+    with process_named_cubby_watch() as pid:  # alive and named like the agent
+        _beat(pid, age=3600)  # but silent for an hour: not the one sorting now
+        assert main(["uninstall"]) == 0
+        _beat(pid)  # the same process, beating now: it is
+        assert main(["uninstall"]) == 1
+
+
+def test_uninstall_succeeds_when_the_process_behind_the_heartbeat_is_gone(monkeypatch):
+    monkeypatch.setattr(cli_agent, "detect_service", _Uninstalled)
+    _beat(2**22 + 12345)
 
     assert main(["uninstall"]) == 0
 
