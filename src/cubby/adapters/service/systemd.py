@@ -130,6 +130,9 @@ class SystemdService(Service):
             return False
         unit = self._unit_name(label)
         require_success(["systemctl", "--user", "disable", "--now", unit])
+        if self.is_running(label):
+            # The unit stays, so `systemctl --user stop` still has one to name.
+            raise ServiceError(f"{unit} is still running after 'systemctl --user disable --now'")
         path.unlink()
         require_success(["systemctl", "--user", "daemon-reload"])
         return True

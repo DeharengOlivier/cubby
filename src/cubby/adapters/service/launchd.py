@@ -76,7 +76,8 @@ class LaunchdService(Service):
         # An agent that is installed but not loaded unloads with an error;
         # the file is still ours to remove.
         run_manager(["launchctl", "unload", "-w", str(path)])
-        path.unlink()
         if self.is_running(label):
+            # The plist stays, so the manual unload in the runbook can name it.
             raise ServiceError(f"{label} is still running after unload")
+        path.unlink()
         return True
