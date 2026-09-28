@@ -61,6 +61,7 @@ class Settings:
     month_lang: str = "fr"  # language for the letters style: "fr" (juillet) or "en" (July)
     vendors: tuple[str, ...] = ()  # known vendor names, matched first when renaming invoices
     ignore: tuple[str, ...] = ()  # glob patterns (case-insensitive) of names never touched
+    notify: bool = True  # desktop notification when the agent cannot sort
 
     def __post_init__(self) -> None:
         """Validate every setting, wherever it came from.

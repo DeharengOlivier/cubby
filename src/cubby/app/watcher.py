@@ -24,6 +24,11 @@ from .sorter import Sorter, describe_error
 
 Sleep = Callable[[float], None]
 Stop = Callable[[], bool]
+Paused = Callable[[], str | None]  # why passes are suspended, or None
+Alert = Callable[[str], None]
+
+#: How many failed file names are remembered, so each is announced once.
+_MAX_ALERTED = 1000
 
 
 class LevelLog(Protocol):
@@ -67,8 +72,18 @@ class StopRequest:
             self._nap(min(self._tick, left))
 
 
+def _not_paused() -> str | None:
+    return None
+
+
+def _no_alert(_: str) -> None:
+    return None
+
+
 class Watcher:
-    def __init__(
+    # Every collaborator is an injected port (clock, log, ledger, pause switch,
+    # alerts) so the loop is tested without real time, files or notifications.
+    def __init__(  # noqa: PLR0913
         self,
         sorter: Sorter,
         interval: float,
@@ -77,6 +92,8 @@ class Watcher:
         log: LevelLog = _quiet,
         ledger: Ledger | None = None,
         lock_timeout: float = 30.0,
+        paused: Paused = _not_paused,
+        alert: Alert = _no_alert,
     ):
         self._sorter = sorter
         self._interval = interval
@@ -86,6 +103,11 @@ class Watcher:
         self._lock_timeout = lock_timeout
         self._source_missing = False
         self._stop: Stop = _never
+        self._paused = paused
+        self._was_paused = False
+        self._alert = alert
+        self._failing = False
+        self._alerted: set[str] = set()
 
     def run(self, *, stop: Stop = _never, max_cycles: int | None = None) -> int:
         """Run the poll loop. Returns the number of items sorted in total.
@@ -108,6 +130,9 @@ class Watcher:
 
     def _cycle(self) -> int:
         """One pass. Never raises: a failed pass is logged and the loop goes on."""
+        if self._is_paused():
+            self._beat()  # alive and deliberately idle, not stalled
+            return 0
         if not self._source_present():
             return 0
         try:
@@ -117,17 +142,33 @@ class Watcher:
             self._log(f"pass skipped: {exc}", level="WARNING")
             return 0
         except Exception as exc:  # noqa: BLE001 - logged, and the agent keeps its schedule
-            self._log(f"pass failed: {describe_error(exc)}", level="ERROR")
+            error = describe_error(exc)
+            self._log(f"pass failed: {error}", level="ERROR")
+            if not self._failing:
+                self._alert(f"Sorting failed: {error}. See 'cubby status'.")
+            self._failing = True
             return 0
+        self._failing = False
         self._announce(outcomes)
         self._beat()
         return sum(1 for o in outcomes if o.error is None)
+
+    def _is_paused(self) -> bool:
+        """True while a pause is in force, said once when it starts and ends."""
+        reason = self._paused()
+        if reason and not self._was_paused:
+            self._log(f"{reason}: passes skipped until 'cubby resume'")
+        elif not reason and self._was_paused:
+            self._log("resumed")
+        self._was_paused = reason is not None
+        return self._was_paused
 
     def _source_present(self) -> bool:
         """False while the folder is absent (an unplugged drive), said once per outage."""
         present = self._sorter.source.is_dir()
         if not present and not self._source_missing:
             self._log(f"source folder missing: {self._sorter.source}", level="ERROR")
+            self._alert(f"The folder {self._sorter.source} is missing; cubby waits for it.")
         elif present and self._source_missing:
             self._log(f"source folder back: {self._sorter.source}")
         self._source_missing = not present
@@ -148,3 +189,15 @@ class Watcher:
             self._log(f"sorted {sorted_count} item(s)")
         if failed:
             self._log(f"{failed} item(s) could not be sorted", level="WARNING")
+            self._alert_new_failures(outcomes)
+
+    def _alert_new_failures(self, outcomes: list[SortOutcome]) -> None:
+        """Announce each file that cannot be sorted once, not at every pass."""
+        new = [o.name for o in outcomes if o.error and o.name not in self._alerted]
+        if not new:
+            return
+        if len(self._alerted) + len(new) > _MAX_ALERTED:
+            self._alerted.clear()
+        self._alerted.update(new)
+        shown = ", ".join(new[:3]) + (f" and {len(new) - 3} more" if len(new) > 3 else "")
+        self._alert(f"Could not sort {shown}. See 'cubby status'.")

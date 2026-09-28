@@ -66,8 +66,10 @@ cubby undo        # revert the last run (or --run ID from history)
 cubby watch       # keep sorting in the foreground (Ctrl-C to stop)
 cubby install     # register the background agent (sorts every minute)
 cubby uninstall   # remove the agent
-cubby status      # is the agent really running? when did it last pass? what failed?
-cubby doctor      # show environment and content-extraction support
+cubby pause       # stop the agent moving files (--for 2h), without uninstalling
+cubby resume      # let it sort again
+cubby status      # is the agent really running? paused? when did it last pass? what failed?
+cubby doctor      # show environment and content-extraction support (--notify to test alerts)
 ```
 
 Everything is configurable on the command line:
