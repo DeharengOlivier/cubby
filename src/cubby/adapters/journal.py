@@ -21,7 +21,9 @@ Format (version 2), one JSON object per line, appended as each move happens::
 - Version 1 lines (``{"ts": ..., "moves": [...]}``, one line per run, written
   by cubby 0.1) are still read, as runs of plain moves.
 - A damaged line (a crash mid-append) is skipped, never fatal.
-- The file is bounded: past :data:`MAX_BYTES` the oldest runs are dropped.
+- Past :data:`MAX_BYTES` the oldest runs that have nothing left to undo are
+  dropped (the :data:`KEEP_RUNS` most recent always stay). What can still be
+  undone is never dropped, so the file is bounded by the moves not yet undone.
 """
 
 from __future__ import annotations
@@ -96,6 +98,10 @@ def _ignore(_: str) -> None:
 class Journal:
     def __init__(self, path: Path | None = None) -> None:
         self.path = path or default_journal_path()
+        # Size after the last compaction. What compaction keeps is still
+        # undoable, so it can stay above MAX_BYTES; trying again before the file
+        # has doubled would re-read it every pass to drop nothing.
+        self._compacted_size = 0
 
     # --- writing -------------------------------------------------------------
 
@@ -129,20 +135,28 @@ class Journal:
     def compact(self) -> None:
         """Drop the oldest runs once the file passes :data:`MAX_BYTES`.
 
+        When what remains is still above the limit, the next attempt waits until
+        the file has doubled, so a long-lived agent pays for compaction in
+        proportion to what it writes, not once per pass.
+
         Raises:
             OSError: The journal could not be rewritten. It is left untouched.
         """
         try:
-            if self.path.stat().st_size <= MAX_BYTES:
-                return
+            size = self.path.stat().st_size
         except FileNotFoundError:
+            return
+        if size <= max(MAX_BYTES, 2 * self._compacted_size):
             return
         runs = self.runs()
         # Recent runs stay for history; a run with anything left to undo stays
         # whatever its age, because dropping it would take away its way back.
         keep = {r.run_id for r in runs[-KEEP_RUNS:]} | {r.run_id for r in runs if r.pending}
-        kept = [line for line in state.read_lines(self.path) if _run_of(line) in keep]
-        state.replace_text(self.path, "".join(line + "\n" for line in kept))
+        lines = state.read_lines(self.path)
+        kept = [line for line in lines if _run_of(line) in keep]
+        if len(kept) < len(lines):
+            state.replace_text(self.path, "".join(line + "\n" for line in kept))
+        self._compacted_size = self.path.stat().st_size
 
     # --- reading -------------------------------------------------------------
 
