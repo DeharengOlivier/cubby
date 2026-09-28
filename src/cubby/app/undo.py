@@ -43,7 +43,24 @@ def _restore(entry: Entry) -> str:
         shutil.copy2(entry.destination, target)
     else:
         move_no_clobber(entry.destination, target)
+        _remove_emptied(entry.destination.parent, entry.source.parent)
     return target.name
+
+
+def _remove_emptied(folder: Path, top: Path) -> None:
+    """Remove ``folder`` and its parents below ``top`` while they are empty.
+
+    The run made these folders (a category, a month) to file into; once undo
+    has taken everything back out, they go too. ``rmdir`` removes an empty
+    folder only, so nothing the user put there can be lost, and ``top``, the
+    folder the file came from, always stays.
+    """
+    while folder != top and folder.is_relative_to(top):
+        try:
+            folder.rmdir()
+        except OSError:
+            return  # not empty (or not ours to remove): it stays, and so do its parents
+        folder = folder.parent
 
 
 def _still_there(path: Path) -> bool:

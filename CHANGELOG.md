@@ -32,6 +32,14 @@ All notable changes to this project are documented here. The format is based on
   the version too; older records read as `unknown`.
 
 ### Fixed
+- `cubby undo` left behind every category and month folder the run had
+  filled, empty; it now removes a folder it emptied (an empty one only).
+  A file that could not be moved was reported as a raw Python exception with
+  two absolute paths; it now reads `PermissionError: Permission denied:
+  fresh.pdf -> Documents/fresh.pdf (check that cubby may write there)`, paths
+  relative to the sorted folder. The docs say that a folder in the watched
+  folder is moved whole into `_Unsorted`, and how to keep it. Found by an
+  exploratory session.
 - Small CLI defects found by an exploratory session: `watch -v` now echoes
   when its output is not a terminal; `--source` pointing at a folder cubby
   files into (`~/Downloads/Documents`) is refused instead of nesting
