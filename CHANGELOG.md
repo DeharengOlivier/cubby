@@ -267,8 +267,6 @@ after upgrading, then `cubby install` again to refresh the agent unit.
 - PDF, docx and xlsx parsing runs in a child process with a timeout and a memory
   ceiling, so a hostile document cannot stall or exhaust the agent.
 - The journal, ledger, heartbeat and log are created with mode 0600.
-
-### Security
 - Category names and `unsorted_dir` are validated as single folder components,
   and every move is checked against the watched root. A category named
   `../../escaped` previously moved files two levels above the watched folder.
@@ -295,6 +293,8 @@ after upgrading, then `cubby install` again to refresh the agent unit.
   and `~/Library/Logs/cubby.log`.
 
 ### Added
+- Colored terminal output for `plan`, `run`, `doctor` and `status`, and a logo
+  banner; color is off when the output is not a terminal or `NO_COLOR` is set.
 - Invoice and bank categories (`date_folders`) file documents into a month/year
   subfolder, read from the document's own date (FR/EN) with a fallback to the
   file's modification date.

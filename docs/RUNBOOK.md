@@ -152,9 +152,16 @@ the config, then delete that list (from `late_content_patterns = [` to its closi
 running 0.2; restore the copy when rolling forward. Without the list, 0.2 files those invoices by
 type (`Documents`) instead of by content.
 
+0.2 ignores `XDG_CONFIG_HOME`: it reads only `~/.config/cubby/config.toml` or `$CUBBY_CONFIG`.
+If `XDG_CONFIG_HOME` is set, 0.3 keeps its config under it, and 0.2 would sort silently with
+the packaged defaults (their source folder and categories). Before running 0.2, export
+`CUBBY_CONFIG="$XDG_CONFIG_HOME/cubby/config.toml"` (and pass it to the agent's environment), or
+copy the config to `~/.config/cubby/config.toml`. 0.2 also has no `cubby log`: read its
+log file directly (`~/Library/Logs/cubby.log` on macOS, `~/.local/state/cubby/cubby.log` on Linux).
+
 Compatibility, measured in the rollback rehearsal of 2026-09-28 (0.3 to 0.2 and back, in a
 throwaway home, `docs/audits/2026-09-28-rollback-0.3.md`): 0.2 lists and undoes runs made by 0.3,
-and 0.3 lists and undoes runs made by 0.2. The config key above is the only difference found.
+and 0.3 lists and undoes runs made by 0.2. With `XDG_CONFIG_HOME` unset, the config key above is the only difference found.
 
 ### From 0.2 to 0.1
 
