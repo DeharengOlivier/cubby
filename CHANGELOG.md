@@ -9,6 +9,8 @@ All notable changes to this project are documented here. The format is based on
 ### Added
 - `make flaky-rate` measures how often CI fails on a commit that later passes
   unchanged, against the 2% budget in `docs/READINESS.md`.
+- A pull request cannot merge until its independent review record is posted
+  on it (the required `review record` check).
 
 ## [0.3.0] - 2026-09-28
 
