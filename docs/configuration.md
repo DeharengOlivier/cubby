@@ -34,6 +34,10 @@ and once when the watched folder goes missing (an unplugged drive). On macOS
 the first notification may need permission for Script Editor in System
 Settings > Notifications. `cubby doctor --notify` sends a test.
 
+Cubby reads the file strictly: a key it does not know is an error that names the
+closest known key (`unknown setting 'ignor' in [settings]; did you mean
+'ignore'?`), and switches take `true` or `false`, not text.
+
 `ignore` patterns match the file name, not a path, and are case-insensitive.
 `cubby explain FILE` tells you when a pattern is what keeps a file in place.
 
