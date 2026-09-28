@@ -305,7 +305,7 @@ def test_a_folder_deleted_and_made_again_is_left_in_place(tmp_path):
     shutil.rmtree(filed)
     filed.mkdir()
     (filed / "users-own.txt").write_text("mine", encoding="utf-8")
-    os.utime(filed / "users-own.txt", ns=(1, 1))  # made later, not in the same clock tick
+    os.utime(filed / "users-own.txt", ns=(1, 1))  # its time set apart from the original's
 
     result = undo_run(journal)
 
@@ -386,7 +386,7 @@ def test_a_folder_of_folders_made_again_is_left_in_place(tmp_path):
     shutil.rmtree(filed)
     (filed / "2024").mkdir(parents=True)
     (filed / "2024" / "p.jpg").write_text("another", encoding="utf-8")
-    os.utime(filed / "2024" / "p.jpg", ns=(1, 1))  # made later, not in the same clock tick
+    os.utime(filed / "2024" / "p.jpg", ns=(1, 1))  # its time set apart from the original's
 
     assert undo_run(journal).replaced == 1
 
