@@ -240,3 +240,14 @@ def test_the_suite_never_sees_the_developers_xdg_config_home():
     import os
 
     assert "XDG_CONFIG_HOME" not in os.environ
+
+
+def test_a_source_that_loops_is_an_error_not_a_traceback(tmp_path, capsys):
+    # Found by re-review: resolve() raises RuntimeError on a loop before 3.13.
+    loop = tmp_path / "loop"
+    loop.symlink_to(loop)
+
+    code, _, err = _cli(capsys, "plan", "--source", str(loop))
+
+    assert code == 1
+    assert "source folder does not exist" in err
