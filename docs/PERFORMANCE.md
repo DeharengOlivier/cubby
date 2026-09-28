@@ -113,6 +113,12 @@ After the change, at 1 000 and 20 000 files (5 repetitions), the pass holds unde
 estimate for 0.3.0 (1 046 MB for one pass) and measures the new ceiling: 400 000 files moved
 in one pass in 618 s of wall clock (337 s of CPU) holding 54 MB, then an idle pass of 0.01 s.
 
+Rechecked after rebasing onto the terminal-escaping and extraction-failure changes (main at `1f092af`):
+three passes of 200 000 files, run one at a time with `bench_sort.py --single-pass 200000`,
+held 19.0, 18.9 and 20.2 MB (190 to 250 s of CPU, load average 27 to 85). The full harness
+could not be used for that check: at a load average near 100 its per-repetition budget
+(6 s per 1 000 files) ran out. The table above keeps the first measurement.
+
 - The pass now costs about **135 bytes per file** (2.6 KB before): the sorted listing of
   names, which a pass must hold to go through the folder in order, and nothing per outcome.
   It is still linear, twenty times flatter: a million files would be about 135 MB
