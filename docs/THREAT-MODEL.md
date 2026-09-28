@@ -47,7 +47,7 @@ publish a release.
 
 | Entry | Untrusted part | Control |
 |---|---|---|
-| Files in the watched folder | name, extension, bytes | names are only ever used as one path component inside the watched root; content is read through bounded extractors (size ceiling, byte window, timeout, child process for in-process parsers); nothing is executed |
+| Files in the watched folder | name, extension, bytes | names are only ever used as one path component inside the watched root; shown to a person with terminal controls and bidi characters escaped, and markup-escaped in a `notify-send` body; content is read through bounded extractors (size ceiling, byte window, timeout, child process for in-process parsers); nothing is executed |
 | Config file (`~/.config/cubby/config.toml`) | trusted as the user's own, like a shell script (see `SECURITY.md`) | every value validated at load; category names are single path components; regex compiled at load |
 | Command-line flags | the user's own input | parsed by the same validation as the config |
 | Undo journal and run ledger | written by cubby, readable by the user | versioned schema; a damaged line is skipped, never executed; undo only moves inside recorded paths |
@@ -76,4 +76,8 @@ publish a release.
 - A file name with any character the filesystem allows, including Unicode line separators and
   (on Linux) bytes that are not valid UTF-8, keeps an undoable journal entry and is reported
   without crashing (`tests/test_properties.py`, `tests/test_undo_everything.py`).
+- A file name cannot drive the terminal or a notification: control (C0, DEL, C1) and bidi
+  characters are shown as escapes in every human output, `&`, `<` and `>` are escaped in a
+  `notify-send` body, and `--json` outputs are escaped by the JSON encoder
+  (`tests/test_terminal_escape.py`).
 - No network access: the test suite runs with sockets disabled (`tests/conftest.py`).
