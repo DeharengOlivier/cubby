@@ -10,9 +10,10 @@ All notable changes to this project are documented here. The format is based on
 - `cubby log`: the agent's log, oldest first and including the rotated file,
   with `--run ID` (one pass), `--warnings`, `-n N` and `--json`.
 - Every log line names the cubby `version` that wrote it, and each line written
-  during a pass names its `run` id, the id `cubby history`, `cubby undo --run`
-  and the ledger use. Ledger records carry the version too; older records read
-  as `unknown`.
+  during a pass names its `run` id; a move's line ends with where the file
+  went (`notes.txt -> Documents/notes (1).txt`). The run id is the one
+  `cubby history`, `cubby undo --run` and the ledger use. Ledger records carry
+  the version too; older records read as `unknown`.
 
 ### Fixed
 - A move whose source could not be removed (a read-only folder) left the file
@@ -22,9 +23,19 @@ All notable changes to this project are documented here. The format is based on
   backends now check that the agent stopped, and keep the unit when it did not.
 - `cubby status` said "not installed" about a cubby that was still sorting; it
   now names the live process (`live_pid` in `--json`).
+- After a large sort, every pass of the agent re-read the whole undo journal
+  to compact it and dropped nothing: 12 s per idle pass after 200 000 files.
+  Compaction now waits until the journal has doubled. Measured in
+  `docs/PERFORMANCE.md`.
+- `cubby uninstall` exits 1, with the `kill` command, when a cubby process
+  still beats after the service manager said it stopped; `uninstall.sh` no
+  longer removes the CLI when the agent could not be stopped.
+- An undo entry that could not be restored is printed as `pending`, with the
+  `cubby undo --run ID` that retries it, instead of `skip`.
 - The runbook, executed by an operator in a throwaway home, had seven false
   claims (stop checks, fallback commands, evidence copy, what undo leaves
-  pending, rollback order); rewritten, with the drill in `docs/audits/`.
+  pending, rollback order); rewritten, then executed again by a second
+  operator. Both drills are in `docs/audits/`.
 
 ### Changed
 - `cli.py` became the `cubby.cli` package (sorting, inspection, agent commands),
