@@ -26,7 +26,8 @@ itself is pure Python and platform-independent.
 `cubby status` shows the last run and the last lines of the log, and
 `cubby log --warnings` (or `--run <id>`) reads further back. The log itself
 is JSON lines, one per event, in `~/Library/Logs/cubby.log` on macOS and
-`~/.local/state/cubby/cubby.log` elsewhere:
+`~/.local/state/cubby/cubby.log` elsewhere (with the default state folder;
+`cubby doctor` prints where it is):
 `jq -r 'select(.level != "INFO") | "\(.ts) \(.msg)"' ~/.local/state/cubby/cubby.log`
 lists only what went wrong. Each line also names the cubby `version` that wrote it
 and, during a pass, its `run` id: the same id as in `cubby history` and

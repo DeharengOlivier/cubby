@@ -43,8 +43,11 @@ All notable changes to this project are documented here. The format is based on
   `~/Library/Logs/cubby.log`, where launchd only puts the agent's own output:
   `install` names the state folder to the agent, and naming it was taken to
   mean a state folder chosen elsewhere. The log now follows the folder: the
-  default one logs to `~/Library/Logs` whether or not it is named. The log of
-  an agent from 0.2 or 0.3 stays in `~/.local/state/cubby/cubby.log`.
+  default one (`~/.local/state/cubby`, or `$XDG_STATE_HOME/cubby`, which
+  `install` now passes on to the agent) logs to `~/Library/Logs` whether or not
+  it is named; a folder chosen elsewhere keeps its log beside it. The log of an
+  agent from 0.2 or 0.3 stays in its state folder, and an agent rolled back to
+  0.3 logs there again.
 - A folder whose name matches an invoice rule was renamed and filed like an
   invoice: `invoice-archive` became `Invoices/2026-09/archive facture`. A
   folder matched by its name is now moved whole under its own name, at the

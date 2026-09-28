@@ -4,7 +4,7 @@ Cubby's state is small and personal: the undo journal, the run ledger, the
 agent's heartbeat, the log and a lock. It lives under
 ``$CUBBY_STATE_DIR``, else ``$XDG_STATE_HOME/cubby``, else
 ``~/.local/state/cubby``. On macOS the log goes to ``~/Library/Logs`` so
-Console.app finds it, unless ``CUBBY_STATE_DIR`` is set.
+Console.app finds it, while the state folder is the default one.
 
 Every path is computed when it is asked for, not at import, so the test suite
 (and a user) can redirect all of it with one environment variable.
@@ -68,7 +68,9 @@ def log_path() -> Path:
     agent would log to the state folder while ``cubby log`` and ``cubby
     status``, run from a shell, read ``~/Library/Logs``.
     """
-    if sys.platform == "darwin" and state_dir() == _default_state_dir():
+    if sys.platform == "darwin" and os.path.realpath(state_dir()) == os.path.realpath(
+        _default_state_dir()
+    ):
         return Path.home() / "Library" / "Logs" / "cubby.log"
     return state_dir() / "cubby.log"
 
