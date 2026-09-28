@@ -111,25 +111,54 @@ def test_other_workflows_and_unfinished_or_cancelled_runs_are_ignored(fr):
 # --- asking gh -------------------------------------------------------------------
 
 
-def test_runs_are_asked_for_every_page_since_the_window(fr):
+def _gh_serving(runs, total=None):
     calls = []
 
     def gh(args):
         calls.append(args)
-        return json.dumps(_run("a", "success")) + "\n\n"
+        if args[-1] == ".total_count":
+            return f"{len(runs) if total is None else total}\n"
+        return "".join(json.dumps(run) + "\n\n" for run in runs)
+
+    return gh, calls
+
+
+def test_runs_are_asked_for_every_page_since_the_window(fr):
+    gh, calls = _gh_serving([_run("a", "success")])
 
     runs = fr.runs_from_gh("o/r", datetime(2026, 7, 1, tzinfo=UTC), gh)
 
     assert runs == [_run("a", "success")]
-    assert calls == [
-        [
-            "api",
-            "repos/o/r/actions/runs?per_page=100&created=>=2026-07-01",
-            "--paginate",
-            "-q",
-            ".workflow_runs[]",
-        ]
+    assert calls[-1] == [
+        "api",
+        "repos/o/r/actions/runs?per_page=100&created=>=2026-07-01",
+        "--paginate",
+        "-q",
+        ".workflow_runs[]",
     ]
+    assert calls[0][1] == "repos/o/r/actions/runs?per_page=1&created=>=2026-07-01"
+
+
+def test_a_list_github_cut_short_is_refused(fr):
+    gh, _ = _gh_serving([_run("a", "success")], total=1500)
+
+    with pytest.raises(fr.MeasureError, match="got 1 of 1500 runs"):
+        fr.runs_from_gh("o/r", datetime(2026, 7, 1, tzinfo=UTC), gh)
+
+
+def test_the_window_is_counted_back_from_today(fr, monkeypatch):
+    class Frozen(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 9, 28, 12, tzinfo=tz)
+
+    monkeypatch.setattr(fr, "datetime", Frozen)
+    gh, calls = _gh_serving([_run("a", "success")])
+
+    assert fr.main(["--days", "10"], gh=gh) == 0
+    assert "created=>=2026-09-18" in calls[-1][1]
+    assert fr.main([], gh=gh) == 0
+    assert "created=>=2026-06-30" in calls[-1][1]
 
 
 def test_earlier_attempts_are_asked_one_by_one(fr):
@@ -180,6 +209,8 @@ def test_the_command_measures_through_gh(fr, capsys):
     def gh(args):
         if "attempts" in args[1]:
             return "failure"
+        if args[-1] == ".total_count":
+            return "1"
         return json.dumps(_run("a", "success", attempt=2)) + "\n"
 
     assert fr.main(["--budget", "1"], gh=gh) == 0

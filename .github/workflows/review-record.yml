@@ -2,9 +2,12 @@
 # it: a comment that starts with "## Independent review record". Branch
 # protection requires the "review record" status this sets on the head commit.
 #
-# It checks that the record exists, not who wrote it: with one maintainer the
-# record is posted from the same account (docs/READINESS.md section 2). It runs
-# no project code, and reads nothing but the pull request's comments.
+# Only a comment from the owner, a member or a collaborator counts: the
+# repository is public and anyone may comment. It checks that the record
+# exists, not who wrote its text: with one maintainer the record is posted from
+# the same account (docs/READINESS.md section 2). A record posted for an older
+# commit still counts after a later push. It runs no project code, and reads
+# nothing but the pull request's comments.
 name: Review record
 
 on:
@@ -29,10 +32,13 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: |
-          set -eu
+          set -euo pipefail
           sha=$(gh api "repos/$REPO/pulls/$PR" -q .head.sha)
-          found=$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
-            -q '.[] | select(.body | startswith("## Independent review record")) | .id' | head -n 1)
+          ids=$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
+            -q '.[] | select(.author_association == "OWNER" or .author_association == "MEMBER"
+                     or .author_association == "COLLABORATOR")
+                | select(.body | startswith("## Independent review record")) | .id')
+          found=${ids%%$'\n'*}
           if [ -n "$found" ]; then
             state=success; text="record posted (comment $found)"
           else
