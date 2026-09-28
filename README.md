@@ -147,10 +147,12 @@ Install the optional extractors with `pip install 'cubby-sort[extract]'`.
 Run `cubby doctor` to see what is active.
 
 A converter that is installed and breaks on a file (it times out, crashes,
-runs out of memory or exits with an error) does not stop the sort: the file is
-still routed by its name and type. It is not hidden either: the log gets a
-WARNING line naming the file, the converter and how it failed, and `cubby
-status` counts those files over the last 24 hours. A converter that is not
+runs out of memory or exits with an error) does not stop the sort: the next
+converter is tried, and when none gives text the file is still routed by its
+name and type. That last case is not hidden either: the log gets a WARNING
+line naming the file, each converter and how it failed, and `cubby status`
+counts those files over the last 24 hours. A file that a later converter
+still read is sorted by its content and not reported. A converter that is not
 installed is only reported by `cubby doctor`.
 
 Reading is bounded, because cubby runs unattended. A file over 20 MB is not

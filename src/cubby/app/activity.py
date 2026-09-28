@@ -1,7 +1,8 @@
 """What cubby did over a recent window, read from the run ledger.
 
 ``cubby status`` shows it: how many runs, moves and failures, and the failures
-grouped by kind of error, plus how many files a content converter broke on
+grouped by kind of error, plus how many files lost their content to a broken
+converter
 (sorted anyway, so counted apart from the failures). Forty files refused with
 the same permission error are one problem to fix, not forty, so they read as
 one line, with the files it hit, when it was last seen and which cubby versions
@@ -38,7 +39,7 @@ class Activity:
     failed: int  # exact, even when a run recorded only its first failures
     errors: tuple[ErrorGroup, ...]  # the most frequent first
     complete: bool  # False when the ledger was trimmed of runs inside the window
-    extraction_failures: int  # files sorted without their content: a converter broke
+    extraction_failures: int  # files sorted without their content: converters broke
 
 
 def error_kind(error: str) -> str:

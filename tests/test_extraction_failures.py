@@ -466,3 +466,214 @@ def test_a_damaged_count_is_refused_like_any_damaged_record(tmp_path):
     )
 
     assert [r.run for r in ledger.runs()] == ["r"]
+
+
+# --- round 2: a file whose text a later backend rescued is not a failure ---------
+
+
+def _rescue_pdf_by_pypdf(monkeypatch):
+    """pdftotext exits 1, then the pdf parser child reads the text."""
+    monkeypatch.setattr(
+        extraction.shutil, "which", lambda name: PDFTOTEXT if name == "pdftotext" else None
+    )
+    monkeypatch.setattr(extraction.importlib.util, "find_spec", lambda name: object())
+
+    def run(cmd, *args, **kwargs):
+        if cmd[0] == PDFTOTEXT:
+            return subprocess.CompletedProcess(cmd, 1, b"", b"")
+        return subprocess.CompletedProcess(cmd, 0, b"numero de facture 42", b"")
+
+    monkeypatch.setattr(extraction.subprocess, "run", run)
+    return "scan.pdf"
+
+
+def _rescue_docx_by_textutil(monkeypatch):
+    """The docx parser child exits 3, then textutil reads the text."""
+    monkeypatch.setattr(extraction.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(extraction.importlib.util, "find_spec", lambda name: object())
+
+    def run(cmd, *args, **kwargs):
+        if cmd[0] == "/usr/bin/textutil":
+            return subprocess.CompletedProcess(cmd, 0, b"numero de facture 42", b"")
+        return subprocess.CompletedProcess(cmd, parsers.EXIT_PARSE_FAILED, b"", b"KeyError: x\n")
+
+    monkeypatch.setattr(extraction.subprocess, "run", run)
+    return "letter.docx"
+
+
+def _rescue_html_by_direct_read(monkeypatch):
+    """textutil exits 1, then cubby strips the tags itself."""
+    monkeypatch.setattr(extraction.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        extraction.subprocess,
+        "run",
+        lambda cmd, *a, **k: subprocess.CompletedProcess(cmd, 1, b"", b""),
+    )
+    return "page.html"
+
+
+def _text_despite_a_non_zero_exit(monkeypatch):
+    """pdftotext prints the text, then exits 1 (a warning it treats as an error)."""
+    monkeypatch.setattr(
+        extraction.shutil, "which", lambda name: PDFTOTEXT if name == "pdftotext" else None
+    )
+    monkeypatch.setattr(extraction.importlib.util, "find_spec", lambda name: None)
+    monkeypatch.setattr(
+        extraction.subprocess,
+        "run",
+        lambda cmd, *a, **k: subprocess.CompletedProcess(cmd, 1, b"numero de facture 42", b""),
+    )
+    return "scan.pdf"
+
+
+RESCUES = [
+    _rescue_pdf_by_pypdf,
+    _rescue_docx_by_textutil,
+    _rescue_html_by_direct_read,
+    _text_despite_a_non_zero_exit,
+]
+
+
+@pytest.mark.parametrize("rescue", RESCUES)
+def test_a_rescued_file_keeps_its_text_and_reports_no_failure(monkeypatch, tmp_path, rescue):
+    name = rescue(monkeypatch)
+    path = aged_file(tmp_path, name, "<p>numero de facture 42</p>")
+
+    result = extract(path, name.rpartition(".")[2])
+
+    assert "numero de facture 42" in result.text
+    assert result.failures == ()
+
+
+@pytest.mark.parametrize("rescue", RESCUES)
+def test_a_rescued_file_is_sorted_by_content_with_no_warning_and_no_count(
+    monkeypatch, tmp_path, rescue
+):
+    name = rescue(monkeypatch)
+    source = tmp_path / "Downloads"
+    aged_file(source, name, "<p>numero de facture 42</p>")
+    categories = (
+        Category(name="Invoices", content_patterns=("numero de facture",)),
+        Category(name="Documents", extensions=frozenset({"pdf", "docx", "html"})),
+    )
+    warnings: list[str] = []
+    ledger = Ledger(tmp_path / "state")
+
+    (outcome,) = Sorter(
+        config_for(source, *categories, content_scan=True), warn=warnings.append, ledger=ledger
+    ).sort_once(apply=True)
+
+    assert outcome.category == "Invoices"  # read by its content
+    assert warnings == []
+    assert ledger.runs()[0].extraction_failures == 0
+
+
+def test_whitespace_is_not_a_rescue(monkeypatch, tmp_path, only_pdftotext):
+    _pdftotext_does(monkeypatch, lambda cmd: subprocess.CompletedProcess(cmd, 1, b" \n\f\n", b""))
+
+    (failure,) = extract(_pdf(tmp_path), "pdf").failures
+
+    assert failure.kind == "exit"
+
+
+# --- round 2: what a failure says ------------------------------------------------
+
+
+def test_the_first_non_blank_line_of_stderr_is_the_reason(monkeypatch, tmp_path, only_pdftotext):
+    _pdftotext_does(monkeypatch, _exits(1, b"\n   \nreason one\nreason two\n"))
+
+    (failure,) = extract(_pdf(tmp_path), "pdf").failures
+
+    assert failure.detail == "status 1, reason one"
+
+
+def test_a_traceback_is_summed_up_by_its_last_line(monkeypatch, tmp_path, only_pdftotext):
+    traceback = (
+        b"Traceback (most recent call last):\n"
+        b'  File "<frozen runpy>", line 198, in _run_module_as_main\n'
+        b"MemoryError\n"
+    )
+    _pdftotext_does(monkeypatch, _exits(1, traceback))
+
+    (failure,) = extract(_pdf(tmp_path), "pdf").failures
+
+    assert failure.detail == "status 1, MemoryError"
+
+
+def test_the_detail_names_the_file_not_its_absolute_path(monkeypatch, tmp_path, only_pdftotext):
+    path = _pdf(tmp_path / "deep" / "folder")
+    said = f"PackageNotFoundError: Package not found at '{path}'".encode()
+    _pdftotext_does(monkeypatch, _exits(1, said))
+
+    (failure,) = extract(path, "pdf").failures
+
+    assert failure.detail == "status 1, PackageNotFoundError: Package not found at 'scan.pdf'"
+    assert str(tmp_path) not in failure.detail
+
+
+def test_a_direct_read_error_names_the_file_not_its_absolute_path(monkeypatch, tmp_path):
+    monkeypatch.setattr(extraction.shutil, "which", lambda name: None)
+    path = aged_file(tmp_path / "deep", "notes.txt")
+
+    def refuse(*args, **kwargs):
+        raise PermissionError(13, "Permission denied", str(path))
+
+    monkeypatch.setattr(extraction.Path, "open", refuse)
+
+    (failure,) = extract(path, "txt").failures
+
+    assert str(tmp_path) not in failure.detail
+    assert "notes.txt" in failure.detail
+
+
+# --- round 2: the survivors of the review's mutation run -----------------------
+
+
+def test_a_warning_that_cannot_reach_stderr_does_not_fail_the_file(
+    monkeypatch, tmp_path, only_pdftotext
+):
+    _pdftotext_does(monkeypatch, _times_out)
+    source = tmp_path / "Downloads"
+    _pdf(source)
+    ledger = Ledger(tmp_path / "state")
+
+    def closed_stderr(message: str) -> None:
+        raise BrokenPipeError(32, "Broken pipe")
+
+    (outcome,) = Sorter(_content_config(source), warn=closed_stderr, ledger=ledger).sort_once(
+        apply=True
+    )
+
+    assert outcome.error is None
+    assert outcome.moved_to is not None
+    (record,) = ledger.runs()
+    assert (record.failed, record.extraction_failures) == (0, 1)
+
+
+def test_status_shows_a_single_extraction_failure(monkeypatch, capsys):
+    monkeypatch.setattr(cli_agent, "detect_service", lambda: None)
+    now = datetime.now().isoformat(timespec="seconds")
+    Ledger().record(
+        RunRecord("r1", "watch", "/d", now, now, moved=1, failed=0, extraction_failures=1)
+    )
+
+    main(["status"])
+
+    assert "content unreadable for 1 (see cubby log --warnings)" in capsys.readouterr().out
+
+
+# --- round 2: the ledger refuses a count cubby never writes ---------------------
+
+
+@pytest.mark.parametrize("field", ["moved", "failed", "extraction_failures"])
+@pytest.mark.parametrize("value", [-2, True, 2.9, "3", None])
+def test_a_count_that_is_not_a_non_negative_integer_makes_the_line_damaged(tmp_path, field, value):
+    ledger = Ledger(tmp_path)
+    good = RunRecord("r", "run", "/d", "a", "b", moved=1, failed=0, extraction_failures=1).to_json()
+    ledger.runs_path.parent.mkdir(parents=True, exist_ok=True)
+    ledger.runs_path.write_text(
+        json.dumps({**good, "run": "bad", field: value}) + "\n" + json.dumps(good) + "\n",
+        encoding="utf-8",
+    )
+
+    assert [r.run for r in ledger.runs()] == ["r"]

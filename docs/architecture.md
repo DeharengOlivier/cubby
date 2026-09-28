@@ -39,7 +39,8 @@ Each adapter implements one IO concern behind a small surface:
 - `extraction.py`, `parsers.py` - text extraction with graceful multi-backend
   fallback; the Python parsers run in a bounded child process. A converter that
   breaks (timeout, crash, non-zero exit) is returned as a `ConverterFailure`
-  beside the text; `build_ref` hands it to the caller, and the sorter logs it
+  beside the text, only when no converter gave usable text (a rescued file
+  lost nothing); `build_ref` hands it to the caller, and the sorter logs it
   as a WARNING and counts it in the run's ledger record. The domain still sees
   only the text.
 - `filesystem.py` - candidate discovery, eligibility, collision-safe moves, and

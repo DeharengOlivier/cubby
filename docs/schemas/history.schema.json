@@ -60,7 +60,7 @@
             }
           },
           "extraction_failures": {
-            "description": "Files whose content a converter broke on (timeout, crash, non-zero exit): sorted anyway by name and type, so not counted in failed. 0 in a record written before the count existed.",
+            "description": "Files whose content was lost: every converter that tried broke (timeout, crash, non-zero exit) and none gave usable text. Sorted anyway by name and type, so not counted in failed. A file another converter rescued is not counted. 0 in a record written before the count existed.",
             "type": "integer",
             "minimum": 0
           },
