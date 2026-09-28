@@ -243,7 +243,10 @@ def _make_folder(folder: Path, root: Path) -> None:
     try:
         folder.mkdir(parents=True, exist_ok=True)
     except (FileExistsError, NotADirectoryError) as exc:
-        blocker = _file_in_the_way(folder, root)
+        try:
+            blocker = _file_in_the_way(folder, root)
+        except OSError:
+            raise exc from None  # the search failed: the real error is the useful one
         if blocker is None:
             raise
         try:
@@ -263,7 +266,8 @@ def _file_in_the_way(folder: Path, root: Path) -> Path | None:
     for path in [folder, *folder.parents]:
         if path in (root, path.parent):
             break
-        if path.exists() and not path.is_dir():
+        # lexists: a dangling symlink is in the way too.
+        if os.path.lexists(path) and not path.is_dir():
             blocker = path
     return blocker
 

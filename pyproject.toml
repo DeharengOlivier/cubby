@@ -70,6 +70,7 @@ select = [
     "PL",   # pylint subset: complexity and argument budgets
     "C90",  # McCabe complexity, held at 10 (CODING-RULES code shape budget)
     "RUF",
+    "TID251",  # banned APIs below
 ]
 ignore = [
     "PLR2004",  # magic values in comparisons: the tests compare literal expectations
@@ -77,12 +78,21 @@ ignore = [
     "S607",     # partial path: we resolve absolute paths with shutil.which
 ]
 
+# State files are parsed through `state.parse_json`, which turns the parser's
+# RecursionError on a deeply nested line into a decode error like any damage.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"json.loads".msg = "use cubby.adapters.state.parse_json"
+"json.load".msg = "use cubby.adapters.state.parse_json"
+"json.JSONDecoder".msg = "use cubby.adapters.state.parse_json"
+"json.decoder".msg = "use cubby.adapters.state.parse_json"
+
 [tool.ruff.lint.mccabe]
 max-complexity = 10
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S108", "PLR0913", "PLC0415"]
-"benchmarks/**" = ["S", "T20"]
+"tests/**" = ["S101", "S108", "PLR0913", "PLC0415", "TID251"]
+"src/cubby/adapters/state.py" = ["TID251"]
+"benchmarks/**" = ["S", "T20", "TID251"]
 
 [tool.ruff.lint.pylint]
 max-args = 7

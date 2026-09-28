@@ -83,27 +83,13 @@ def test_ordinary_nesting_still_parses(tmp_path, depth):
     assert len(journal.runs()) == 1
 
 
-def test_no_module_parses_json_except_through_parse_json():
-    # Held by the AST, not by a comment: a new reader calling json.loads
-    # directly would bring the crash back for its file.
-    import ast
+def test_a_config_file_nested_too_deep_is_a_config_error(tmp_path, capsys):
+    from cubby.cli import main
 
-    source = Path(__file__).resolve().parents[1] / "src" / "cubby"
-    offenders = []
-    for module in source.rglob("*.py"):
-        if module.name == "state.py" and module.parent.name == "adapters":
-            continue
-        tree = ast.parse(module.read_text("utf-8"))
-        for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.Attribute)
-                and node.attr in {"loads", "load"}
-                and isinstance(node.value, ast.Name)
-                and node.value.id == "json"
-            ) or (
-                isinstance(node, ast.ImportFrom)
-                and node.module == "json"
-                and any(alias.name in {"loads", "load"} for alias in node.names)
-            ):
-                offenders.append(f"{module.relative_to(source)}:{node.lineno}")
-    assert offenders == []
+    config = tmp_path / "cubby.toml"
+    config.write_text("x = " + "[" * 100_000 + "]" * 100_000 + "\n", encoding="utf-8")
+
+    code = main(["plan", "--config", str(config), "--source", str(tmp_path)])
+
+    assert code == 2
+    assert "is not valid TOML: nested too deep to read" in capsys.readouterr().err

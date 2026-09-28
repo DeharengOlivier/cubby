@@ -203,7 +203,7 @@ def _tree(root: Path) -> dict[str, bytes]:
         # it fail on purpose (tests/test_file_in_folder_path.py).
         (
             file_names.map(lambda s: s + ".txt") | file_names.map(lambda s: s + ".png") | file_names
-        ).filter(lambda s: s not in {"Invoices", "Images", "Documents", "_Unsorted"}),
+        ).filter(lambda s: s.casefold() not in {"invoices", "images", "documents", "_unsorted"}),
         st.binary(max_size=8),
         min_size=1,
         max_size=12,
