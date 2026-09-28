@@ -66,7 +66,10 @@ def human_line(record: dict[str, str]) -> str:
     The message names files, and a line the service manager appended can hold
     anything: neither reaches the terminal raw.
     """
-    ts, level, msg = (shown(str(record.get(key) or "")) for key in ("ts", "level", "msg"))
+    ts, level, msg = (
+        "" if (value := record.get(key)) is None else shown(str(value))
+        for key in ("ts", "level", "msg")
+    )
     return f"{ts or '?'}  {level or '?':<7} {msg}"
 
 
