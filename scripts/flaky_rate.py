@@ -93,8 +93,13 @@ def _gh(args: list[str]) -> str:
 
 def runs_from_gh(repo: str, since: datetime, gh: Callable[[list[str]], str] = _gh) -> list[Any]:
     query = f"repos/{repo}/actions/runs?per_page=100&created=>={since:%Y-%m-%d}"
+    total = int(gh(["api", query.replace("per_page=100", "per_page=1"), "-q", ".total_count"]))
     out = gh(["api", query, "--paginate", "-q", ".workflow_runs[]"])
-    return [json.loads(line) for line in out.splitlines() if line.strip()]
+    runs = [json.loads(line) for line in out.splitlines() if line.strip()]
+    # With a created= filter GitHub serves at most 1000 runs and stops quietly.
+    if len(runs) < total:
+        raise MeasureError(f"got {len(runs)} of {total} runs: shorten --days")
+    return runs
 
 
 def attempts_from_gh(repo: str, gh: Callable[[list[str]], str] = _gh) -> Attempts:
