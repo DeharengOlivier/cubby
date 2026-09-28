@@ -242,7 +242,9 @@ def _print_activity(pal: Palette, day: Activity) -> None:
     if day.failed:
         summary += pal.yellow(f", {day.failed} failed")
     if not day.complete:
-        summary += pal.yellow(" (the ledger was trimmed: older runs of the window are missing)")
+        summary += pal.yellow(
+            f" (the ledger keeps its last {KEEP_LINES} runs: older ones may be missing)"
+        )
     kv(pal, f"last {ACTIVITY_HOURS} h", summary)
     for group in day.errors:
         print(f"  {group.count}x {_shortened(group.kind)}")

@@ -282,7 +282,7 @@
           }
         },
         "complete": {
-          "description": "False when the ledger, trimmed to its last 2000 lines, may be missing older runs of the window.",
+          "description": "False when the ledger holds as many runs as it keeps (2000) and none older than the window: runs of the window may have been dropped. A hint, not a proof.",
           "type": "boolean"
         }
       },

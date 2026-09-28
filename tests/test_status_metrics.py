@@ -339,3 +339,20 @@ def test_a_stop_during_the_sleep_ends_the_loop_without_another_pass(tmp_path):
     assert beat is not None
     assert beat.last_pass is not None
     assert beat.last_pass.waiting == 1
+
+
+def test_status_warns_when_the_ledger_may_miss_part_of_the_day(capsys, monkeypatch):
+    monkeypatch.setattr(cli_agent, "detect_service", lambda: None)
+    monkeypatch.setattr(cli_agent, "KEEP_LINES", 3)
+    ledger = Ledger()
+    now = datetime.now()
+    for i in range(3):
+        ledger.record(_record(f"r{i}", now - timedelta(hours=i)))
+
+    main(["status", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    main(["status"])
+    text = capsys.readouterr().out
+
+    assert payload["activity"]["complete"] is False
+    assert "the ledger keeps its last 3 runs: older ones may be missing" in text
