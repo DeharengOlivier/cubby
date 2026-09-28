@@ -244,6 +244,7 @@ def _tally(lines: list[str]) -> dict[str, tuple[int, int]]:
 
 
 def _run_of(line: str) -> str | None:
+    """The run a line belongs to, keyed as the reads key it (see :func:`_fields`)."""
     try:
         record = json.loads(line)
     except json.JSONDecodeError:
@@ -252,8 +253,9 @@ def _run_of(line: str) -> str | None:
         return None
     if "moves" in record and "v" not in record:
         return _v1_run_id(line)
-    run = record.get("run")
-    return run if isinstance(run, str) else None
+    # The reads take str() of any id, so a run read as "7" must be kept as "7":
+    # keeping string ids only dropped such a run with its moves still to undo.
+    return str(record["run"]) if "run" in record else None
 
 
 def _seq(value: object) -> int:
@@ -277,7 +279,7 @@ def _fields(line: str) -> Iterator[_Fields]:
 
     Anything malformed yields nothing: a damaged line costs that line only. A
     version 1 line stops at its first malformed move. Building ``Path`` objects
-    is most of the cost of reading, so it is left to :func:`_parse`.
+    is most of the cost of reading, so it is left to :func:`_run_from`.
     """
     try:
         record = json.loads(line)

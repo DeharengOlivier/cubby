@@ -23,6 +23,9 @@ All notable changes to this project are documented here. The format is based on
   the version too; older records read as `unknown`.
 
 ### Fixed
+- Journal compaction dropped a run whose id was not a string (a hand-edited
+  or foreign line such as `"run": 7`) while `cubby undo` could still revert
+  it: the reads took such an id as `"7"`, compaction ignored it.
 - Run ids carry 64 random bits instead of 32. Two runs started in the same
   second could draw the same id (CI saw it once in 5 000 draws), and their
   moves then shared one journal entry list: undoing one reverted both. Older
