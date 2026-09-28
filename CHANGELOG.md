@@ -18,9 +18,9 @@ All notable changes to this project are documented here. The format is based on
 - `ignore` setting: glob patterns (case-insensitive) of file names cubby never
   touches.
 - `cubby plan --json` items carry the deciding rule.
-- `cubby pause [--for 2h]` and `cubby resume`: stop the agent moving files at its
-  next pass without uninstalling it. A damaged pause file counts as a pause
-  (fail closed). `cubby status` shows the pause; a manual `cubby run` still
+- `cubby pause [--for 2h]` (at most 366 days) and `cubby resume`: the agent
+  moves nothing more from the next file on, without uninstalling it. Any pause
+  file cubby cannot read counts as a pause (fail closed). `cubby status` shows the pause; a manual `cubby run` still
   works and says the agent is paused.
 - Desktop notifications when the agent cannot sort a file, a pass fails, or the
   watched folder goes missing: once per file or per problem, not at every pass.

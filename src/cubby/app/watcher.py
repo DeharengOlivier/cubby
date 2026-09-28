@@ -137,7 +137,7 @@ class Watcher:
             return 0
         try:
             with exclusive(timeout=self._lock_timeout):
-                outcomes = self._sorter.sort_once(apply=True, stop=self._stop)
+                outcomes = self._sorter.sort_once(apply=True, stop=self._stop_or_pause)
         except Busy as exc:
             self._log(f"pass skipped: {exc}", level="WARNING")
             return 0
@@ -153,9 +153,20 @@ class Watcher:
         self._beat()
         return sum(1 for o in outcomes if o.error is None)
 
+    def _pause_reason(self) -> str | None:
+        """The pause in force. A check that fails counts as a pause (fail closed)."""
+        try:
+            return self._paused()
+        except Exception as exc:  # noqa: BLE001 - when in doubt, do not move files
+            return f"paused (pause check failed: {describe_error(exc)})"
+
+    def _stop_or_pause(self) -> bool:
+        """Checked before each file: a stop or a pause ends the pass there."""
+        return self._stop() or self._pause_reason() is not None
+
     def _is_paused(self) -> bool:
         """True while a pause is in force, said once when it starts and ends."""
-        reason = self._paused()
+        reason = self._pause_reason()
         if reason and not self._was_paused:
             self._log(f"{reason}: passes skipped until 'cubby resume'")
         elif not reason and self._was_paused:
@@ -189,15 +200,16 @@ class Watcher:
             self._log(f"sorted {sorted_count} item(s)")
         if failed:
             self._log(f"{failed} item(s) could not be sorted", level="WARNING")
-            self._alert_new_failures(outcomes)
+        self._alert_new_failures(outcomes)
 
     def _alert_new_failures(self, outcomes: list[SortOutcome]) -> None:
         """Announce each file that cannot be sorted once, not at every pass."""
-        new = [o.name for o in outcomes if o.error and o.name not in self._alerted]
+        failing = [o.name for o in outcomes if o.error]
+        new = [name for name in failing if name not in self._alerted]
+        # Remember only what fails now: a file that recovers and fails again
+        # is announced again, and the set never outgrows one pass.
+        self._alerted = set(failing[:_MAX_ALERTED])
         if not new:
             return
-        if len(self._alerted) + len(new) > _MAX_ALERTED:
-            self._alerted.clear()
-        self._alerted.update(new)
         shown = ", ".join(new[:3]) + (f" and {len(new) - 3} more" if len(new) > 3 else "")
         self._alert(f"Could not sort {shown}. See 'cubby status'.")

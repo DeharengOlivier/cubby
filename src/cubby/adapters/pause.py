@@ -13,6 +13,7 @@ doubt, the agent does not move files.
 from __future__ import annotations
 
 import json
+import math
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -21,6 +22,10 @@ from pathlib import Path
 from . import state
 
 VERSION = 1
+#: The longest pause ``--for`` accepts; longer is "until resumed".
+MAX_DURATION = 366 * 86400.0
+#: Any ``until`` past this (year 3000) is not a time cubby wrote.
+_LATEST = 32_503_680_000.0
 
 
 def pause_path() -> Path:
@@ -74,24 +79,37 @@ def clear_pause() -> bool:
     return True
 
 
+_DAMAGED = Pause(since="unknown", until=None, damaged=True)
+
+
 def current_pause(now: float | None = None) -> Pause | None:
     """The pause in force, if any. An expired pause is no pause."""
-    path = pause_path()
     try:
-        raw = path.read_text(encoding="utf-8")
+        raw = pause_path().read_text(encoding="utf-8")
     except FileNotFoundError:
         return None
-    except OSError:
-        return Pause(since="unknown", until=None, damaged=True)
+    except (OSError, UnicodeDecodeError):
+        return _DAMAGED
+    pause = _parse(raw)
+    now = time.time() if now is None else now
+    if pause.until is not None and now >= pause.until:
+        return None
+    return pause
+
+
+def _parse(raw: str) -> Pause:
+    """The pause a file records; anything cubby did not write is a damaged one."""
     try:
         data = json.loads(raw)
-        since = str(data["since"])
-        until = data["until"]
-        if until is not None and (isinstance(until, bool) or not isinstance(until, (int, float))):
-            raise TypeError("until")
-    except (json.JSONDecodeError, KeyError, TypeError):
-        return Pause(since="unknown", until=None, damaged=True)
-    now = time.time() if now is None else now
-    if until is not None and now >= until:
-        return None
+        since, until = data["since"], data["until"]
+    except (ValueError, KeyError, TypeError):  # JSONDecodeError is a ValueError
+        return _DAMAGED
+    valid_until = until is None or (
+        not isinstance(until, bool)
+        and isinstance(until, (int, float))
+        and math.isfinite(until)
+        and until <= _LATEST
+    )
+    if not isinstance(since, str) or not valid_until:
+        return _DAMAGED
     return Pause(since=since, until=None if until is None else float(until))
