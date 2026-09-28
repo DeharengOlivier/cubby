@@ -92,8 +92,10 @@ What undo does with each file of the run:
   replaced by another file of the same name, or changed since (its size or modification time
   differs). Moving it could take a file cubby never moved, so undo prints
   `skip (changed or replaced since the run: PATH is left in place; move it back to ORIGINAL
-  by hand if it is yours)`. A folder counts as the same folder as long as it was not
-  replaced: files added to it or removed from it do not stop undo. Runs made by cubby 0.2.0
+  by hand if it is yours)`. A folder counts as the same folder while one file that was
+  in it when it was moved (the first by name) is still in it, unchanged: files added,
+  renamed or removed around it do not stop undo, a folder deleted and made again does. An
+  empty folder counts as the same while nothing was added to it. Runs made by cubby 0.2.0
   and older did not record this, and undo moves what it finds there.
 - **Duplicate not recreated**: for a duplicate that `dedupe` deleted, the kept copy changed or
   was replaced since the run. Undo prints `skip (the copy kept at PATH changed or was replaced

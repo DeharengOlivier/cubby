@@ -14,10 +14,13 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import time
+from pathlib import Path
 
 import pytest
 
+from cubby.adapters.filesystem import identity, same_file
 from cubby.adapters.journal import Journal
 from cubby.app.sorter import Sorter
 from cubby.app.undo import undo_run
@@ -266,3 +269,75 @@ def test_a_move_whose_identity_cannot_be_read_says_undo_will_not_check_it(tmp_pa
 
     assert journal.runs()[0].entries[0].ident is None
     assert any("could not read" in w and "a.txt" in w for w in warnings)
+
+
+# --- from the re-review ----------------------------------------------------------
+
+
+def _sorted_folder(tmp_path, *files: str) -> tuple[Journal, Path]:
+    (tmp_path / "project").mkdir()
+    for name in files:
+        (tmp_path / "project" / name).write_text(name, encoding="utf-8")
+    past = time.time() - 10_000
+    os.utime(tmp_path / "project", (past, past))
+    journal = Journal(tmp_path.parent / f"{tmp_path.name}.jsonl")
+    Sorter(config_for(tmp_path), journal=journal).sort_once(apply=True)
+    return journal, tmp_path / "_Unsorted" / "project"
+
+
+def test_a_folder_deleted_and_made_again_is_left_in_place(tmp_path):
+    # Found by re-review: ext4 gave the new folder the old one's inode, and
+    # undo moved the user's new folder out.
+    journal, filed = _sorted_folder(tmp_path, "a.txt")
+    shutil.rmtree(filed)
+    filed.mkdir()
+    (filed / "users-own.txt").write_text("mine", encoding="utf-8")
+
+    result = undo_run(journal)
+
+    assert (result.restored, result.replaced) == (0, 1)
+    assert (filed / "users-own.txt").exists()
+
+
+def test_a_folder_whose_files_were_renamed_or_added_still_comes_back(tmp_path):
+    journal, filed = _sorted_folder(tmp_path, "a.txt", "b.txt")
+    (filed / "a.txt").rename(filed / "z.txt")
+    (filed / "new.txt").write_text("added", encoding="utf-8")
+
+    assert undo_run(journal).restored == 1
+
+
+def test_an_empty_folder_comes_back(tmp_path):
+    journal, _ = _sorted_folder(tmp_path)
+
+    assert undo_run(journal).restored == 1
+    assert (tmp_path / "project").is_dir()
+
+
+def test_an_empty_folder_made_again_is_left_in_place(tmp_path):
+    journal, filed = _sorted_folder(tmp_path)
+    filed.rmdir()
+    filed.mkdir()
+    os.utime(filed, ns=(1, 1))  # whatever its inode, its time tells it apart
+
+    assert undo_run(journal).replaced == 1
+
+
+def test_the_device_number_is_not_compared(tmp_path):
+    # macOS numbers an external drive anew at each mount.
+    path = tmp_path / "a.txt"
+    path.write_text("x", encoding="utf-8")
+    dev, ino, size, mtime = identity(path)
+
+    assert same_file(path, (dev + 1, ino, size, mtime))
+    assert not same_file(path, (dev, ino + 1, size, mtime))
+
+
+def test_a_destination_under_a_file_now_is_gone(tmp_path):
+    journal, _ = _sorted(tmp_path, "a.txt")
+    shutil.rmtree(tmp_path / "Documents")
+    (tmp_path / "Documents").write_text("a file now", encoding="utf-8")
+
+    result = undo_run(journal)
+
+    assert (result.gone, result.failed) == (1, [])
