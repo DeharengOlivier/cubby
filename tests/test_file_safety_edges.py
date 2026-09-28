@@ -180,6 +180,14 @@ def test_text_is_read_up_to_the_default_window(tmp_path):
     assert len(build_ref(path).read_text()) == 4000
 
 
+def test_text_is_read_up_to_the_configured_window(tmp_path):
+    # Found by mutation round 11: dropping max_bytes fell back to the default
+    # 4000, which no test told apart from a configured content_max_bytes.
+    path = tmp_path / "long.txt"
+    path.write_text("a" * 10_000)
+    assert len(build_ref(path, 100).read_text()) == 100
+
+
 def test_skip_reasons_are_exact(tmp_path):
     settings = Settings(source=tmp_path)
     assert candidate_skip_reason(tmp_path / ".x", settings, frozenset()) == "hidden file"
