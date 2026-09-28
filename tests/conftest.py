@@ -10,16 +10,23 @@ import pytest
 from cubby.domain.category import Category, Config, Settings
 from cubby.domain.file_ref import FileRef
 
+# The isolation below uses its own MonkeyPatch, not the shared `monkeypatch`
+# fixture: a test calling `monkeypatch.undo()` would otherwise undo it too, and
+# the rest of that test would write to the developer's real state folder (it
+# happened once: tests/test_isolation.py pins it).
+
 
 @pytest.fixture(autouse=True)
-def _isolate_user_config(monkeypatch):
+def _isolate_user_config():
     """Keep tests hermetic: never read the developer's real ~/.config file."""
-    monkeypatch.setattr("cubby.adapters.config.find_user_config", lambda: None)
-    monkeypatch.delenv("CUBBY_CONFIG", raising=False)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("cubby.adapters.config.find_user_config", lambda: None)
+        mp.delenv("CUBBY_CONFIG", raising=False)
+        yield
 
 
 @pytest.fixture(autouse=True)
-def _isolate_user_state(monkeypatch, tmp_path_factory):
+def _isolate_user_state(tmp_path_factory):
     """Point every piece of cubby state (journal, ledger, heartbeat, log, lock)
     at a fresh folder for each test.
 
@@ -27,18 +34,22 @@ def _isolate_user_state(monkeypatch, tmp_path_factory):
     ~/.local/state/cubby/journal.jsonl, so a real `cubby undo` would replay a
     test's temp directories instead of their last real sort.
     """
-    monkeypatch.setenv("CUBBY_STATE_DIR", str(tmp_path_factory.mktemp("cubby-state")))
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("CUBBY_STATE_DIR", str(tmp_path_factory.mktemp("cubby-state")))
+        yield
 
 
 @pytest.fixture(autouse=True)
-def _no_network(monkeypatch):
+def _no_network():
     """Cubby makes no network calls; a test that tries one is a bug either way."""
 
     def refuse(*args, **kwargs):
         raise AssertionError("the test suite must not open network connections")
 
-    monkeypatch.setattr(socket.socket, "connect", refuse)
-    monkeypatch.setattr(socket, "create_connection", refuse)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(socket.socket, "connect", refuse)
+        mp.setattr(socket, "create_connection", refuse)
+        yield
 
 
 @pytest.fixture

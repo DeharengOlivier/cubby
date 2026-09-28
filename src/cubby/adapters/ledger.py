@@ -40,7 +40,7 @@ class RunRecord:
     """One run, as the ledger keeps it."""
 
     run: str
-    mode: str  # "run", "watch" or "undo"
+    mode: str  # "run" or "watch"
     source: str
     started: str
     finished: str

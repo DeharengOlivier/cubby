@@ -90,8 +90,7 @@
           "source",
           "stage",
           "subdir"
-        ],
-        "additionalProperties": false
+        ]
       }
     }
   },
@@ -101,6 +100,5 @@
     "failed",
     "items",
     "version"
-  ],
-  "additionalProperties": false
+  ]
 }

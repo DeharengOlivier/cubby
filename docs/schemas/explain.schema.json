@@ -61,14 +61,12 @@
           "rule",
           "skipped",
           "stage"
-        ],
-        "additionalProperties": false
+        ]
       }
     }
   },
   "required": [
     "items",
     "version"
-  ],
-  "additionalProperties": false
+  ]
 }

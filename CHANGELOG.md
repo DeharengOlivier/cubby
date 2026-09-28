@@ -9,7 +9,9 @@ All notable changes to this project are documented here. The format is based on
 ### Added
 - JSON Schemas for every `--json` output in `docs/schemas/` (`plan`, `status`,
   `history`, `explain`, `log-record`), checked against the real outputs by
-  the test suite.
+  the test suite. The schemas allow fields added later within a version.
+- `cubby log --json` prints nothing when there is no log yet (it printed a
+  text line), and turns a line cubby did not write into `{"msg": "<line>"}`.
 - `cubby log`: the agent's log, oldest first and including the rotated file,
   with `--run ID` (one pass), `--warnings`, `-n N` and `--json`.
 - Every log line names the cubby `version` that wrote it, and each line written
