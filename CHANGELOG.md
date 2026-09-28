@@ -24,6 +24,14 @@ All notable changes to this project are documented here. The format is based on
   against them.
 
 ### Fixed
+- A folder whose name matches an invoice rule was renamed and filed like an
+  invoice: `invoice-archive` became `Invoices/2026-09/archive facture`. A
+  folder matched by its name is now moved whole under its own name, at the
+  category's root. `docs/usage.md` wrongly said every folder goes to
+  `_Unsorted`; only a folder no rule names does.
+- `cubby install --no-content` was accepted but not passed on to the agent,
+  which went on reading file contents. The agent now runs with it.
+- `cubby doctor` lists `catdoc`, which content extraction already used.
 - A content converter that broke on a file (it timed out, crashed, ran out of
   memory or exited non-zero, `pdftotext` or the parser child for PDF, docx
   and xlsx alike) was indistinguishable from a file with no text: the file

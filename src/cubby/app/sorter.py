@@ -137,9 +137,14 @@ class Sorter:
         return self._config.settings.source
 
     def placement_for(self, path: Path, ref: FileRef, category: str) -> Placement:
-        """Month subfolder and optional rename for a finance file (else empty)."""
+        """Month subfolder and optional rename for a finance file (else empty).
+
+        A folder matched by its name is filed whole at the category's root,
+        under its own name: its name is not an invoice's, and it has no
+        printed date to file it by month.
+        """
         rules = self._by_name.get(category)
-        if rules is None or not rules.date_folders:
+        if rules is None or not rules.date_folders or not ref.is_file:
             return Placement(subdir="")
         settings = self._config.settings
         text = ref.text() if settings.content_scan else ""

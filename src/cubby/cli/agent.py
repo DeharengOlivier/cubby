@@ -67,6 +67,8 @@ def _program_args(args: argparse.Namespace) -> list[str]:
         base += ["--delay", str(args.delay)]
     if getattr(args, "interval", None) is not None:
         base += ["--interval", str(args.interval)]
+    if getattr(args, "no_content", False):
+        base += ["--no-content"]
     if getattr(args, "month_style", None):
         base += ["--month-style", str(args.month_style)]
     if getattr(args, "month_lang", None):
@@ -313,7 +315,9 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     kv(pal, "source", shown(str(config.settings.source)))
     kv(pal, "state", shown(str(state.state_dir())))
     kv(pal, "log", shown(str(state.log_path())))
-    tools = {name: bool(shutil.which(name)) for name in ("pdftotext", "textutil", "antiword")}
+    tools = {
+        name: bool(shutil.which(name)) for name in ("pdftotext", "textutil", "antiword", "catdoc")
+    }
     libs = {}
     for lib in ("pypdf", "docx", "openpyxl"):
         try:
