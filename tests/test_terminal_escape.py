@@ -15,6 +15,7 @@ before the fix.
 from __future__ import annotations
 
 import re
+import subprocess
 import unicodedata
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +24,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from cubby.adapters import notify as notify_module
 from cubby.adapters.ledger import Failure, Ledger, RunRecord
 from cubby.adapters.ui import escape_for_terminal
 from cubby.app.report import SortOutcome, render_plan
@@ -222,6 +224,47 @@ def test_json_outputs_are_unchanged(hostile, capsys):
     assert main(["plan", "--json", *_flags(hostile)]) == EXIT_OK
     payload = json.loads(capsys.readouterr().out)
     assert payload["items"][0]["name"] == HOSTILE
+
+
+# --- notifications ----------------------------------------------------------------
+
+
+@pytest.fixture
+def tools(monkeypatch):
+    monkeypatch.setattr(notify_module.shutil, "which", lambda name: f"/usr/bin/{name}")
+
+
+def test_notify_send_body_is_not_markup(tools):
+    cmd = notify_module.command(f"Could not sort <b>{HOSTILE}</b> & more", platform="linux")
+    assert cmd is not None
+    body = cmd[-1]
+    assert body == f"Could not sort &lt;b&gt;{SHOWN}&lt;/b&gt; &amp; more"
+    assert raw_controls(body) == []
+
+
+def test_osascript_text_is_escaped_but_not_as_markup(tools):
+    cmd = notify_module.command(f"Could not sort <b>{HOSTILE}</b> & more", platform="darwin")
+    assert cmd is not None
+    assert cmd[-1] == f"Could not sort <b>{SHOWN}</b> & more"
+
+
+def test_a_shortened_body_never_cuts_an_entity(tools):
+    cmd = notify_module.command("&" * 1000, platform="linux")
+    assert cmd is not None
+    assert cmd[-1] == "&amp;" * (notify_module.MAX_CHARS - 1) + "…"
+
+
+def test_the_notifier_sends_the_escaped_text(tools, monkeypatch):
+    sent: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        sent.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(notify_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(notify_module.sys, "platform", "linux")
+    notify_module.notifier(True)(f"Could not sort {HOSTILE}. See 'cubby status'.")
+    assert sent[0][-1] == f"Could not sort {SHOWN}. See 'cubby status'."
 
 
 # --- the escaping itself ----------------------------------------------------------

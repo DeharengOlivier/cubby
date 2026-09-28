@@ -4,7 +4,9 @@ The agent runs unattended, so a problem it only writes to its log is a
 problem nobody sees. A notification goes to the logged-in user through the
 platform's own tool: ``osascript`` on macOS, ``notify-send`` on Linux. The
 message travels as a program argument, never inside a script, so a file name
-cannot inject AppleScript or shell.
+cannot inject AppleScript or shell. Its control characters are escaped as they
+are for the terminal, and for ``notify-send``, whose body is markup, so are
+``&``, ``<`` and ``>``: a file name cannot inject a tag or a link either.
 
 Notifying is best effort and never raises: a missing tool or a failure is
 reported once to the caller's ``warn`` and the agent carries on.
@@ -12,10 +14,13 @@ reported once to the caller's ``warn`` and the agent carries on.
 
 from __future__ import annotations
 
+import html
 import shutil
 import subprocess
 import sys
 from collections.abc import Callable
+
+from .ui import escape_for_terminal
 
 TIMEOUT = 5.0
 TITLE = "cubby"
@@ -33,7 +38,8 @@ def _quiet(_: str) -> None:
 def command(message: str, platform: str | None = None) -> list[str] | None:
     """The argument list that shows ``message``, or None if there is no tool."""
     platform = platform or sys.platform
-    text = message if len(message) <= MAX_CHARS else message[: MAX_CHARS - 1] + "…"
+    text = escape_for_terminal(message)
+    text = text if len(text) <= MAX_CHARS else text[: MAX_CHARS - 1] + "…"
     if platform == "darwin":
         tool = shutil.which("osascript")
         if tool is None:
@@ -51,7 +57,8 @@ def command(message: str, platform: str | None = None) -> list[str] | None:
     tool = shutil.which("notify-send")
     if tool is None:
         return None
-    return [tool, "--app-name", TITLE, TITLE, text]
+    # Shortened first, then made markup: a cut never falls inside ``&amp;``.
+    return [tool, "--app-name", TITLE, TITLE, html.escape(text, quote=False)]
 
 
 def notifier(enabled: bool, *, warn: Warn = _quiet) -> Notify:
