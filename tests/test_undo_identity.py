@@ -13,6 +13,10 @@ the run is left in place too, and undo says so.
 from __future__ import annotations
 
 import json
+import os
+import time
+
+import pytest
 
 from cubby.adapters.journal import Journal
 from cubby.app.sorter import Sorter
@@ -95,13 +99,22 @@ def test_an_entry_without_identity_undoes_as_before(tmp_path):
 def test_a_damaged_identity_reads_as_unknown(tmp_path):
     journal = Journal(tmp_path / "j.jsonl")
     record = {"v": 2, "run": "r1", "seq": 0, "op": "move", "from": "/a", "to": "/b"}
-    recorded = [[1, 2, 3, 4], [1, 2], "x", [1, 2, 3, "4"], [True, 2, 3, 4], [-1, 2, 3, 4], None]
+    recorded = [
+        [1, 2, 3, 4],
+        [0, 2, 0, 0],
+        [1, 2],
+        "x",
+        [1, 2, 3, "4"],
+        [True, 2, 3, 4],
+        [-1, 2, 3, 4],
+        None,
+    ]
     lines = [json.dumps({**record, "seq": i, "id": ident}) for i, ident in enumerate(recorded)]
     journal.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     idents = [entry.ident for entry in journal.runs()[0].entries]
 
-    assert idents == [(1, 2, 3, 4), None, None, None, None, None, None]
+    assert idents == [(1, 2, 3, 4), (0, 2, 0, 0), None, None, None, None, None, None]
 
 
 def test_a_duplicate_is_not_recreated_from_a_replaced_copy(tmp_path):
@@ -132,12 +145,12 @@ def test_undo_says_what_it_could_not_put_back_and_exits_1(tmp_path, capsys):
     capsys.readouterr()
 
     code = main(["undo"])
-    out = capsys.readouterr().out
+    captured = capsys.readouterr()
 
     assert code == 1
-    assert "Restored 1 file(s)." in out
-    assert "1 no longer where the run put it" in out
-    assert "1 changed or replaced since the run, left in place" in out
+    assert "Restored 1 file(s)." in captured.out
+    assert "cubby: 1 no longer where the run put it" in captured.err
+    assert "cubby: 1 changed or replaced since the run, left in place" in captured.err
 
 
 def test_undo_says_when_a_file_comes_back_under_another_name(tmp_path, capsys):
@@ -149,3 +162,107 @@ def test_undo_says_when_a_file_comes_back_under_another_name(tmp_path, capsys):
     main(["undo"])
 
     assert "restored notes.txt as notes (1).txt (notes.txt is taken)" in capsys.readouterr().out
+
+
+# --- from the review of this change ---------------------------------------------
+
+
+def test_a_sorted_folder_whose_content_changed_still_comes_back(tmp_path):
+    # A folder's mtime moves whenever an entry inside changes (Finder writes
+    # .DS_Store just by opening it): only the inode tells a folder apart.
+    (tmp_path / "holiday").mkdir()
+    (tmp_path / "holiday" / "a.jpg").write_bytes(b"x")
+    past = 10_000
+    os.utime(tmp_path / "holiday", (time.time() - past, time.time() - past))
+    journal = Journal(tmp_path.parent / "f.jsonl")
+    Sorter(config_for(tmp_path), journal=journal).sort_once(apply=True)
+    moved = next((tmp_path / "_Unsorted").iterdir())
+    (moved / ".DS_Store").write_bytes(b"finder")
+
+    assert undo_run(journal).restored == 1
+    assert (tmp_path / "holiday" / ".DS_Store").exists()
+
+
+def test_a_changed_kept_copy_is_not_called_a_file_to_move_back(tmp_path):
+    aged_file(tmp_path / "Documents", "report.txt", content="SAME")
+    aged_file(tmp_path, "report.txt", content="SAME")
+    journal = Journal(tmp_path.parent / "k.jsonl")
+    Sorter(config_for(tmp_path, dedupe=True), journal=journal).sort_once(apply=True)
+    with (tmp_path / "Documents" / "report.txt").open("a", encoding="utf-8") as handle:
+        handle.write(" edited")
+    logs: list[str] = []
+
+    undo_run(journal, log=logs.append)
+
+    (line,) = [line for line in logs if "report.txt" in line]
+    assert "the duplicate is not recreated" in line
+    assert "move it back" not in line
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads through any permission")
+def test_an_unreadable_destination_stays_pending(tmp_path):
+    # Found by review: lexists() says False on a permission error, and the
+    # entry was settled as gone for good.
+    journal, _ = _sorted(tmp_path, "a.txt")
+    documents = tmp_path / "Documents"
+    documents.chmod(0o000)
+    try:
+        result = undo_run(journal)
+    finally:
+        documents.chmod(0o755)
+
+    assert (result.gone, len(result.failed)) == (0, 1)
+    assert undo_run(journal).restored == 1
+
+
+def test_an_empty_file_is_still_told_apart(tmp_path):
+    aged_file(tmp_path, "empty.txt", content="")
+    journal = Journal(tmp_path.parent / "e.jsonl")
+    Sorter(config_for(tmp_path), journal=journal).sort_once(apply=True)
+    filed = tmp_path / "Documents" / "empty.txt"
+    filed.write_text("now it has content", encoding="utf-8")
+
+    assert undo_run(journal).replaced == 1
+
+
+def test_two_replaced_files_are_both_counted(tmp_path):
+    journal, _ = _sorted(tmp_path, "a.txt", "b.txt")
+    for name in ("a.txt", "b.txt"):
+        (tmp_path / "Documents" / name).write_text("changed", encoding="utf-8")
+
+    assert undo_run(journal).replaced == 2
+
+
+def test_undo_exits_1_when_files_are_only_gone(tmp_path, capsys):
+    aged_file(tmp_path, "a.txt")
+    main(["run", "--source", str(tmp_path), "--delay", "0"])
+    (tmp_path / "Documents" / "a.txt").unlink()
+    capsys.readouterr()
+
+    assert main(["undo"]) == 1
+    assert "cubby: 1 no longer where the run put it" in capsys.readouterr().err
+
+
+def test_a_kept_copy_that_is_a_symlink_is_not_deduplicated_against(tmp_path):
+    # Found by review: the identity was the link's, while the copy followed it.
+    outside = aged_file(tmp_path.parent / "elsewhere", "report.txt", content="SAME")
+    (tmp_path / "Documents").mkdir()
+    (tmp_path / "Documents" / "report.txt").symlink_to(outside)
+    aged_file(tmp_path, "report.txt", content="SAME")
+    journal = Journal(tmp_path.parent / "s.jsonl")
+
+    (outcome,) = Sorter(config_for(tmp_path, dedupe=True), journal=journal).sort_once(apply=True)
+
+    assert outcome.moved_to == tmp_path / "Documents" / "report (1).txt"
+
+
+def test_a_move_whose_identity_cannot_be_read_says_undo_will_not_check_it(tmp_path, monkeypatch):
+    monkeypatch.setattr("cubby.adapters.filesystem.identity", lambda _: None)
+    aged_file(tmp_path, "a.txt")
+    warnings: list[str] = []
+    journal = Journal(tmp_path.parent / "w.jsonl")
+
+    Sorter(config_for(tmp_path), journal=journal, warn=warnings.append).sort_once(apply=True)
+
+    assert journal.runs()[0].entries[0].ident is None
+    assert any("could not read" in w and "a.txt" in w for w in warnings)

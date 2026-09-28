@@ -7,6 +7,7 @@ import fnmatch
 import hashlib
 import os
 import shutil
+import stat
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -144,13 +145,22 @@ def _digest(path: Path) -> str | None:
 
 
 def files_identical(a: Path, b: Path) -> bool:
-    """True if both are regular files with the same size and content."""
+    """True if both are regular files (not symlinks) with the same size and content.
+
+    A symlink is never a copy: deleting a file as the "duplicate" of a link
+    could delete the very file the link points to. A file that cannot be read
+    is never identical to anything.
+    """
     try:
-        if not (a.is_file() and b.is_file()) or a.stat().st_size != b.stat().st_size:
-            return False
+        info_a, info_b = a.lstat(), b.lstat()
     except OSError:
         return False
-    return _digest(a) == _digest(b)
+    if not (stat.S_ISREG(info_a.st_mode) and stat.S_ISREG(info_b.st_mode)):
+        return False
+    if info_a.st_size != info_b.st_size:
+        return False
+    digest = _digest(a)
+    return digest is not None and digest == _digest(b)
 
 
 @dataclass(frozen=True)
@@ -168,6 +178,8 @@ class Moved:
 #: enough: ext4 hands a freed inode number to the next file created (measured),
 #: so a file deleted and replaced under the same name can have the same one.
 #: An edit changes the size or the time, and counts as another file too.
+#: A folder (or a macOS bundle) records 0 for both: its size and time change
+#: whenever something inside does, which Finder does just by opening it.
 Identity = tuple[int, int, int, int]
 
 
@@ -177,7 +189,18 @@ def identity(path: Path) -> Identity | None:
         info = path.lstat()
     except OSError:
         return None
+    if not stat.S_ISREG(info.st_mode):
+        return info.st_dev, info.st_ino, 0, 0
     return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns
+
+
+def same_identity(recorded: Identity, current: Identity | None) -> bool:
+    """Whether ``current`` is still the file recorded as ``recorded``.
+
+    The device number is left out: macOS numbers an external drive anew each
+    time it is mounted, while the path already pins the volume.
+    """
+    return current is not None and recorded[1:] == current[1:]
 
 
 #: How many times a name may be taken under us before the move gives up.

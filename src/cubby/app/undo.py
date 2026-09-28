@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
-from ..adapters.filesystem import identity, move_no_clobber, unique_destination
+from ..adapters.filesystem import identity, move_no_clobber, same_identity, unique_destination
 from ..adapters.journal import Entry, Journal, Run
 
 Logger = Callable[[str], None]
@@ -46,14 +46,42 @@ def _restore(entry: Entry) -> str:
     return target.name
 
 
+def _still_there(path: Path) -> bool:
+    """Whether anything (a dangling symlink too) is at ``path``.
+
+    Raises:
+        OSError: It cannot be told (a folder on the way is unreadable), which
+            is not the same as the file being gone.
+    """
+    try:
+        path.lstat()
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    return True
+
+
+def _skip_message(entry: Entry) -> str:
+    if entry.op == "dedupe":
+        return (
+            f"skip (the copy kept at {entry.destination} changed or was replaced since "
+            f"the run, so the duplicate is not recreated from it): {entry.source.name}"
+        )
+    return (
+        f"skip (changed or replaced since the run: {entry.destination} is left "
+        f"in place; move it back to {entry.source} by hand if it is yours): "
+        f"{entry.source.name}"
+    )
+
+
 def undo_run(journal: Journal, run_id: str | None = None, *, log: Logger = _noop) -> UndoResult:
     """Reverse one recorded run: the given one, else the latest with anything left.
 
     Entries are undone newest first. Every entry that can be restored is, even
     if another cannot: an undo that stops at the first problem is worse than
     one that puts back everything it can and says what it could not. An entry
-    whose file no longer exists is settled as gone; one that fails (a
-    permission, a full disk) stays pending, so running undo again retries it.
+    whose file no longer exists, or was changed or replaced since the run, is
+    settled; one that fails or cannot be checked (a permission, a full disk)
+    stays pending, so running undo again retries it.
 
     Raises:
         OSError: The journal could not be read.
@@ -72,24 +100,23 @@ def undo_run(journal: Journal, run_id: str | None = None, *, log: Logger = _noop
         return result
 
     for entry in reversed(run.pending):
-        if not os.path.lexists(entry.destination):  # a dangling symlink is still there
-            log(f"skip (no longer at {entry.destination}): {entry.source.name}")
-            journal.settle(entry, "gone")
-            result.gone += 1
-            continue
-        if entry.ident is not None and identity(entry.destination) != entry.ident:
-            # Another file took the name, or the file was changed since: moving
-            # it could take a file cubby never moved, so it stays, and the user
-            # decides (the file is named, and where it would have gone).
-            log(
-                f"skip (changed or replaced since the run: {entry.destination} is left "
-                f"in place; move it back to {entry.source} by hand if it is yours): "
-                f"{entry.source.name}"
-            )
-            journal.settle(entry, "gone")
-            result.replaced += 1
-            continue
         try:
+            there = _still_there(entry.destination)
+            if not there:
+                log(f"skip (no longer at {entry.destination}): {entry.source.name}")
+                journal.settle(entry, "gone")
+                result.gone += 1
+                continue
+            if entry.ident is not None and not same_identity(
+                entry.ident, identity(entry.destination)
+            ):
+                # Another file took the name, or the file was changed since:
+                # moving it could take a file cubby never moved, so it stays,
+                # and the user decides (the file is named, and where it went).
+                log(_skip_message(entry))
+                journal.settle(entry, "gone")
+                result.replaced += 1
+                continue
             name = _restore(entry)
         except OSError as exc:
             log(

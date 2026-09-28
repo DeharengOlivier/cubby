@@ -53,8 +53,16 @@ All notable changes to this project are documented here. The format is based on
   duplicate was recreated from whatever replaced the kept copy. Each move now
   records the file's device, inode, size and modification time, and undo
   leaves a file that differs in place and says where it would have gone. A
-  file edited since the run is left in place too. Found by an exploratory
-  session.
+  file edited since the run is left in place too; a folder is compared by its
+  inode only, since its size and date change with its content. Found by an
+  exploratory session.
+- `cubby undo` settled a file as gone for good when a folder on the way to it
+  was unreadable; it now stays pending and is retried once the folder can be
+  read.
+- With `dedupe = true`, two unreadable files of the same size counted as
+  identical, and a file already filed as a symlink counted as a copy of the
+  file it points to: in both cases the only copy could be deleted. Neither
+  counts as a duplicate any more.
 - `cubby undo` exited 0 when some files could not be put back because they
   had been moved or deleted since the run; it now counts them and exits 1,
   as the exit codes say. A file restored under another name because its name

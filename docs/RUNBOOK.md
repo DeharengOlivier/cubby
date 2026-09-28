@@ -92,14 +92,23 @@ What undo does with each file of the run:
   replaced by another file of the same name, or changed since (its size or modification time
   differs). Moving it could take a file cubby never moved, so undo prints
   `skip (changed or replaced since the run: PATH is left in place; move it back to ORIGINAL
-  by hand if it is yours)`. Runs made before 0.3.0 did not record this, and undo moves what
-  it finds there.
-- After a skip of either kind, undo counts it under `Restored N file(s).` and exits 1 (0.2.0
-  exited 0). Nothing is left to retry: the run shows as `undone`.
-- **Pending**: restoring failed with an error (a permission, a full disk). Undo prints
+  by hand if it is yours)`. A folder counts as the same folder as long as it was not
+  replaced: files added to it or removed from it do not stop undo. Runs made by cubby 0.2.0
+  and older did not record this, and undo moves what it finds there.
+- **Duplicate not recreated**: for a duplicate that `dedupe` deleted, the kept copy changed or
+  was replaced since the run. Undo prints `skip (the copy kept at PATH changed or was replaced
+  since the run, so the duplicate is not recreated from it)`. Nothing is to be moved back:
+  the kept copy is yours, as it is now.
+- After a skip of any kind, undo still prints `Restored N file(s).` for the others, then
+  `cubby: N no longer where the run put it` or `cubby: N changed or replaced since the run`,
+  and exits 1 (0.2.0 exited 0). These entries are settled for good: the run shows as
+  `undone`, and running undo again does not retry them.
+- **Pending**: restoring failed with an error (a permission, a full disk), or undo could not
+  even look at the place the run put the file (a folder on the way is unreadable). Undo prints
   `pending (cannot restore NAME): <error>` (`skip (cannot restore ...)` in 0.2.0), exits 1,
-  and the run shows as `partly undone` (or still `undoable` if nothing of it was restored). Fix the cause and run `cubby undo --run ID` again; a
-  failed attempt changes nothing, so the retry is safe.
+  and the run shows as `partly undone` (or still `undoable` if nothing of it was restored).
+  Fix the cause and run `cubby undo --run ID` again; a failed attempt changes nothing, so the
+  retry is safe.
 - A deduplicated file is restored as a copy of the one that was kept.
 
 Undo appends to the journal and never rewrites it; do not edit the journal by hand.
