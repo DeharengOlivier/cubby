@@ -23,5 +23,6 @@ config.local.toml
 .vscode/
 coverage.xml
 .locked.txt
+.mutmut-results.txt
 mutants/
 .hypothesis/

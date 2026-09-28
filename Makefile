@@ -25,11 +25,15 @@ audit:
 
 mutation:
 	uv run --locked mutmut run
-	@# A run whose baseline fails checks no mutant and reports nothing: fail it.
-	@if uv run --locked mutmut results | grep -q 'not checked'; then \
-		echo "mutation: some mutants were not checked (did the baseline test run fail?)" >&2; \
-		exit 1; \
+	@# Every mutant must end killed, timed out or survived (then reviewed in
+	@# docs/audits): an interrupted run leaves some "not checked", and "no tests",
+	@# "skipped" or "suspicious" are mutants nothing checked. Fails closed: an
+	@# error from `mutmut results` fails the target too.
+	uv run --locked mutmut results --all true > .mutmut-results.txt
+	@if grep ': ' .mutmut-results.txt | grep -Ev ': (killed|timeout|survived)$$'; then \
+		echo "mutation: the mutants above were not checked" >&2; exit 1; \
 	fi
+	@grep -q ': killed$$' .mutmut-results.txt || { echo "mutation: no mutant was killed" >&2; exit 1; }
 
 clean:
-	rm -rf .pytest_cache .ruff_cache .mypy_cache .locked.txt mutants **/__pycache__ *.egg-info build dist
+	rm -rf .pytest_cache .ruff_cache .mypy_cache .locked.txt .mutmut-results.txt mutants **/__pycache__ *.egg-info build dist
