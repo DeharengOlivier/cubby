@@ -96,9 +96,10 @@ and stops at the first stage that names a category:
   touched. A folder is sorted as one item, by its name, and keeps that name:
   a saved web page's `page_files` folder goes to `Documents`, and an
   `invoice-archive` folder goes to `Invoices/invoice-archive`, never renamed
-  like an invoice nor filed by month (a folder named like a month folder,
-  such as `2026-09`, becomes `2026-09 (folder)`). A folder no rule matches
-  goes whole to `_Unsorted`. Its content is never sorted.
+  like an invoice nor filed by month (a folder that a finance rule matches
+  and that is named like a month folder, such as `2026-09`, becomes
+  `2026-09 (folder)`, so invoices are never filed into it). A folder no rule
+  matches goes whole to `_Unsorted`. Its content is never sorted.
 
 The shipped categories, in order: `Invoices`, `Bank-Statements`, `Legal`,
 `Resumes` (name and content rules, in French and English), `Images`, `Video`,
@@ -189,7 +190,8 @@ A file moves only once its last change is older than the delay (`--delay`,
 setting `delay`, default `1m`; units `s`, `m`, `h`, `d`), so a download still
 being written is never grabbed. Files with an in-progress extension are always
 left alone: `crdownload`, `part`, `download`, `tmp`, `partial` and `opdownload`
-by default (setting `skip_ext`, which replaces that list).
+by default (setting `skip_ext` replaces that list; an empty list keeps the
+defaults).
 
 ## Preview first: plan and explain
 
@@ -286,8 +288,7 @@ cubby uninstall                             # stop it and remove it
 
 The agent runs `cubby watch --wait-for-source` with the `--config`, `--source`,
 `--delay`, `--interval`, `--month-style` and `--month-lang` you gave to
-`install` (`--no-content` is not passed on: set `content_scan = false` in the
-config for the agent). It also receives `CUBBY_STATE_DIR`, and `CUBBY_CONFIG` or
+`install`, and `--no-content` when you gave it. It also receives `CUBBY_STATE_DIR`, and `CUBBY_CONFIG` or
 `XDG_CONFIG_HOME` when set, so it reads the same files as your shell.
 
 `install` checks what the service manager answers and that the agent is really
@@ -322,7 +323,8 @@ failures, files still settling), the last run and its failures, and the 24-hour
 activity with failures grouped by kind of error and the cubby versions that hit
 them. `content unreadable for N` counts files sorted by name and type because
 every converter broke on them. `status` exits 1 when an installed agent is not
-running, when its last pass is older than three intervals (and two minutes), or
+running, when its last pass is older than three intervals or two minutes,
+whichever is longer, or
 when it has completed no pass two minutes after install.
 
 `cubby history` lists recent runs, newest first (`-n`, default 20): time, id,
@@ -339,8 +341,9 @@ Undo one with: cubby undo --run <id>
 
 `cubby log` prints the agent's log, oldest first, the rotated file included:
 `--run ID` keeps one pass, `--warnings` keeps what went wrong, `-n` sets the
-number of lines (20), `--json` prints the records. Each line carries the cubby
-version and, during a pass, the run id used by `history` and `undo`:
+number of lines (20), `--json` prints the records. Each record in the log file
+(and in `--json`) carries the cubby version and, during a pass, the run id used
+by `history` and `undo`; the human view shows the time, level and message:
 
 ```
 $ cubby log --warnings
@@ -413,8 +416,9 @@ and whether notifications can reach you.
 one JSON record per line (nothing at all when there is no log yet). Each has a
 published JSON Schema in [`docs/schemas/`](docs/schemas): `plan`, `explain`,
 `status`, `history` and `log-record`. The test suite validates the real outputs
-against them. The top-level `version` changes when a field is removed or changes
-meaning; new fields may be added, so ignore the ones you do not know.
+against them. The top-level `version` of `plan`, `explain`, `status` and `history` changes
+when a field is removed or changes meaning (in a `log-record`, `version` is the
+cubby version that wrote it); new fields may be added, so ignore the ones you do not know.
 
 ```sh
 cubby plan --json | jq -r '.items[] | select(.category == "Invoices") | .renamed_to'
@@ -499,14 +503,16 @@ they name what you downloaded.
 Sorting is linear in the number of files, journal included: 0.6 to 0.9 ms
 of CPU per file moved (on a busy machine), and nothing once the folder is sorted.
 
-| Files | Apply (CPU, median) | Idle pass | Memory of the agent's pass |
+| Files | Apply, CPU | Idle pass | Memory of the agent's pass |
 | ---: | ---: | ---: | ---: |
-| 1 000 | 0.7 s | 0.00 s | under 1 MB |
-| 20 000 | 11 to 15 s | 0.00 s | 4 MB |
-| 200 000 | 180 s | 0.01 s | 26 MB |
-| 400 000 | 337 s | 0.01 s | 54 MB |
+| 1 000 | 0.72 s (median) | 0.00 s | under 1 MB |
+| 20 000 | 11.08 s (median) | 0.00 s | 4 MB |
+| 200 000 | 124.57 s (median) | 0.01 s | 26 MB |
+| 400 000 | 337 s (one run) | 0.01 s | 54 MB |
 
-Measured, not estimated (method, limits and next steps in
+The CPU medians come from the 0.3.0 benchmark (the memory change since left
+CPU per file unchanged within noise), and the 400 000 row is one run of the
+current code. Measured, not estimated (method, limits and next steps in
 [docs/PERFORMANCE.md](docs/PERFORMANCE.md)), and re-runnable on your own hardware:
 
 ```bash
