@@ -481,3 +481,13 @@ def test_the_scan_stops_at_its_limit(tmp_path, monkeypatch, limit, found):
     (tmp_path / "top" / "c.txt").write_text("x", encoding="utf-8")  # the third entry
 
     assert (identity(tmp_path / "top")[2] != 0) is found
+
+
+def test_a_symlink_to_a_file_is_never_the_witness(tmp_path):
+    # Mutation round 8: following links let a file outside the folder stand for it.
+    (tmp_path / "outside.txt").write_text("x", encoding="utf-8")
+    (tmp_path / "top").mkdir()
+    (tmp_path / "top" / "a-link").symlink_to(tmp_path / "outside.txt")
+    (tmp_path / "top" / "b.txt").write_text("b", encoding="utf-8")
+
+    assert identity(tmp_path / "top")[2] == (tmp_path / "top" / "b.txt").stat().st_ino
