@@ -284,7 +284,7 @@ cubby uninstall                             # stop it and remove it
 | Service manager | launchd, per-user LaunchAgent | systemd `--user` service |
 | Unit file | `~/Library/LaunchAgents/com.cubby.agent.plist` | `~/.config/systemd/user/cubby.service` |
 | Restart | `KeepAlive` | `Restart=on-failure` |
-| Log | `~/Library/Logs/cubby.log` | `cubby.log` in the state folder |
+| Log | `~/Library/Logs/cubby.log` (default state folder) | `cubby.log` in the state folder |
 
 The agent runs `cubby watch --wait-for-source` with the `--config`, `--source`,
 `--delay`, `--interval`, `--month-style` and `--month-lang` you gave to
