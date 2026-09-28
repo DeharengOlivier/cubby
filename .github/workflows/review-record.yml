@@ -1,13 +1,29 @@
-# A pull request merges only once its independent review record is posted on
-# it: a comment that starts with "## Independent review record". Branch
-# protection requires the "review record" status this sets on the head commit.
+# A pull request merges only once an independent review record names its
+# current head commit. Branch protection requires the "review record" status
+# this sets on the head commit.
+#
+# A record is a comment that starts with "## Independent review record" and
+# has a line "Reviewed head: <full 40-digit SHA>" (the rules are in
+# scripts/review_record.py, tested in tests/test_review_record.py). A push
+# after the review sets the new head's status to failure until a record names
+# it: a short re-review record is enough. Editing or deleting a comment
+# re-evaluates the status.
 #
 # Only a comment from the owner, a member or a collaborator counts: the
 # repository is public and anyone may comment. It checks that the record
 # exists, not who wrote its text: with one maintainer the record is posted from
-# the same account (docs/READINESS.md section 2). A record posted for an older
-# commit still counts after a later push. It runs no project code, and reads
-# nothing but the pull request's comments.
+# the same account (docs/READINESS.md section 2).
+#
+# What runs with `statuses: write`: the decision is a standard-library Python
+# script run by the runner's python3, checked out from the default branch
+# only, never from the pull request's head, without persisting the token, and
+# nothing else from the repository runs. An issue_comment run uses the
+# default branch's workflow file, so a pull request cannot change what judges
+# its comments. A pull_request run uses the pull request's own workflow file,
+# which a same-repository branch could edit; that edit is itself reviewed
+# before merge, and a fork's pull_request run gets a read-only token that
+# cannot set the status (the next comment's run does). The job reads only the
+# pull request's head SHA and its comments.
 name: Review record
 
 on:
@@ -17,8 +33,15 @@ on:
     types: [created, edited, deleted]
 
 permissions:
+  contents: read
   statuses: write
   pull-requests: read
+
+# One evaluation at a time per pull request, each reading the comments afresh:
+# a slower, older run cannot overwrite a newer one's answer.
+concurrency:
+  group: review-record-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
 
 jobs:
   record:
@@ -26,6 +49,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: scripts/review_record.py
+          sparse-checkout-cone-mode: false
       - name: Set the review record status on the head commit
         env:
           GH_TOKEN: ${{ github.token }}
@@ -34,15 +63,11 @@ jobs:
         run: |
           set -euo pipefail
           sha=$(gh api "repos/$REPO/pulls/$PR" -q .head.sha)
-          ids=$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
-            -q '.[] | select(.author_association == "OWNER" or .author_association == "MEMBER"
-                     or .author_association == "COLLABORATOR")
-                | select(.body | startswith("## Independent review record")) | .id')
-          found=${ids%%$'\n'*}
-          if [ -n "$found" ]; then
-            state=success; text="record posted (comment $found)"
+          gh api --paginate "repos/$REPO/issues/$PR/comments" > "$RUNNER_TEMP/comments.json"
+          if decision=$(python3 scripts/review_record.py "$sha" < "$RUNNER_TEMP/comments.json"); then
+            IFS=$'\t' read -r state text <<< "$decision"
           else
-            state=failure; text="post the independent review record as a PR comment"
+            state=error; text="the review record check failed: see the workflow log"
           fi
           gh api "repos/$REPO/statuses/$sha" -f state="$state" \
             -f context="review record" -f description="$text" > /dev/null
