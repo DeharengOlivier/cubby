@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- `benchmarks/latency.py` measures how long you wait: p50, p90, p95, p99 and
+  the slowest, with the sample size, for each file the agent moves, a whole
+  pass, and `status`, `history`, `explain`, `plan`, `run` and `undo` run
+  fresh against a full ledger and journal, each against a stated budget.
+  Results in `docs/PERFORMANCE.md`, "Latency percentiles".
+
 ### Changed
 - The required `review record` check passes only when the review record names
   the pull request's current head commit, on a line
