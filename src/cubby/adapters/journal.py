@@ -73,15 +73,6 @@ class Entry:
     destination: Path  # where the run put it (or the kept copy, for dedupe)
 
 
-@dataclass(frozen=True)
-class Settlement:
-    """An undo's verdict on one entry."""
-
-    run: str
-    seq: int
-    resolution: Resolution
-
-
 @dataclass
 class Run:
     """A run as read back from the journal."""
@@ -155,11 +146,11 @@ class Journal:
             self._compacted_size = 0  # rewritten or removed since: start afresh
         if size <= max(MAX_BYTES, 2 * self._compacted_size):
             return
-        runs = self.runs()
+        lines = state.read_lines(self.path)
+        tallies = _tally(lines)
         # Recent runs stay for history; a run with anything left to undo stays
         # whatever its age, because dropping it would take away its way back.
-        keep = {r.run_id for r in runs[-KEEP_RUNS:]} | {r.run_id for r in runs if r.pending}
-        lines = state.read_lines(self.path)
+        keep = set(list(tallies)[-KEEP_RUNS:]) | {run for run, (_, left) in tallies.items() if left}
         kept = [line for line in lines if _run_of(line) in keep]
         if len(kept) < len(lines):
             state.replace_text(self.path, "".join(line + "\n" for line in kept))
@@ -173,27 +164,83 @@ class Journal:
         Raises:
             OSError: The journal exists but cannot be read.
         """
-        runs: dict[str, Run] = {}
-        for line in state.read_lines(self.path):
-            for item in _parse(line):
-                run = runs.setdefault(item.run, Run(item.run))
-                if isinstance(item, Entry):
-                    run.entries.append(item)
-                else:
-                    run.settled[item.seq] = item.resolution
-        return [run for run in runs.values() if run.entries]
+        return _build(state.read_lines(self.path), wanted=None)
 
     def run(self, run_id: str) -> Run | None:
-        return next((r for r in self.runs() if r.run_id == run_id), None)
+        """One run, building the entries of that run only.
+
+        Raises:
+            OSError: The journal exists but cannot be read.
+        """
+        found = _build(state.read_lines(self.path), wanted=run_id)
+        return found[0] if found else None
 
     def last_pending_run(self) -> Run | None:
-        """The most recent run with something left to undo."""
-        return next((r for r in reversed(self.runs()) if r.pending), None)
+        """The most recent run with something left to undo.
+
+        Raises:
+            OSError: The journal exists but cannot be read.
+        """
+        groups = _group(state.read_lines(self.path))
+        for run_id in reversed(groups):
+            if _count(groups[run_id])[1]:
+                return _run_from(run_id, groups[run_id])
+        return None
+
+    def tallies(self) -> dict[str, tuple[int, int]]:
+        """Each run's number of moves and of moves still to undo, oldest run first.
+
+        What ``cubby history`` needs, without building a single entry.
+
+        Raises:
+            OSError: The journal exists but cannot be read.
+        """
+        return _tally(state.read_lines(self.path))
 
 
 def _v1_run_id(line: str) -> str:
     """A version 1 run's id: derived from its content, so it survives compaction."""
     return "v1-" + hashlib.sha256(line.encode("utf-8")).hexdigest()[:12]
+
+
+def _group(lines: list[str], wanted: str | None = None) -> dict[str, list[_Fields]]:
+    """The validated fields of ``lines`` per run, in order; only ``wanted`` if given."""
+    groups: dict[str, list[_Fields]] = {}
+    for line in lines:
+        for fields in _fields(line):
+            if wanted is None or fields[0] == wanted:
+                groups.setdefault(fields[0], []).append(fields)
+    return groups
+
+
+def _count(fields: list[_Fields]) -> tuple[int, int]:
+    """A run's moves, and those not settled yet (see ``Run.pending``)."""
+    moves = [seq for _, seq, op, _, _ in fields if op in ("move", "dedupe")]
+    settled = {seq for _, seq, op, _, _ in fields if op not in ("move", "dedupe")}
+    return len(moves), sum(1 for seq in moves if seq not in settled)
+
+
+def _run_from(run_id: str, fields: list[_Fields]) -> Run | None:
+    """The run the fields describe, or None if it has no move."""
+    run = Run(run_id)
+    for _, seq, op, source, destination in fields:
+        if op == "move" or op == "dedupe":  # noqa: PLR1714 - `in` does not narrow for mypy
+            run.entries.append(Entry(run_id, seq, op, Path(source), Path(destination)))
+        else:
+            run.settled[seq] = op
+    return run if run.entries else None
+
+
+def _build(lines: list[str], wanted: str | None) -> list[Run]:
+    """The runs of ``lines`` with moves, oldest first; only ``wanted`` if given."""
+    runs = (_run_from(run_id, fields) for run_id, fields in _group(lines, wanted).items())
+    return [run for run in runs if run is not None]
+
+
+def _tally(lines: list[str]) -> dict[str, tuple[int, int]]:
+    """Moves and pending moves per run with moves, oldest first."""
+    counts = {run_id: _count(fields) for run_id, fields in _group(lines).items()}
+    return {run_id: count for run_id, count in counts.items() if count[0]}
 
 
 def _run_of(line: str) -> str | None:
@@ -220,10 +267,17 @@ def _seq(value: object) -> int:
     return value
 
 
-def _parse(line: str) -> Iterator[Entry | Settlement]:
-    """Yield the entries or settlements one line holds.
+#: One line's worth of journal, validated but not yet turned into objects:
+#: ``(run, seq, op, source, destination)``, the two paths empty for a settlement.
+_Fields = tuple[str, int, "MoveOp | Resolution", str, str]
 
-    Anything malformed yields nothing: a damaged line costs that line only.
+
+def _fields(line: str) -> Iterator[_Fields]:
+    """Yield the moves or settlements one line holds, as validated raw fields.
+
+    Anything malformed yields nothing: a damaged line costs that line only. A
+    version 1 line stops at its first malformed move. Building ``Path`` objects
+    is most of the cost of reading, so it is left to :func:`_parse`.
     """
     try:
         record = json.loads(line)
@@ -235,20 +289,31 @@ def _parse(line: str) -> Iterator[Entry | Settlement]:
         if "moves" in record and "v" not in record:  # version 1: one line per run
             run_id = _v1_run_id(line)
             for seq, move in enumerate(record["moves"]):
-                yield Entry(run_id, seq, "move", Path(move["from"]), Path(move["to"]))
+                yield run_id, seq, "move", _path(move["from"]), _path(move["to"])
             return
         if record.get("v") != VERSION:
             return
         op = record["op"]
         if op in ("move", "dedupe"):
-            yield Entry(
+            yield (
                 str(record["run"]),
                 _seq(record["seq"]),
                 op,
-                Path(record["from"]),
-                Path(record["to"]),
+                _path(record["from"]),
+                _path(record["to"]),
             )
         elif op in ("restored", "gone"):
-            yield Settlement(str(record["run"]), _seq(record["seq"]), op)
+            yield str(record["run"]), _seq(record["seq"]), op, "", ""
     except (KeyError, TypeError, ValueError):
         return
+
+
+def _path(value: object) -> str:
+    """A path as written by cubby: a string.
+
+    Raises:
+        TypeError: Anything else, which ``Path()`` would refuse too.
+    """
+    if not isinstance(value, str):
+        raise TypeError(f"not a path: {value!r}")
+    return value

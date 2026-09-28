@@ -31,8 +31,22 @@ comfortable, and what to change then. Re-run with `benchmarks/bench_sort.py`.
 Median / slowest. The 200 000 row is ten times the largest size tested before (audit 1 went
 to 20 000).
 
-Reading the undo journal, which `cubby history` and `cubby undo` do, measured separately on a
-journal of 200 000 moves still to undo (29.5 MB): 6.2 s median, 7.4 s slowest of 3, 237 MB peak.
+Reading the undo journal, which `cubby history` and `cubby undo` do, measured separately
+(`journal_probe2`, method below) on a journal of 2 000 runs of 100 moves still to undo
+(200 000 moves, 29.9 MB), CPU time, median / slowest of 5:
+
+| Command | Before (0.2.0) | After |
+| --- | ---: | ---: |
+| `cubby history` | 6.42 / 6.58 s | 1.58 / 1.59 s |
+| `cubby undo` (latest run with something left) | 6.20 / 6.76 s | 1.48 / 1.53 s |
+| `cubby undo --run ID` | 5.97 / 6.47 s | 1.29 / 1.39 s |
+
+Before, every command built an entry, with two `Path` objects, for each of the 200 000 moves
+(65% of the time, per the profile). Now each line is validated once into plain fields;
+`history` only counts them, and `undo` builds the entries of the one run it reverts. A
+property test checks that the fast reads answer exactly what the full read answers, damaged
+lines included (`tests/test_journal_reads.py`). The probe writes the journal directly, then
+times `recent_runs`, `Journal.last_pending_run` and `Journal.run` in one process.
 
 ## What the numbers say
 
@@ -61,7 +75,7 @@ idle pass at 60 000 files went from 6.89 s to 0.001 s, and at 200 000 from 11.9 
 |---|---|---|---|
 | First sort of a very large folder | ~200 000 files: 2 to 3 min | the lock is held for the whole pass; a manual `cubby run` meanwhile waits, then stops with "another cubby process is sorting" | none needed: a one-off, and a stop request ends the pass between two files |
 | Memory of one pass | ~400 000 files at 2.6 KB each: 1 GB | a very large first sort on a small machine | count outcomes instead of keeping them in `watch` mode; stream compaction over lines instead of parsed entries |
-| Reading a large journal | 200 000 undoable moves: 6 s for `history` or `undo` | interactive commands feel slow | parse only the fields a command needs (building `Path` objects is 65% of the read, per the profile), or keep a per-run index |
+| Reading a large journal | 200 000 undoable moves: 1.3 to 1.6 s for `history` or `undo` (was 6 s) | interactive commands wait a second | a per-run index, so a command reads only the lines it needs |
 | Journal size | 150 to 400 bytes per move (it records both paths), never dropped while undoable | 30 to 80 MB after 200 000 moves nobody undid | an age limit on undo, if users ask for one |
 
 A Downloads folder with a few thousand files is two orders of magnitude below every limit.

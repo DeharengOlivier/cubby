@@ -54,6 +54,9 @@ All notable changes to this project are documented here. The format is based on
   operator. Both drills are in `docs/audits/`.
 
 ### Changed
+- `cubby history` and `cubby undo` read a large undo journal about four times
+  faster (200 000 moves: 6.4 s to 1.6 s of CPU for `history`, 6.2 s to 1.5 s
+  for `undo`): only the run being undone is built into entries.
 - `cli.py` became the `cubby.cli` package (sorting, inspection, agent commands),
   and cyclomatic complexity is now capped at 10 by the linter.
 - The benchmark measures each size several times in fresh processes, with the
