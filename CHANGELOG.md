@@ -107,8 +107,9 @@ All notable changes to this project are documented here. The format is based on
   and `explain` says when it read a file's content and nothing matched
   (`content_chars` in `--json`). Found by an exploratory session.
   A config written by `cubby init` keeps its own copy of the categories: to
-  get the new Invoices `late_content_patterns`, copy them from the packaged defaults
-  (`cubby init --path /tmp/cubby-defaults.toml` writes them).
+  get the new Invoices `late_content_patterns`, copy them from the packaged
+  defaults (`cubby init --force --path /tmp/cubby-defaults.toml` writes them
+  there and leaves your own config untouched).
 - A regular file named like a folder cubby sorts into (`_Unsorted`, a
   category, or a month folder inside one) made every move into that folder
   fail with `[Errno 17] File exists`. The file is still left alone, and the
