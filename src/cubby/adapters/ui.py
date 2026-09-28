@@ -11,8 +11,9 @@ every human rendering of a name, a path or a message quoting one goes through
 
 from __future__ import annotations
 
+import json
 import os
-from typing import TextIO
+from typing import Any, TextIO
 
 from .. import __version__
 
@@ -57,6 +58,11 @@ def _escape_character(ch: str) -> str:
     if code <= 0xFFFF:
         return f"\\u{code:04x}"
     return f"\\U{code:08x}"
+
+
+def dumps_for_terminal(value: Any) -> str:
+    """``value`` as the indented JSON of a ``--json`` output."""
+    return json.dumps(value, ensure_ascii=False, indent=2)
 
 
 _RESET = "\033[0m"

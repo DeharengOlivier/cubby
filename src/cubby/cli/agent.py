@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import shutil
 import sys
@@ -32,7 +31,7 @@ from ..adapters.service import (
     detect_service,
     get_service,
 )
-from ..adapters.ui import Palette
+from ..adapters.ui import Palette, dumps_for_terminal
 from ..adapters.ui import escape_for_terminal as shown
 from ..app.activity import Activity, summarize
 from ..domain.duration import format_duration
@@ -205,7 +204,7 @@ def cmd_status(args: argparse.Namespace) -> int:
             "activity": {"hours": ACTIVITY_HOURS, **asdict(day)},
             "log": str(state.log_path()),
         }
-        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        print(dumps_for_terminal(payload))
         return EXIT_OK if healthy else EXIT_FAILED
 
     _print_status(agent, pause, last, day)
