@@ -148,19 +148,21 @@ opened at all (its name and type still route it), each backend reads a window
 rather than the whole file, and every external converter runs with a timeout.
 Asking for 4 KB of text out of a 315 MB page costs neither time nor memory.
 
-Sorting itself is linear in the number of files, and cheap:
+Sorting itself is linear in the number of files, journal included: about 0.6 ms
+of CPU per file moved, and nothing once the folder is sorted.
 
-| Files | Plan | Apply | Memory |
-| --- | --- | --- | --- |
-| 1 000 | 0.02 s | 0.16 s | ~5 MB |
-| 5 000 | 0.07 s | 0.80 s | ~23 MB |
-| 20 000 | 0.33 s | 3.62 s | ~78 MB |
+| Files | Apply (CPU, median) | Idle pass | Peak memory |
+| ---: | ---: | ---: | ---: |
+| 1 000 | 0.7 s | 0.00 s | 1 MB |
+| 20 000 | 11 s | 0.00 s | 29 MB |
+| 200 000 | 125 s | 0.01 s | 528 MB |
 
-Measured, not estimated, and re-runnable on your own hardware:
+Measured, not estimated (method, limits and next steps in
+[docs/PERFORMANCE.md](docs/PERFORMANCE.md)), and re-runnable on your own hardware:
 
 ```bash
 python benchmarks/bench_sort.py
-python benchmarks/bench_sort.py 500 5000
+python benchmarks/bench_sort.py 500 5000 --repeat 7
 ```
 
 Apply is dominated by the moves themselves. The ceiling of this design is that
