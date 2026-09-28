@@ -36,6 +36,8 @@ All notable changes to this project are documented here. The format is based on
 - `benchmarks/bench_sort.py` measures the plan and the agent's pass in
   separate processes, and `benchmarks/profile_pass.py` shows where the
   memory of a pass goes.
+- The README describes every feature, each with a real example and a link to
+  its detailed doc, and ends with a reference of every command and flag.
 
 ### Fixed
 - On macOS the background agent wrote its log to `~/.local/state/cubby/cubby.log`
