@@ -24,7 +24,12 @@ audit:
 	uv run --locked bandit -c pyproject.toml -r src -q
 
 mutation:
-	uv run --locked mutmut run
+	@# Under a throwaway HOME, with no XDG or cubby variable: a mutant that
+	@# ignores the test isolation must still not reach the real state folder
+	@# (it did once). uv keeps its own cache.
+	home=$$(mktemp -d) && trap 'rm -rf "$$home"' EXIT && \
+		env -u XDG_STATE_HOME -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u CUBBY_STATE_DIR -u CUBBY_CONFIG \
+		HOME="$$home" UV_CACHE_DIR="$$(uv cache dir)" uv run --locked mutmut run
 	@# Every mutant must end killed, timed out or survived (then reviewed in
 	@# docs/audits): an interrupted run leaves some "not checked", and "no tests",
 	@# "skipped" or "suspicious" are mutants nothing checked. Fails closed: an
