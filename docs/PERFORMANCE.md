@@ -1,7 +1,8 @@
 # Performance and capacity
 
 What sorting costs, how it grows with the size of the folder, where it stops being
-comfortable, and what to change then. Re-run with `benchmarks/bench_sort.py`.
+comfortable, and what to change then. Re-run with `benchmarks/bench_sort.py`; latency
+percentiles with `benchmarks/latency.py` (section "Latency percentiles").
 
 ## Method
 
@@ -162,6 +163,105 @@ entry could still be undone. The agent would have spent 12 s of every 30-second 
 doing nothing. Compaction now waits until the journal has doubled since its last attempt
 (`Journal.compact`, test `test_a_journal_that_cannot_shrink_is_not_reread_every_pass`); the
 idle pass at 60 000 files went from 6.89 s to 0.001 s, and at 200 000 from 11.9 s to 0.01 s.
+
+## Latency percentiles
+
+The sections above give the median and the slowest of a handful of runs. This one measures
+how the wait is spread, on the paths someone waits on, over samples large enough for a
+percentile: `python benchmarks/latency.py` (defaults below), smoke-tested by
+`tests/test_latency_benchmark.py`.
+
+**Method.**
+
+- **move**: one file of the agent's pass, from the outcome of the file before to its own
+  (eligibility, classification, the move and its journal line), stamped with
+  `time.perf_counter_ns` inside the real `Watcher` pass. The first file of each pass is left
+  out, its interval also holds the folder listing. 30 passes of 1 000 files: 29 970 moves.
+- **pass** and **idle pass**: one pass of the agent (lock, journal, ledger, compaction,
+  heartbeat) over a fresh folder of 1 000 settled `.pdf` files, each in a process of its
+  own, then the next pass once the folder is sorted. 30 of each. As in `bench_sort.py`, the
+  agent is built without its file log, so the log line per move is not in these two rows
+  (it is in `cubby run`).
+- **cubby COMMAND**: the wall time of the command as typed, `python -m cubby ...`, each of
+  the 50 invocations a fresh process (interpreter start and imports included;
+  `cubby --version` is that floor). The state is a full one: a ledger at its 2 000-run
+  limit, a journal of 50 000 moves still undoable (500 runs of 100, 10.4 MB), a folder of
+  1 000 files, and the default categories. The commands take turns in each round, so a
+  change of load spreads over all of them; each round starts from a copy of the same state,
+  and `run` is followed by the `undo` that puts the folder back. `explain` is asked about one
+  file of the folder; `status` finds no agent installed.
+- Percentiles are nearest-rank. Below 100 samples a p99 is the maximum (the rank rounds up
+  to the last sample): the p99 of the passes and of the commands is their slowest run, and
+  only the move row has a p99 of its own.
+- Every child runs with `HOME`, `CUBBY_STATE_DIR`, `CUBBY_CONFIG` and `TMPDIR` in a
+  throwaway folder, and without any `XDG_*` or other `CUBBY_*` variable.
+- Conditions, as the script records them: AMD EPYC (12 vCPU), 47 GB RAM, Linux 6.8.0,
+  Python 3.11.16, ext4, cubby 0.4.0 at `8634d6e` (the "-dirty" the script printed was this
+  changelog entry being written during the run, no code), 2026-09-28. The machine was
+  shared: load average 21 to 27 (1, 5 and 15 minutes) across both runs, on 12 CPUs. Two
+  full runs, one after the other (7 min 40 s each).
+
+**Budgets**, at p95, set before measuring:
+
+- one move, 10 ms: a first pass of 1 000 files then ends within 10 s. Its CPU cost is about
+  0.6 ms (section "Results"); the rest is room for the disk and a busy machine.
+- a pass of 1 000 files, 10 s: a third of the default 30-second interval, and the pass holds
+  the lock a manual command waits behind.
+- an idle pass, 100 ms: paid every interval, forever; under 0.4% of 30 s.
+- `status`, `history`, `explain FILE` (and the `--version` floor), 1 s: the usual limit for a
+  reply to feel immediate, and these are the commands asked "what happened?".
+- `plan` of 1 000 files, 2 s: it lists all of them, and is read, not waited on repeatedly.
+- `run` and `undo` of 1 000 files, 5 s: a manual one-off on a large folder, 5 ms a file.
+
+**Results**, milliseconds unless marked, first run; the last column is the p95 of the second
+run, as a check of how much the load moves it:
+
+| Path | n | p50 | p90 | p95 | p99 | max | p95 budget | Met | p95, run 2 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| move | 29,970 | 0.50 | 2.00 | 5.19 | 16.13 | 125.47 | 10 | yes | 8.37 |
+| pass, 1 000 files | 30 | 1.32 s | 1.97 s | 2.32 s | 2.85 s | 2.85 s | 10 s | yes | 2.74 s |
+| idle pass | 30 | 0.84 | 1.77 | 4.48 | 5.04 | 5.04 | 100 | yes | 39.2 |
+| `cubby --version` | 50 | 232 | 343 | 388 | 579 | 579 | 1 000 | yes | 651 |
+| `cubby status` | 50 | 279 | 407 | 439 | 875 | 875 | 1 000 | yes | 695 |
+| `cubby history` | 50 | 821 | 1 040 | 1 140 | 1 350 | 1 350 | 1 000 | **no** | 1 736 |
+| `cubby explain FILE` | 50 | 248 | 333 | 392 | 618 | 618 | 1 000 | yes | 724 |
+| `cubby plan` | 50 | 410 | 537 | 604 | 669 | 669 | 2 000 | yes | 1 043 |
+| `cubby run` | 50 | 3.62 s | 4.82 s | 5.68 s | 7.13 s | 7.13 s | 5 s | **no** | 6.60 s |
+| `cubby undo` | 50 | 1.74 s | 2.21 s | 2.84 s | 3.32 s | 3.32 s | 5 s | yes | 3.65 s |
+
+**What they say.**
+
+- A move is half a millisecond at the median; the tail is the machine, not the file: p99
+  16 to 25 ms and a slowest of 125 to 217 ms, on files that are all alike. A whole pass of
+  1 000 files stays under 3 s at p99, and the steady state under 50 ms.
+- Interpreter start and imports are most of an interactive command: `--version` alone is
+  230 to 320 ms at the median, `status` and `explain` add 20 to 100 ms to it.
+- Load moves the tails a lot: the same code measured a p95 up to 1.7 times higher in the
+  second run (load 25 to 27 instead of 21 to 26). A budget met in one run and missed in the
+  other would be a noisy verdict; the two missed below are missed in both.
+
+**Findings** (measured, not optimized here):
+
+- **`cubby history` misses its budget with 50 000 undoable moves**: p95 1.14 and 1.74 s,
+  median 0.82 to 1.06 s, against 0.28 to 0.42 s for `status`, which reads the same ledger.
+  What `history` adds is reading the whole 10.4 MB journal to tell which runs are undone:
+  the "Reading a large journal" limit below, now with its percentiles.
+- **`cubby run` of 1 000 files is 2.7 times the agent's pass over the same number** (median
+  3.62 s against 1.32 s) and misses its 5 s budget (p95 5.68 and 6.60 s). Two measurements
+  say where the difference goes:
+  - with the journal emptied before each run, 10 alternating runs each: median 2.98 s
+    against 3.90 s with the full journal. About 0.9 s is the journal;
+  - one `cubby run` under `cProfile` (whose overhead inflates everything, 8.4 s in all):
+    journal compaction 2.3 s, one read of its 51 000 lines that parses each twice (once
+    for its run, once for its fields: 102 000 parses), to keep them all, since every move
+    is still undoable; the log line written per move 0.86 s;
+    the moves themselves 3.1 s.
+
+  The compaction is the one that is not the file's own cost. The agent tries it again only
+  once the journal has doubled since its last attempt (section "A defect this benchmark
+  found"), but that memory lives in the process: every `cubby run` starts without it, so
+  past 5 MB each run re-reads a journal it cannot shrink. The next step, if it matters, is
+  to keep the size at the last compaction in the state folder.
 
 ## Limits and the next step
 
