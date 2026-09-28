@@ -16,7 +16,7 @@ from ..adapters.config import (
 from ..adapters.journal import Journal
 from ..adapters.ledger import Ledger
 from ..adapters.logging import human_line, read_all
-from ..adapters.ui import Palette, Shown, dumps_for_terminal
+from ..adapters.ui import Palette, Shown, dumps_for_terminal, os_error_text
 from ..adapters.ui import escape_for_terminal as shown
 from ..app.explain import Explanation, PlannedPass, explain
 from ..app.history import recent_runs
@@ -177,7 +177,10 @@ def cmd_init(args: argparse.Namespace) -> int:
         )
         return EXIT_FAILED
     except OSError as error:
-        print(f"cubby: could not write {shown(str(target))}: {shown(str(error))}", file=sys.stderr)
+        print(
+            f"cubby: could not write {shown(str(target))}: {shown(os_error_text(error))}",
+            file=sys.stderr,
+        )
         return EXIT_FAILED
     print(f"Wrote a starter config to {shown(str(target))}")
     print("Preview what it does with: cubby plan")

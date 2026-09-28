@@ -454,6 +454,52 @@ def test_undo_shows_a_hostile_name_in_an_os_error_once(hostile, monkeypatch, cap
     assert f"[Errno 13] Permission denied: '{hostile}/{SHOWN}'" in out
 
 
+#: A file name holding a literal backslash and a real ESC, and how an OSError
+#: naming it must read: each escaped once, so the two stay apart.
+ODD_PATH = "/h/a\\b\x1b/pause.json"
+ODD_PATH_SHOWN = "'/h/a\\\\b\\x1b/pause.json'"
+
+
+def _refuse(*args, **kwargs):
+    raise PermissionError(13, "Permission denied", ODD_PATH)
+
+
+@pytest.mark.parametrize(
+    ("command", "target"),
+    [
+        (["pause"], "set_pause"),
+        (["resume"], "clear_pause"),
+    ],
+)
+def test_pause_and_resume_show_a_file_name_in_an_os_error_once(
+    monkeypatch, capsys, command, target
+):
+    monkeypatch.setattr(cli_sorting, target, _refuse)
+    assert main(command) == EXIT_FAILED
+    err = capsys.readouterr().err
+    assert raw_controls(err) == []
+    assert f"[Errno 13] Permission denied: {ODD_PATH_SHOWN}\n" in err
+
+
+def test_init_shows_a_file_name_in_an_os_error_once(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cli_inspect, "write_starter_config", _refuse)
+    assert main(["init", "--path", str(tmp_path / "config.toml")]) == EXIT_FAILED
+    err = capsys.readouterr().err
+    assert raw_controls(err) == []
+    assert f"[Errno 13] Permission denied: {ODD_PATH_SHOWN}\n" in err
+
+
+def test_the_log_warning_shows_a_file_name_in_an_os_error_once(tmp_path, monkeypatch, capsys):
+    from cubby.adapters.logging import file_logger
+
+    monkeypatch.setattr(state, "append_line", _refuse)
+    file_logger(tmp_path / "back\\slash.log")("hello")
+    err = capsys.readouterr().err
+    assert raw_controls(err) == []
+    assert "cannot write the log " + str(tmp_path) + "/back\\\\slash.log: " in err
+    assert f"[Errno 13] Permission denied: {ODD_PATH_SHOWN}\n" in err
+
+
 # --- notifications ----------------------------------------------------------------
 
 
