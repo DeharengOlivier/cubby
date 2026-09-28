@@ -92,7 +92,10 @@ def read_lines(path: Path) -> list[str]:
         raw = path.read_text("utf-8", errors="replace")
     except FileNotFoundError:
         return []
-    return [line for line in raw.splitlines() if line.strip()]
+    # Split on "\n" only, the one separator append_line writes. str.splitlines()
+    # also breaks on U+2028, U+0085 and others, which JSON leaves unescaped, so a
+    # file named with one of them tore its journal line in two.
+    return [line for line in raw.split("\n") if line.strip()]
 
 
 def keep_last_lines(path: Path, *, max_bytes: int, keep: int) -> None:

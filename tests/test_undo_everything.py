@@ -109,3 +109,18 @@ def test_undoing_a_deduplicated_file_brings_the_duplicate_back(downloads):
     # Both copies exist again, and the one that was already filed stayed filed.
     assert _files(downloads) == ["Images/p.png", "p.png"]
     assert (downloads / "p.png").read_text() == "same"
+
+
+@pytest.mark.parametrize("odd", ["\u2028", "\u2029", "\x85", "\x0b", "\x0c", "\x1c"])
+def test_a_name_with_a_unicode_line_break_can_be_undone(downloads, odd):
+    # Found by the journal property test: str.splitlines() also breaks on these,
+    # so the journal line of such a file was torn in two and its move was lost.
+    name = f"odd{odd}name.txt"
+    (downloads / name).write_text("x")
+    journal = Journal(downloads.parent / "journal.jsonl")
+
+    Sorter(_config(downloads), journal=journal).sort_once(apply=True)
+    assert _files(downloads) == [f"Documents/{name}"]
+
+    assert undo_last_run(journal) == 1
+    assert _files(downloads) == [name]
