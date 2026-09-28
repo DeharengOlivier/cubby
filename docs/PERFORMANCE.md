@@ -6,7 +6,8 @@ comfortable, and what to change then. Re-run with `benchmarks/bench_sort.py`.
 ## Method
 
 - `python benchmarks/bench_sort.py 1000 10000 20000 --repeat 5` and
-  `python benchmarks/bench_sort.py 200000 --repeat 3`, at commit `f816371`, 2026-09-28.
+  `python benchmarks/bench_sort.py 200000 --repeat 3`, at commit `f816371`, 2026-09-28
+  (the section "Memory of one pass" below has its own method, from 50 000 to 400 000 files).
 - Each repetition runs in a fresh process on a fresh folder of settled `.pdf` files, with
   content reading off, and with the undo journal and the run ledger the agent writes: the
   cost measured is the agent's.
@@ -20,6 +21,10 @@ comfortable, and what to change then. Re-run with `benchmarks/bench_sort.py`.
   the wall-clock columns carry contention; the CPU column is the steadier one.
 
 ## Results
+
+The table of 0.3.0, kept as the record it was. Its memory column is the peak of one process
+that planned, then applied, then idled, with the plan's list still held during the apply;
+the next section measures the pass alone.
 
 | Files | Plan | Apply | Apply CPU | CPU per file | Idle pass | Peak memory |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -54,6 +59,83 @@ Peak memory (`tracemalloc`) on the same journal: `cubby undo` 200 MB before, 126
 command uses any more) went from 200 MB to 254 MB, as it now holds the raw fields before
 building the entries.
 
+## Memory of one pass
+
+Audit 3 (PRF-04, SCL-02) found the memory of one pass unbounded: about 2.6 KB per file, and a
+breaking point near 400 000 files at 1 GB that was extrapolated, not measured.
+
+**Method.** `python benchmarks/bench_sort.py 50000 100000 200000 --repeat 3` and
+`python benchmarks/bench_sort.py 400000 --repeat 1`, the same harness run against 0.3.0
+(`b6dd32b`, before) and against this change (after), 2026-09-28. The harness now measures
+the plan and the agent's pass in two processes of their own, each on a fresh folder: the
+memory a plan frees stays resident and would be reused by a pass run after it, hiding what
+the pass needs. The pass is the agent's own (`Watcher`, one cycle, journal and ledger), not
+`sort_once`. Memory is the growth of the peak resident set (`ru_maxrss`) over the process
+before the phase, the largest of the repetitions. Same machine as above; load average 19 to
+42 during these runs, from other workloads and, for part of them, from the other benchmark
+running beside it, so the wall-clock columns are noisy and the CPU column is the one to
+compare.
+
+**Where the memory was.** `tracemalloc` over one pass of 50 000 files, grouped by the cubby
+line that allocated it (`python benchmarks/profile_pass.py 50000`):
+
+| Held by | 0.3.0 | After |
+| --- | ---: | ---: |
+| outcome of every file, kept to the end of the pass (`SortOutcome`, its destination `Path` and its text, the rule text) | 33.8 MB (680 B a file) | none |
+| folder listing held as `Path` objects, with the text each caches when stat'ed | 23.5 MB (490 B a file) | names only (72 B a file) |
+| **traced peak of the per-file loop** | **58.1 MB** | **6.2 MB** |
+| **traced peak while compacting the 21.7 MB journal**, what the loop left included | **121.8 MB** | **5.2 MB** |
+
+In 0.3.0 compaction held the journal's whole text, its lines and every line's parsed fields
+at once: 64 MB on top of the loop, three times the journal.
+
+The outcomes were a little over a quarter of that peak, the listing a fifth; compaction, which
+the audit did not name, was the largest single cost (half), and it grows with the journal (every
+move still undoable), not with the pass.
+
+**What changed.** The agent's pass hands each outcome to its caller and keeps counts
+(`Sorter.sort_pass`, `PassTally`); the watcher gathers what its alerts need as files fail
+(the first 1 000 names, how many are new, the first three to name). The listing is sorted as
+names and each path made when its turn comes. Compaction streams the journal twice: a census
+of sequence numbers per run, then the kept lines into the staged file.
+
+**Before and after**, peak resident growth, largest of the repetitions:
+
+| Files | Pass, 0.3.0 | Pass, after | Plan, 0.3.0 / after | Apply CPU per file, 0.3.0 / after |
+| ---: | ---: | ---: | ---: | ---: |
+| 50,000 | 130 MB | 6 MB | 66 / 66 MB | 860 / 647 us |
+| 100,000 | 260 MB | 13 MB | 132 / 132 MB | 722 / 850 us |
+| 200,000 | 522 MB | 26 MB | 264 / 264 MB | 726 / 901 us |
+| 400,000 | 1,046 MB | 54 MB | 535 / 530 MB | 1,019 / 843 us |
+
+After the change, at 1 000 and 20 000 files (5 repetitions), the pass holds under 1 MB and
+4 MB. The 400 000 row is one real run on each side, not an extrapolation. It confirms the audit's
+estimate for 0.3.0 (1 046 MB for one pass) and measures the new ceiling: 400 000 files moved
+in one pass in 618 s of wall clock (337 s of CPU) holding 54 MB, then an idle pass of 0.01 s.
+
+- The pass now costs about **135 bytes per file** (2.6 KB before): the sorted listing of
+  names, which a pass must hold to go through the folder in order, and nothing per outcome.
+  It is still linear, twenty times flatter: a million files would be about 135 MB
+  (extrapolated, not measured).
+- CPU per file is unchanged within the noise of this machine (722 to 1 019 us before, 647 to
+  901 us after, at load averages of 19 to 42); the change adds no work per file.
+- `cubby plan` and `cubby run` still hold every outcome, 1.3 to 1.4 KB per file, because they
+  print every file, grouped by folder and sorted by name, which needs them all before the
+  first line. Streaming that list would change the output, so it stays. They gain from the
+  listing and compaction changes: `cubby run`'s path (`sort_once` applied, journal, ledger,
+  then the rendered text) over 200 000 files, one run each, went from 515 MB to 275 MB.
+  `plan` does not compact and lists the folder once, so its memory did not move.
+- Compaction now holds the sequence numbers of the journal's runs, not its lines: 0.24 times
+  the journal's size in the profile above, 0.37 in `test_compaction_memory_is_a_fraction_of_the_journal`
+  (200 runs of 100 moves), where it held three to four times the journal.
+
+The invariants are pinned in `tests/test_bounded_pass_memory.py`: the agent's pass never
+holds more than the outcome being made; the ledger line, counts and alerts equal those built
+from the full list; journal sequence numbers still count failed files; the listing order is
+that of the sorted paths; compaction keeps exactly what 0.3.0 kept (property test against a
+frozen copy, `tests/compaction_reference.py`), never reads the whole file, and stays under
+half the journal's size; a pass of 2 000 files stays under 300 bytes a file.
+
 ## What the numbers say
 
 - **Apply is linear**: 0.55 to 0.72 ms of CPU per file at every size, one link, one unlink,
@@ -61,9 +143,9 @@ building the entries.
 - **The steady state is free**: once the folder is sorted, a pass costs a directory listing
   of the top level only (10 ms at 200 000 files, which sit in category folders the
   scan does not enter).
-- **Memory is linear**, about 2.6 KB per file moved in one pass. Measured with `tracemalloc` at
-  20 000 files: the outcomes of the pass hold 24 MB (1.2 KB each), and compacting the journal
-  peaks at 37 MB while it parses every entry.
+- **Memory of the agent's pass is small and linear**: about 135 bytes per file (54 MB at
+  400 000 files, measured), the sorted listing of names. It was 2.6 KB per file in 0.3.0
+  (section above). `plan` and `run`, which print every file, hold 1.3 to 1.4 KB per file.
 
 ## A defect this benchmark found
 
@@ -79,8 +161,9 @@ idle pass at 60 000 files went from 6.89 s to 0.001 s, and at 200 000 from 11.9 
 
 | Limit | Where it is reached | Effect | Next step if it matters |
 |---|---|---|---|
-| First sort of a very large folder | ~200 000 files: 2 to 3 min | the lock is held for the whole pass; a manual `cubby run` meanwhile waits, then stops with "another cubby process is sorting" | none needed: a one-off, and a stop request ends the pass between two files |
-| Memory of one pass | ~400 000 files at 2.6 KB each: 1 GB | a very large first sort on a small machine | count outcomes instead of keeping them in `watch` mode; stream compaction over lines instead of parsed entries |
+| First sort of a very large folder | ~200 000 files: 2 to 3 min; 400 000 files: 10 min (337 s of CPU) on this loaded machine | the lock is held for the whole pass; a manual `cubby run` meanwhile waits, then stops with "another cubby process is sorting" | none needed: a one-off, and a stop request ends the pass between two files |
+| Memory of the agent's pass | 135 bytes per file: 54 MB at 400 000 files (measured), about 135 MB at a million | none on any machine that runs a desktop | the listing itself: sort names in chunks on disk, only if folders of tens of millions of files appear |
+| Memory of `cubby plan` and `cubby run` | 1.3 to 1.4 KB per file: `plan` 530 MB at 400 000 files, `run` 275 MB at 200 000 (measured) | a first manual sort of a very large folder on a small machine; the agent is not affected | print as it goes, in folder order rather than grouped (an output change), or group through a temporary file |
 | Reading a large journal | 200 000 undoable moves: 1.3 to 1.6 s for `history` or `undo` (was 6 s) | interactive commands wait a second | a per-run index, so a command reads only the lines it needs |
 | Journal size | 150 to 400 bytes per move (it records both paths), never dropped while undoable | 30 to 80 MB after 200 000 moves nobody undid | an age limit on undo, if users ask for one |
 
