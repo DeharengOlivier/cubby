@@ -172,17 +172,16 @@ def _still_sorting() -> int | None:
     return _live_pid(beat, beat.age_seconds() > max(3 * beat.interval, 120.0))
 
 
-def _agent_text(pal: Palette, agent: dict[str, Any]) -> str:
+def _agent_text(pal: Palette, agent: dict[str, Any]) -> Shown:
     if not agent["installed"]:
-        if agent["live_pid"]:
-            return pal.yellow(
-                f"not installed, but cubby (pid {agent['live_pid']:d}) is still sorting"
-            )
-        return pal.yellow("not installed")
+        if live := agent["live_pid"]:
+            return pal.yellow(Shown(f"not installed, but cubby (pid {live:d}) is still sorting"))
+        return pal.yellow(Shown("not installed"))
+    manager = shown(agent["manager"])
     if agent["running"]:
         pid = f", pid {agent['live_pid']:d}" if agent["live_pid"] else ""
-        return pal.green(f"running ({shown(agent['manager'])}{pid})")
-    return pal.yellow(f"installed but not running ({shown(agent['manager'])})")
+        return pal.green(Shown(f"running ({manager}{pid})"))
+    return pal.yellow(Shown(f"installed but not running ({manager})"))
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -222,7 +221,7 @@ def _print_status(
     agent: dict[str, Any], pause: Pause | None, last: RunRecord | None, day: Activity
 ) -> None:
     pal = palette()
-    kv(pal, "agent", Shown(_agent_text(pal, agent)))
+    kv(pal, "agent", _agent_text(pal, agent))
     if agent["unit"]:
         kv(pal, "agent file", shown(agent["unit"]))
     if agent["watching"]:
@@ -231,9 +230,9 @@ def _print_status(
         kv(pal, "watching" if live else "last watched", shown(agent["watching"]))
     if pause:
         kv(pal, "paused", Shown(pal.yellow(shown(pause.describe()) + ": no file is moved")))
-    kv(pal, "last pass", Shown(_last_pass_text(pal, agent)))
+    kv(pal, "last pass", _last_pass_text(pal, agent))
     if last is None:
-        kv(pal, "last run", Shown(pal.dim("none recorded")))
+        kv(pal, "last run", pal.dim(Shown("none recorded")))
     else:
         summary = f"{shown(last.finished)}  moved {last.moved:d}"
         if last.failed:
@@ -252,7 +251,7 @@ def _print_status(
 
 def _print_activity(pal: Palette, day: Activity) -> None:
     if not day.runs:
-        kv(pal, f"last {ACTIVITY_HOURS} h", Shown(pal.dim("no run moved or failed anything")))
+        kv(pal, f"last {ACTIVITY_HOURS} h", pal.dim(Shown("no run moved or failed anything")))
         return
     summary = f"{day.runs:d} run{'s' if day.runs != 1 else ''}, moved {day.moved:d}"
     if day.failed:
@@ -277,15 +276,15 @@ def _shortened(text: str, limit: int = 100) -> str:
     return text if len(text) <= limit else text[: limit - 3] + "..."
 
 
-def _last_pass_text(pal: Palette, agent: dict[str, Any]) -> str:
+def _last_pass_text(pal: Palette, agent: dict[str, Any]) -> Shown:
     if agent["never_passed"]:
-        return pal.yellow("no pass completed since install: see the log")
+        return pal.yellow(Shown("no pass completed since install: see the log"))
     if agent["last_pass_age"] is None:
-        return pal.dim("never")
-    text: str = shown(format_age(agent["last_pass_age"]))
-    text = pal.yellow(text + " (stale)") if agent["stale"] else text
+        return pal.dim(Shown("never"))
+    text = shown(format_age(agent["last_pass_age"]))
+    text = pal.yellow(Shown(text + " (stale)")) if agent["stale"] else text
     measures = agent["last_pass"]
-    return f"{text}, {_measures_text(pal, measures)}" if measures else text
+    return Shown(f"{text}, {_measures_text(pal, measures)}") if measures else text
 
 
 def _measures_text(pal: Palette, measures: dict[str, Any]) -> str:
@@ -298,15 +297,17 @@ def _measures_text(pal: Palette, measures: dict[str, Any]) -> str:
     return ", ".join(parts)
 
 
-def _notifications_text(pal: Palette, enabled: bool) -> str:
+def _notifications_text(pal: Palette, enabled: bool) -> Shown:
     if not enabled:
-        return pal.dim("off (notify = false)")
+        return pal.dim(Shown("off (notify = false)"))
     if notify_module.command("cubby") is None:
         return pal.yellow(
-            "on, but no notification tool (osascript or notify-send) found: "
-            "problems go to the log only"
+            Shown(
+                "on, but no notification tool (osascript or notify-send) found: "
+                "problems go to the log only"
+            )
         )
-    return "on"
+    return Shown("on")
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -318,7 +319,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     kv(
         pal,
         "service",
-        shown(service.name) if service else Shown(pal.yellow("none (manual watch only)")),
+        shown(service.name) if service else pal.yellow(Shown("none (manual watch only)")),
     )
     kv(pal, "config file", shown(str(find_user_config() or "defaults only")))
     kv(pal, "source", shown(str(config.settings.source)))
@@ -334,10 +335,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             libs[lib] = True
         except (ImportError, OSError):  # absent, or a broken native wheel
             libs[lib] = False
-    kv(pal, "extract tools", Shown(format_features(pal, tools)))
-    kv(pal, "extract libs", Shown(format_features(pal, libs)))
+    kv(pal, "extract tools", format_features(pal, tools))
+    kv(pal, "extract libs", format_features(pal, libs))
     kv(pal, "parsable", pal.dim(shown(", ".join(sorted(PARSABLE)))))
-    kv(pal, "notifications", Shown(_notifications_text(pal, config.settings.notify)))
+    kv(pal, "notifications", _notifications_text(pal, config.settings.notify))
     if getattr(args, "notify", False):
         return _test_notification(pal)
     return 0
