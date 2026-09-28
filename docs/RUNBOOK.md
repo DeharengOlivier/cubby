@@ -142,6 +142,22 @@ Later versions leave one name.
 
 ## 4. Roll back to a previous version
 
+### From 0.3 to 0.2
+
+Follow the steps below with `@v0.2.0`; the recorded options pass unchanged to 0.2's
+`cubby install`, which has the same flags. A config written by 0.3's `cubby init` has a
+`late_content_patterns` list under Invoices, which 0.2 refuses:
+`cubby: config error: unknown key 'late_content_patterns' in category 'Invoices'`. Keep a copy of
+the config, then delete that list (from `late_content_patterns = [` to its closing `]`) before
+running 0.2; restore the copy when rolling forward. Without the list, 0.2 files those invoices by
+type (`Documents`) instead of by content.
+
+Compatibility, measured in the rollback rehearsal of 2026-09-28 (0.3 to 0.2 and back, in a
+throwaway home, `docs/audits/2026-09-28-rollback-0.3.md`): 0.2 lists and undoes runs made by 0.3,
+and 0.3 lists and undoes runs made by 0.2. The config key above is the only difference found.
+
+### From 0.2 to 0.1
+
 Record the agent's options, and remove the agent **before** replacing the package:
 
 ```sh
