@@ -12,6 +12,7 @@ from ..adapters.service import (
     ServiceError,
 )
 from ..adapters.ui import banner
+from ..adapters.ui import escape_for_terminal as shown
 from .agent import cmd_doctor, cmd_install, cmd_status, cmd_uninstall
 from .common import (
     EXIT_BAD_CONFIG,
@@ -195,23 +196,24 @@ def main(argv: list[str] | None = None) -> int:
         # Before ValueError: TOMLDecodeError is one, and the file it came from
         # is the useful half of the message when three locations are possible.
         print(
-            f"cubby: config error: {config_path_of(args)} is not valid TOML: {exc}",
+            f"cubby: config error: {shown(str(config_path_of(args)))} is not valid TOML: "
+            f"{shown(str(exc))}",
             file=sys.stderr,
         )
         return EXIT_BAD_CONFIG
     except (OSError, UnicodeError) as exc:
         # UnicodeError before ValueError, which it subclasses: a name or a text
         # cubby could not encode is not a setting to correct.
-        print(f"cubby: {exc}", file=sys.stderr)
+        print(f"cubby: {shown(str(exc))}", file=sys.stderr)
         return EXIT_FAILED
     except ValueError as exc:
         # A setting cubby cannot act on. The message names it; a traceback
         # would not tell the user which line of their file to correct. A flag
         # used wrongly names the flag, and is not the config's fault.
         kind = "" if isinstance(exc, SourceFlagError) else "config error: "
-        print(f"cubby: {kind}{exc}", file=sys.stderr)
+        print(f"cubby: {kind}{shown(str(exc))}", file=sys.stderr)
         return EXIT_BAD_CONFIG
     except ServiceError as exc:
-        print(f"cubby: {exc}", file=sys.stderr)
+        print(f"cubby: {shown(str(exc))}", file=sys.stderr)
         return EXIT_FAILED
     return exit_code

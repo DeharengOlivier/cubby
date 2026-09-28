@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..adapters.ui import Palette
+from ..adapters.ui import escape_for_terminal as shown
 from ..domain.file_ref import Stage
 
 #: Version of the ``--json`` document. Bumped when a field changes meaning or
@@ -99,8 +100,8 @@ def render_plan(
     p = palette or Palette(False)
     lines = [
         p.yellow(
-            f"{name} is a file where the {name}/ folder goes: files for it cannot be "
-            f"sorted; rename or move it."
+            f"{shown(name)} is a file where the {shown(name)}/ folder goes: files for it "
+            f"cannot be sorted; rename or move it."
         )
         for name in blocked or []
     ]
@@ -114,31 +115,32 @@ def render_plan(
     duplicates = [o for o in outcomes if o.error is None and o.duplicate_of is not None]
     for category in sorted(grouped):
         items = grouped[category]
-        header = p.bold(p.accent(f"{category}/")) + p.dim(f"  ({len(items)})")
+        header = p.bold(p.accent(f"{shown(category)}/")) + p.dim(f"  ({len(items)})")
         lines.append(f"\n{header}")
         for outcome in sorted(items, key=lambda o: o.display_name.lower()):
             stage = outcome.stage
             tag = "" if stage is None or stage is Stage.NAME else p.dim(f"   <- {stage.value}")
             if outcome.renamed_to:
-                tag += p.dim(f"   (was {outcome.name})")
-            lines.append(f"    {outcome.display_name}{tag}")
+                tag += p.dim(f"   (was {shown(outcome.name)})")
+            lines.append(f"    {shown(outcome.display_name)}{tag}")
 
     if duplicates:
         title = "Deleted as duplicates" if applied else "Would delete as duplicates"
         lines.append("\n" + p.bold(f"{title}  ({len(duplicates)})"))
         lines.extend(
-            f"    {o.name}   {p.dim('duplicate of ' + _near(o.duplicate_of, o.source.parent))}"
+            f"    {shown(o.name)}   "
+            f"{p.dim('duplicate of ' + shown(_near(o.duplicate_of, o.source.parent)))}"
             for o in duplicates
             if o.duplicate_of is not None
         )
     unjournaled = [o for o in outcomes if not o.journaled]
     if unjournaled:
         lines.append("\n" + p.bold(p.yellow(f"Moved but cannot be undone  ({len(unjournaled)})")))
-        lines.extend(f"    {o.display_name}" for o in unjournaled)
+        lines.extend(f"    {shown(o.display_name)}" for o in unjournaled)
     if failures:
         title = "Could not sort" if applied else "Would fail"
         lines.append("\n" + p.bold(p.yellow(f"{title}  ({len(failures)})")))
-        lines.extend(f"    {o.name}   {p.dim(o.error or '')}" for o in failures)
+        lines.extend(f"    {shown(o.name)}   {p.dim(shown(o.error or ''))}" for o in failures)
 
     lines.extend(_left_alone_lines(p, left_alone or []))
 
@@ -158,8 +160,8 @@ def _left_alone_lines(p: Palette, left_alone: list[LeftAlone]) -> list[str]:
     if not left_alone:
         return []
     lines = ["\n" + p.bold(f"Left alone  ({len(left_alone)})")]
-    shown = sorted(left_alone, key=lambda item: item[0].lower())[:_LEFT_ALONE_SHOWN]
-    lines.extend(f"    {name}   {p.dim(reason)}" for name, reason in shown)
+    first = sorted(left_alone, key=lambda item: item[0].lower())[:_LEFT_ALONE_SHOWN]
+    lines.extend(f"    {shown(name)}   {p.dim(shown(reason))}" for name, reason in first)
     if len(left_alone) > _LEFT_ALONE_SHOWN:
         more = len(left_alone) - _LEFT_ALONE_SHOWN
         lines.append(p.dim(f"    and {more} more; 'cubby explain FILE' says why for any file"))

@@ -16,6 +16,7 @@ from ..adapters.logging import file_logger
 from ..adapters.notify import notifier
 from ..adapters.pause import clear_pause, current_pause, set_pause
 from ..adapters.ui import banner
+from ..adapters.ui import escape_for_terminal as shown
 from ..app.report import LeftAlone, SortOutcome, render_json, render_plan
 from ..app.sorter import Sorter
 from ..app.undo import undo_run
@@ -86,10 +87,15 @@ def cmd_run(args: argparse.Namespace) -> int:
     return EXIT_FAILED if any(o.needs_attention for o in outcomes) else EXIT_OK
 
 
+def _print_shown(message: str) -> None:
+    """Print a message that names files, which may hold terminal controls."""
+    print(shown(message))
+
+
 def cmd_undo(args: argparse.Namespace) -> int:
     with exclusive():
         try:
-            result = undo_run(Journal(), getattr(args, "run", None), log=print)
+            result = undo_run(Journal(), getattr(args, "run", None), log=_print_shown)
         except KeyError:
             print(
                 f"cubby: no run {args.run!r} in the journal; see 'cubby history'", file=sys.stderr
