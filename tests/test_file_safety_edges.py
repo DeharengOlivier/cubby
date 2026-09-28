@@ -451,3 +451,14 @@ def test_a_filed_link_to_the_source_is_not_its_duplicate(tmp_path):
 
     assert moved.op == "move"
     assert moved.destination.read_text("utf-8") == "only copy"
+
+
+def test_a_link_to_a_file_is_not_its_copy_even_at_the_same_size(tmp_path):
+    # The link's own size is the length of its target: make them equal.
+    target = tmp_path / "t.txt"
+    target.write_text("x" * len(str(target)), encoding="utf-8")
+    link = tmp_path / "link.txt"
+    link.symlink_to(target)
+
+    assert files_identical(target, link) is False
+    assert files_identical(link, target) is False

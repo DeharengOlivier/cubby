@@ -178,8 +178,14 @@ class Moved:
 #: enough: ext4 hands a freed inode number to the next file created (measured),
 #: so a file deleted and replaced under the same name can have the same one.
 #: An edit changes the size or the time, and counts as another file too.
-#: A folder (or a macOS bundle) records 0 for both: its size and time change
-#: whenever something inside does, which Finder does just by opening it.
+#:
+#: A folder (or a macOS bundle) cannot use its own size and time: they change
+#: whenever something inside does, which Finder does just by opening it. Its
+#: inode is not enough either, since a folder deleted and made again can get
+#: the same one (measured on ext4). Instead of size and time, a folder records
+#: the inode and time of one entry inside it, its witness: the folder is the
+#: same while that entry is still in it. An empty folder records 0 and its own
+#: time.
 Identity = tuple[int, int, int, int]
 
 
@@ -187,20 +193,52 @@ def identity(path: Path) -> Identity | None:
     """``path``'s identity (not following a symlink), or None if it cannot be read."""
     try:
         info = path.lstat()
+        if stat.S_ISDIR(info.st_mode):
+            witness = _witness(path)
+            if witness is None:
+                return info.st_dev, info.st_ino, 0, info.st_mtime_ns
+            return info.st_dev, info.st_ino, witness.st_ino, witness.st_mtime_ns
     except OSError:
         return None
-    if not stat.S_ISREG(info.st_mode):
-        return info.st_dev, info.st_ino, 0, 0
     return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns
 
 
-def same_identity(recorded: Identity, current: Identity | None) -> bool:
-    """Whether ``current`` is still the file recorded as ``recorded``.
+def _witness(folder: Path) -> os.stat_result | None:
+    """The entry of ``folder`` that stands for it: its first file by name, else
+    its first entry, hidden ones (``.DS_Store``) left out; None when empty.
+
+    Raises:
+        OSError: The folder could not be listed.
+    """
+    with os.scandir(folder) as entries:
+        visible = sorted(
+            (entry for entry in entries if not entry.name.startswith(".")),
+            key=lambda entry: (not entry.is_file(follow_symlinks=False), entry.name),
+        )
+    return visible[0].stat(follow_symlinks=False) if visible else None
+
+
+def same_file(path: Path, recorded: Identity) -> bool:
+    """Whether ``path`` is still the file or folder recorded as ``recorded``.
 
     The device number is left out: macOS numbers an external drive anew each
     time it is mounted, while the path already pins the volume.
+
+    Raises:
+        OSError: ``path`` could not be read.
     """
-    return current is not None and recorded[1:] == current[1:]
+    info = path.lstat()
+    if info.st_ino != recorded[1]:
+        return False
+    if not stat.S_ISDIR(info.st_mode):
+        return (info.st_size, info.st_mtime_ns) == recorded[2:]
+    if recorded[2] == 0:  # empty when it was moved
+        return info.st_mtime_ns == recorded[3]
+    with os.scandir(path) as entries:
+        return any(
+            (found.st_ino, found.st_mtime_ns) == recorded[2:]
+            for found in (entry.stat(follow_symlinks=False) for entry in entries)
+        )
 
 
 #: How many times a name may be taken under us before the move gives up.

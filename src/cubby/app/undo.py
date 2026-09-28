@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..adapters.filesystem import identity, move_no_clobber, same_identity, unique_destination
+from ..adapters.filesystem import move_no_clobber, same_file, unique_destination
 from ..adapters.journal import Entry, Journal, Run
 
 Logger = Callable[[str], None]
@@ -101,29 +101,28 @@ def undo_run(journal: Journal, run_id: str | None = None, *, log: Logger = _noop
 
     for entry in reversed(run.pending):
         try:
-            there = _still_there(entry.destination)
-            if not there:
-                log(f"skip (no longer at {entry.destination}): {entry.source.name}")
-                journal.settle(entry, "gone")
+            if not _still_there(entry.destination):
+                name = None
                 result.gone += 1
-                continue
-            if entry.ident is not None and not same_identity(
-                entry.ident, identity(entry.destination)
-            ):
+                log(f"skip (no longer at {entry.destination}): {entry.source.name}")
+            elif entry.ident is not None and not same_file(entry.destination, entry.ident):
                 # Another file took the name, or the file was changed since:
                 # moving it could take a file cubby never moved, so it stays,
                 # and the user decides (the file is named, and where it went).
-                log(_skip_message(entry))
-                journal.settle(entry, "gone")
+                name = None
                 result.replaced += 1
-                continue
-            name = _restore(entry)
+                log(_skip_message(entry))
+            else:
+                name = _restore(entry)
         except OSError as exc:
             log(
                 f"pending (cannot restore {entry.destination.name}): {exc}; "
                 f"fix the cause, then retry with 'cubby undo --run {run.run_id}'"
             )
             result.failed.append(entry.destination.name)
+            continue
+        if name is None:
+            journal.settle(entry, "gone")
             continue
         journal.settle(entry, "restored")
         wanted = entry.source.name

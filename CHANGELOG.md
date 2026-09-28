@@ -53,8 +53,9 @@ All notable changes to this project are documented here. The format is based on
   duplicate was recreated from whatever replaced the kept copy. Each move now
   records the file's device, inode, size and modification time, and undo
   leaves a file that differs in place and says where it would have gone. A
-  file edited since the run is left in place too; a folder is compared by its
-  inode only, since its size and date change with its content. Found by an
+  file edited since the run is left in place too. A folder, whose size and
+  date change with its content, is recognised by one file it held when it
+  was moved, still inside it and unchanged. Found by an
   exploratory session.
 - `cubby undo` settled a file as gone for good when a folder on the way to it
   was unreadable; it now stays pending and is retried once the folder can be
