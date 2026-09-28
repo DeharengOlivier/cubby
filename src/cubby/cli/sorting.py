@@ -84,7 +84,7 @@ def cmd_undo(args: argparse.Namespace) -> int:
     if result.failed:
         print(
             f"cubby: {len(result.failed)} file(s) could not be restored and stay pending; "
-            "run 'cubby undo' again once the cause is fixed.",
+            f"run 'cubby undo --run {result.run_id}' again once the cause is fixed.",
             file=sys.stderr,
         )
         return EXIT_FAILED

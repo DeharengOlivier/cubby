@@ -26,12 +26,14 @@ The agent stays running (its heartbeat shows it alive) but skips every pass unti
 ```sh
 cubby uninstall          # stops the agent, checks it stopped, removes its launchd/systemd unit
 cubby status             # must say "not installed", with no "still sorting (pid N)"
-pgrep -fl 'cubby watch'  # must print nothing
+pgrep -fa 'cubby watch'  # must print nothing (on macOS: pgrep -fl)
 ```
 
-`cubby uninstall` exits non-zero if the service manager refuses or the agent is still running
-afterwards; in both cases it keeps the unit file. `cubby status` names any cubby process whose
-heartbeat is still fresh ("not installed, but cubby (pid N) is still sorting"). Stop it by hand:
+`cubby uninstall` exits non-zero if the service manager refuses, if the manager still reports
+the agent as active (it then keeps the unit file), or if a cubby process still sends heartbeats
+after the manager said it stopped (it prints that pid). `cubby status` shows the pid of the
+cubby that is sorting: "running (systemd, pid N)", or "not installed, but cubby (pid N) is
+still sorting"; `cubby status --json` has it as `agent.live_pid`. Stop it by hand:
 
 - macOS:
   ```sh
@@ -42,9 +44,11 @@ heartbeat is still fresh ("not installed, but cubby (pid N) is still sorting"). 
   ```sh
   systemctl --user stop cubby.service              # works on the loaded unit
   systemctl --user disable cubby.service           # if ~/.config/systemd/user/cubby.service exists
-  systemctl --user is-active cubby.service         # must print "inactive" (or "unknown")
+  systemctl --user is-active cubby.service         # "inactive" (or "unknown"), and then:
+  cubby status                                     # no pid: "inactive" alone is not enough
   ```
-- A foreground `cubby watch` (no agent): `kill -TERM <pid>` with the pid `cubby status` names.
+- An agent its manager lost track of, or a foreground `cubby watch`: `kill -TERM <pid>` with the
+  pid `cubby uninstall` or `cubby status` printed, then `cubby status` again.
 
 Stopping sends SIGTERM: the agent finishes the file in progress, stops the pass between two
 files and exits, so no move is left without its journal line. The launchd and systemd units
@@ -83,8 +87,9 @@ What undo does with each file of the run:
 - **Skipped for good**: the file is no longer where the run put it (moved again, deleted).
   Undo prints `skip (no longer at ...)`, still exits 0, and the run shows as `undone`. Look
   for those lines and move such files back by hand, if they still exist somewhere.
-- **Pending**: restoring failed with an error (a permission, a full disk). Undo exits 1 and
-  the run shows as `partly undone`. Fix the cause and run `cubby undo --run ID` again; a
+- **Pending**: restoring failed with an error (a permission, a full disk). Undo prints
+  `pending (cannot restore NAME): <error>` (`skip (cannot restore ...)` in 0.2.0), exits 1,
+  and the run shows as `partly undone`. Fix the cause and run `cubby undo --run ID` again; a
   failed attempt changes nothing, so the retry is safe.
 - A deduplicated file is restored as a copy of the one that was kept.
 
@@ -94,11 +99,20 @@ A run shown as `unknown` is not in the journal. Compaction (once the journal pas
 drops only runs that are older than the 200 most recent **and** have nothing left to undo,
 so such a run needs nothing. A run that is `unknown` while its files are still misplaced
 means the journal was lost or could not be written (`cubby log --warnings` shows
-`could not write` lines): move its files back by hand, from the lines of `cubby log --run ID`.
+`could not write` lines). Then:
 
-**Before 0.3.0**, a failed undo attempt could leave a second name for the file, and the retry
-then restored `name (1).ext` beside `name.ext`. If you retried an undo with an older cubby,
-`ls -li` shows both names with the same inode number: delete the `(1)` one.
+- Do not run plain `cubby undo`: it skips the `unknown` run and reverts the most recent older
+  run that still has something to undo. Always name the run: `cubby undo --run ID`.
+- Move its files back by hand. Each line of `cubby log --run ID` reads
+  `[Category] (reason) old-name -> where/it/went`, relative to the sorted folder (`watching`
+  in `cubby status`); move each file from the right-hand path back to that folder under its
+  old name. (cubby 0.2.0 and older log only the old name: look for the file in the category
+  folder and its month subfolders, possibly renamed `name (1).ext`, and check its content.)
+
+**In cubby 0.2.0 and 0.1**, a move that failed after linking the file (a read-only folder, during
+a run or an undo) left the file under two names, and a retried undo restored `name (1).ext`
+beside `name.ext`. `ls -li` shows both names with the same inode number: delete the `(1)` one.
+Later versions leave one name.
 
 ## 4. Roll back to a previous version
 
@@ -115,8 +129,14 @@ cubby install <the recorded options>   # only when you want the old version to s
 ```
 
 Uninstall first because a 0.1 agent cannot start from a 0.2 unit: it rejects
-`--wait-for-source` and restarts in a loop. 0.1 also rejects `--month-style` and
-`--month-lang`: drop them from the recorded options.
+`--wait-for-source` and restarts in a loop. The options to pass to `cubby install` are the
+flags after `watch --wait-for-source`, without `--month-style` and `--month-lang`, which 0.1
+also rejects. For example `ExecStart=... "watch" "--wait-for-source" "--delay" "0" "--interval" "1s"`
+becomes `cubby install --delay 0 --interval 1s`.
+
+**The 0.1 agent journals nothing**: what it moves can be undone by no version, and is listed only
+in `~/Library/Logs/cubby.log`. If undo matters, run 0.1 by hand (`cubby run`, which journals)
+instead of reinstalling its agent.
 
 **0.1 has no pause, no `history`, no `log` and no `undo --run`.** A `cubby pause` set under 0.2
 is ignored by a 0.1 agent, which starts moving files again at once: that is why the agent is
@@ -129,7 +149,9 @@ Compatibility, measured in the rollback rehearsal and the runbook drill of 2026-
 - Cubby 0.2 reads journals written by 0.1.
 - Cubby 0.1 cannot read the 0.2 journal format: while the last journal line comes from 0.2,
   `cubby undo` in 0.1 fails with `KeyError: 'moves'`. It changes nothing (the journal file was
-  byte-identical afterwards), and runs made by 0.1 after the rollback undo normally.
+  byte-identical afterwards). Runs made by a manual 0.1 `cubby run` after the rollback undo
+  normally once the last journal line is theirs; while it is still from 0.2, 0.1 `cubby undo`
+  keeps failing with that error.
 - Rolling forward to 0.2 again undoes the 0.2 runs as before.
 - These hold only when neither `XDG_STATE_HOME` nor `CUBBY_STATE_DIR` is set. 0.1 always uses
   `~/.local/state/cubby`, including when the 0.2 unit sets `CUBBY_STATE_DIR`. Then 0.1 sees none
@@ -142,17 +164,27 @@ later.
 
 ## 5. Remove cubby completely
 
+First make sure the agent is gone. Deleting the state folder while an agent still runs lifts
+its pause and takes away its journal.
+
 ```sh
-cubby uninstall
+cubby uninstall              # must exit 0; if not, follow section 1 and start again
+cubby status                 # must say "not installed", with no "still sorting (pid N)"
+```
+
+Only then:
+
+```sh
 pipx uninstall cubby-sort    # pipx install; otherwise: rm -rf ~/.local/share/cubby/venv ~/.local/bin/cubby
 rm -rf "${CUBBY_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/cubby}" ~/.local/state/cubby \
-       ~/.config/cubby ${CUBBY_CONFIG:+"$CUBBY_CONFIG"} ~/Library/Logs/cubby.log*
+       ~/.config/cubby ~/.cubby.toml ${CUBBY_CONFIG:+"$CUBBY_CONFIG"} ~/Library/Logs/cubby.log*
 rm -rf ~/cubby-evidence-*    # once the incident is closed: section 2's copies list your downloads
 ```
 
-`./uninstall.sh` does the first two lines from a checkout. Sorted files stay where they are;
-cubby never deletes a file except an opt-in, byte-identical duplicate (`dedupe = true`), and
-that is journaled.
+From a checkout, `./uninstall.sh` runs `cubby uninstall` and removes the program; it stops
+without removing anything when the agent cannot be stopped (from 0.3.0; earlier scripts
+removed the CLI anyway). Sorted files stay where they are; cubby never deletes a file except
+an opt-in, byte-identical duplicate (`dedupe = true`), and that is journaled.
 
 ## 6. A state file is damaged
 
@@ -167,7 +199,7 @@ Copy the state folder first (section 2), then:
 ## 7. Report it
 
 Open an issue with the output of `cubby status --json`, `cubby history --json` and the
-relevant `cubby log --run ID` lines. All three contain full paths and file names: remove the
-ones you do not want to share. For a security problem, open a
+relevant `cubby log --run ID` lines. Together they contain folder paths and file names:
+remove the ones you do not want to share. For a security problem, open a
 [private advisory](https://github.com/DeharengOlivier/cubby/security/advisories/new) instead
 of a public issue.

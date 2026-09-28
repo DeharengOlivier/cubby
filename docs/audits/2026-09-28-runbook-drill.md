@@ -220,4 +220,10 @@ author of the changes. Its findings were handled as follows:
   a "damaged state file" section, `cubby log --run` for the files of a run, and the security
   contact (`SECURITY.md` now names the private advisory URL).
 
-The corrected runbook was then executed again: see "Second drill" below.
+The corrected runbook was then executed again by a second operator agent that had not seen
+this record: `2026-09-28-runbook-drill-2.md` (43 steps worked, 8 wrong, 6 unclear, 4 not
+executable here, out of 61). It confirmed the three code fixes and found 13 further defects,
+four of them in the code (the log line of a move did not say where the file went, a pending
+undo entry was printed as "skip", `uninstall` trusted a manager that had lost the agent, and
+`uninstall.sh` removed the CLI when the agent could not be stopped). All are fixed, with
+reproducers in `tests/test_review_runbook_drill.py`, and the runbook corrected.
