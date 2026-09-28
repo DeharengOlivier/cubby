@@ -23,6 +23,10 @@ All notable changes to this project are documented here. The format is based on
 - A file whose name contains a Unicode line separator (U+2028, U+2029, U+0085)
   could not be undone: its journal line was read back as two broken lines.
   Journal, ledger and log lines are now split on `\n` only.
+- On Linux, a file whose name is not valid UTF-8 was moved, then the journal
+  refused its name: the move could not be undone and the CLI reported a
+  "config error". State files are written as ASCII JSON and the terminal
+  output escapes such names.
 
 ### Fixed (audit 1, docs/audits/2026-09-28-audit-1.md)
 - Files sorted by the background agent can be undone. `cubby watch` never
@@ -57,9 +61,11 @@ All notable changes to this project are documented here. The format is based on
   stays pending and is retried by the next `cubby undo`.
 - `CUBBY_STATE_DIR` redirects every file cubby keeps for itself.
 - `cubby watch` stops cleanly on SIGTERM (what launchd and systemd send): the
-  pass in progress finishes, so a move is never cut off from its journal line.
-- Tagged releases are built, checked against the package version, smoke-tested
-  and published on GitHub with SHA-256 sums.
+  pass ends between two files, so a move is never cut off from its journal
+  line, and the units allow 60 s for it.
+- Tagged releases are built with a hash-pinned build backend, checked against
+  the package version and the main branch, smoke-tested and published on
+  GitHub with SHA-256 sums.
 - Property-based tests (Hypothesis), an end-to-end agent journey in real
   processes, and targeted mutation testing of the journal, containment and undo.
 - `docs/THREAT-MODEL.md`.

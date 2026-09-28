@@ -72,7 +72,7 @@ def file_logger(path: Path | None = None, *, echo: bool = False) -> LevelLogger:
                 echoing = False  # stdout closed (`cubby run -v | head`): the file still gets it
         try:
             _rotate(destination)
-            state.append_line(destination, json.dumps(record, ensure_ascii=False))
+            state.append_line(destination, json.dumps(record))
         except OSError as exc:
             if not reported:
                 reported = True

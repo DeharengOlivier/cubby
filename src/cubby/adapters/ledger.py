@@ -106,7 +106,7 @@ class Ledger:
         Raises:
             OSError: The ledger could not be written.
         """
-        state.append_line(self.runs_path, json.dumps(record.to_json(), ensure_ascii=False))
+        state.append_line(self.runs_path, json.dumps(record.to_json()))
         state.keep_last_lines(self.runs_path, max_bytes=MAX_BYTES, keep=KEEP_LINES)
 
     def runs(self, limit: int | None = None) -> list[RunRecord]:

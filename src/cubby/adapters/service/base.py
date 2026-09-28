@@ -17,6 +17,11 @@ DEFAULT_LABEL = "com.cubby.agent"
 #: must not hang `cubby install`.
 COMMAND_TIMEOUT = 30.0
 
+#: Seconds the service manager waits after SIGTERM before killing the agent.
+#: A stop waits for the file in progress (text extraction is capped at 15 s)
+#: and, at worst, for the pass lock (30 s), so 60 s lets it end cleanly.
+STOP_TIMEOUT = 60
+
 
 class ServiceError(RuntimeError):
     """The service manager refused, failed, or the agent did not start."""

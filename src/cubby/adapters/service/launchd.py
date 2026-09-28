@@ -8,6 +8,7 @@ from pathlib import Path
 from .. import state
 from .base import (
     DEFAULT_LABEL,
+    STOP_TIMEOUT,
     Service,
     ServiceError,
     ServiceSpec,
@@ -47,6 +48,7 @@ class LaunchdService(Service):
             "RunAtLoad": True,
             "KeepAlive": True,
             "ProcessType": "Background",
+            "ExitTimeOut": STOP_TIMEOUT,
             "StandardOutPath": str(spec.log_path),
             "StandardErrorPath": str(spec.log_path),
         }

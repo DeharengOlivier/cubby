@@ -43,7 +43,7 @@ from .app.history import recent_runs
 from .app.report import SortOutcome, render_json, render_plan
 from .app.sorter import Sorter
 from .app.undo import undo_run
-from .app.watcher import Watcher
+from .app.watcher import StopRequest, Watcher
 from .domain.category import Config
 from .domain.duration import format_duration
 
@@ -188,18 +188,14 @@ def cmd_watch(args: argparse.Namespace) -> int:
     ledger = Ledger()
     sorter = Sorter(config, log=log, warn=warn, journal=Journal(), ledger=ledger, mode="watch")
     # launchd and systemd stop the agent with SIGTERM. Dying on it could fall
-    # between a move and its journal line; instead the pass in progress
-    # finishes and the loop stops. The same event cuts the sleep short.
-    stopping = threading.Event()
-
-    def request_stop(signum: int, _frame: object) -> None:
-        stopping.set()
-
-    def sleep(seconds: float) -> None:
-        stopping.wait(seconds)
-
-    previous = signal.signal(signal.SIGTERM, request_stop)
-    watcher = Watcher(sorter, config.settings.interval, log=loud, ledger=ledger, sleep=sleep)
+    # between a move and its journal line; instead the pass stops between two
+    # files and the loop ends. The units allow STOP_TIMEOUT for that.
+    stopping = StopRequest()
+    on_main_thread = threading.current_thread() is threading.main_thread()
+    previous = signal.signal(signal.SIGTERM, stopping.request) if on_main_thread else None
+    watcher = Watcher(
+        sorter, config.settings.interval, log=loud, ledger=ledger, sleep=stopping.sleep
+    )
     log(
         f"cubby watching {config.settings.source} "
         f"(delay {format_duration(config.settings.delay)}, "
@@ -207,9 +203,10 @@ def cmd_watch(args: argparse.Namespace) -> int:
     )
     try:
         with contextlib.suppress(KeyboardInterrupt):  # Ctrl-C at a terminal
-            watcher.run(stop=stopping.is_set)
+            watcher.run(stop=stopping)
     finally:
-        signal.signal(signal.SIGTERM, previous)
+        if on_main_thread:
+            signal.signal(signal.SIGTERM, previous)
     log("cubby stopped")
     return EXIT_OK
 
@@ -586,6 +583,19 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _tolerate_undecodable_names() -> None:
+    """Print any file name, even one that is not valid UTF-8.
+
+    Linux allows such names and Python holds them as surrogate characters,
+    which a strict stream refuses: the report of a run that has already moved
+    the file would crash. They are shown with backslash escapes instead.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(errors="backslashreplace")
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run one cubby command.
 
@@ -595,6 +605,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         :data:`EXIT_OK`, :data:`EXIT_FAILED` or :data:`EXIT_BAD_CONFIG`.
     """
+    _tolerate_undecodable_names()
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.func is None:
@@ -611,15 +622,17 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return EXIT_BAD_CONFIG
+    except (OSError, UnicodeError) as exc:
+        # UnicodeError before ValueError, which it subclasses: a name or a text
+        # cubby could not encode is not a setting to correct.
+        print(f"cubby: {exc}", file=sys.stderr)
+        return EXIT_FAILED
     except ValueError as exc:
         # A setting cubby cannot act on. The message names it; a traceback
         # would not tell the user which line of their file to correct.
         print(f"cubby: config error: {exc}", file=sys.stderr)
         return EXIT_BAD_CONFIG
     except ServiceError as exc:
-        print(f"cubby: {exc}", file=sys.stderr)
-        return EXIT_FAILED
-    except OSError as exc:
         print(f"cubby: {exc}", file=sys.stderr)
         return EXIT_FAILED
     return exit_code
