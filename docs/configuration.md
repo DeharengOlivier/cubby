@@ -56,7 +56,7 @@ its state folder:
 | `journal.jsonl` | every move, for `cubby undo` (bounded to the last 200 runs past 5 MB) |
 | `runs.jsonl` | one line per run that moved or failed something, for `cubby status` |
 | `heartbeat.json` | when the agent last completed a pass |
-| `cubby.log` | the activity log, JSON lines, rotated at 1 MB (on macOS: `~/Library/Logs/cubby.log`) |
+| `cubby.log` | the activity log, JSON lines, rotated at 1 MB (on macOS, with the default state folder: `~/Library/Logs/cubby.log`) |
 | `cubby.lock` | makes each pass and each undo exclusive |
 
 The state folder is `$CUBBY_STATE_DIR` when set, else `$XDG_STATE_HOME/cubby`,

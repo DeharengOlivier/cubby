@@ -89,6 +89,10 @@ def cmd_install(args: argparse.Namespace) -> int:
     # without this, it would read another config than the one install read.
     if config_home := config_module.config_home_override():
         environment["XDG_CONFIG_HOME"] = str(config_home)
+    # The same for the state folder's base: the agent must find the default
+    # state folder the shell finds, or on macOS their logs would part.
+    if xdg_state := os.environ.get("XDG_STATE_HOME"):
+        environment["XDG_STATE_HOME"] = str(Path(xdg_state).expanduser().resolve())
     spec = ServiceSpec(program_args=_program_args(args), log_path=log_path, environment=environment)
     path = service.install(spec)
     print(f"Installed {service.name} agent: {shown(str(path))} (running)")

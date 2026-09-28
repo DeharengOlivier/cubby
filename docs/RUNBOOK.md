@@ -68,7 +68,7 @@ if [ "$(uname)" = Darwin ]; then cp -a ~/Library/Logs/cubby.log* "$EVIDENCE"/; f
 echo "$EVIDENCE"
 ```
 
-On macOS, an agent of 0.2 or 0.3 logged into the state folder (`~/.local/state/cubby/cubby.log`), which the first copy already takes; later versions log to `~/Library/Logs/cubby.log`.
+On macOS, an agent of 0.2 or 0.3 logged into its state folder (`~/.local/state/cubby/cubby.log` by default), which the first copy already takes; later versions log to `~/Library/Logs/cubby.log` while the state folder is the default one.
 
 After a rollback to 0.1 (section 4), also copy `~/.local/state/cubby` and, on every platform,
 `~/Library/Logs/cubby.log*`: that is where 0.1 writes. These files list the names of downloaded
