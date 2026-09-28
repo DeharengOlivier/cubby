@@ -75,7 +75,8 @@ containers, infrastructure, secrets.
 | SEC-07-005 parsers fuzzed | P0 | PASS | Hypothesis over config tables, journal lines (with noise and surrogates), dates, durations; seeded engine fuzz (`test_fuzz.py`) | each release |
 | SEC-08-003 no command built from user data | P0 | PASS | argument lists only; systemd quoting tested (`test_service_boundary.py`); notification text passed as an argument (`test_macos_passes_the_message_as_an_argument_not_as_script`) | each release |
 | SEC-08-006 no eval | P0 | PASS | bandit in CI; a planted `.py` is never imported by a parser child (`test_review_pr2.py`) | each release |
-| SEC-08-001, 002, 004, 005 | P0 | N/A | no SQL, NoSQL, HTML or templates | - |
+| SEC-08-004 output encoding | P0 | PASS | untrusted file names reach a terminal and desktop notifications: every human output escapes control, DEL, C1 and bidi characters and doubles a backslash (`escape_for_terminal`); the `notify-send` body is markup-escaped; `--json` and the log are escaped by the JSON encoder. `tests/test_terminal_escape.py`: a hostile name through `plan`, `run -v`, `undo`, `explain`, `log`, `status`, `doctor`, a missing source and stderr warnings, a Hypothesis property (no control character left, escaping reversible, identity on printable text), notification bodies | each release |
+| SEC-08-001, 002, 005 | P0 | N/A | no SQL, NoSQL, HTML or templates | - |
 | SEC-09 (API) | P0 | N/A | no API, no outbound URL | - |
 | SEC-10-001 size limited | P0 | PASS | files past `MAX_SOURCE_BYTES` are not read (`test_extraction_bounds.py`) | each release |
 | SEC-10-002 types, extension not proof | P0 | PASS | the extension picks a parser, which runs in a child process with a memory ceiling and timeout; a mislabeled file only fails to parse | each release |

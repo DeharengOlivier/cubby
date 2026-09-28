@@ -12,6 +12,19 @@ All notable changes to this project are documented here. The format is based on
 - A pull request cannot merge until its independent review record is posted
   on it (the required `review record` check).
 
+### Security
+- A file name can no longer drive the terminal. Control characters (C0,
+  DEL, C1) and bidi overrides or isolates in a name reached the output of
+  `plan`, `run`, `undo`, `explain`, `log`, `status` and `doctor` raw, so a
+  file planted in Downloads could clear the screen or forge those reports.
+  Every human output now shows them as visible escapes (`\x1b`, `\u202e`)
+  and doubles a backslash, so each shown name stands for one real name;
+  ordinary names (accented, CJK, emoji) read as they are. `--json` outputs
+  and the log file were already escaped and are unchanged.
+- The `notify-send` body is markup: `&`, `<` and `>` in a file name are
+  now escaped there, and control characters are escaped in notifications
+  on every platform.
+
 ## [0.3.0] - 2026-09-28
 
 ### Added
