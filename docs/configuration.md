@@ -84,9 +84,13 @@ document (parsed in French and English), or the file's modification date when
 none is readable.
 
 Add `vendor_rename = true` (invoices) to also rename the file to
-`<vendor> facture <date>`, e.g. `spotify facture 2026-07-07.pdf`. The vendor is
-matched against the `vendors` list first, then guessed from the filename; when
-nothing is certain the original name is kept. Renaming never overwrites and
+`<vendor> facture <date>`, e.g. `spotify facture 2026-07-07.pdf`. The date is the
+one printed in the document, else one in the file name (`2026-08` alone gives
+`spotify facture 2026-08.pdf`); the download date files the invoice but is never
+written in its name (`spotify facture.pdf`). The vendor is matched against the
+`vendors` list first, then taken from the filename, skipping generic words
+(`invoices`, `your`, `bill`, `scan`, month names...); when nothing is certain
+the original name is kept. Renaming never overwrites and
 `cubby undo` still restores the original path.
 
 ### The cascade

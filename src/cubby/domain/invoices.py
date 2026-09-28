@@ -183,6 +183,52 @@ def _worded_date(m: re.Match[str], *, day: int, month: int) -> date | None:
     return _valid(int(m[3]), num, int(m[day])) if num else None
 
 
+# 2026-08 or 2026_08 in a file name, with no day after it.
+_YEAR_MONTH = re.compile(r"\b(\d{4})[-_. ](\d{1,2})\b(?![-_. ]\d)")
+# août 2026, August 2026.
+_MONTH_YEAR = re.compile(rf"\b({_MONTHS_ALT})\.?\s+(\d{{4}})\b", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class InvoiceDate:
+    """When an invoice was issued, as precisely as it could be read.
+
+    ``day_known`` is False when only the month was found (``2026-08`` in a
+    name); ``stated`` is False for the fallback (the download date), which is
+    good enough to file by but never written into a name as the invoice date.
+    """
+
+    when: date
+    day_known: bool = True
+    stated: bool = True
+
+    def label(self) -> str:
+        return self.when.isoformat() if self.day_known else self.when.strftime("%Y-%m")
+
+
+def name_date(name: str) -> InvoiceDate | None:
+    """A date stated in the file name ``name``, day first, else a month; None if none."""
+    stem = re.sub(r"[_]+", " ", name.rsplit(".", 1)[0] if "." in name else name)
+    candidates = _find_dates(stem)
+    if candidates:
+        return InvoiceDate(min(candidates, key=lambda pair: pair[0])[1])
+    for pattern, year_group, month_group in ((_YEAR_MONTH, 1, 2), (_MONTH_YEAR, 2, 1)):
+        if m := pattern.search(stem):
+            month = (
+                _month_num(m[month_group]) if not m[month_group].isdigit() else int(m[month_group])
+            )
+            if month and (found := _valid(int(m[year_group]), month, 1)):
+                return InvoiceDate(found, day_known=False)
+    return None
+
+
+def invoice_date(name: str, text: str, fallback: date) -> InvoiceDate:
+    """The invoice's date: from its content, else its name, else ``fallback``."""
+    if text and _find_dates(text):
+        return InvoiceDate(parse_invoice_date(text, fallback))
+    return name_date(name) or InvoiceDate(fallback, stated=False)
+
+
 def parse_invoice_date(text: str, fallback: date) -> date:
     """The invoice's issue date, read from ``text``; ``fallback`` if unreadable.
 
@@ -211,37 +257,71 @@ def parse_invoice_date(text: str, fallback: date) -> date:
 
 _SEP = re.compile(r"[\s_\-.]+")
 # Noise tokens that are never a vendor name (FR + EN).
-_STOPWORDS = (
-    frozenset(
-        {
-            "invoice",
-            "facture",
-            "factures",
-            "receipt",
-            "recu",
-            "reçu",
-            "order",
-            "commande",
-            "payment",
-            "paiement",
-            "confirmation",
-            "bill",
-            "devis",
-            "no",
-            "num",
-            "ref",
-            "reference",
-            "référence",
-            "de",
-            "du",
-            "the",
-            "pour",
-            "for",
-        }
-    )
-    | {name.lower() for name in _FR_MONTHS.values()}
-    | {name.lower() for name in _EN_MONTHS.values()}
-)
+_STOPWORDS = frozenset(
+    {
+        "invoice",
+        "facture",
+        "factures",
+        "receipt",
+        "recu",
+        "reçu",
+        "order",
+        "commande",
+        "payment",
+        "paiement",
+        "confirmation",
+        "bill",
+        "devis",
+        "no",
+        "num",
+        "ref",
+        "reference",
+        "référence",
+        "de",
+        "du",
+        "the",
+        "pour",
+        "for",
+        # Plurals and words that say what the file is, not who sent it.
+        "invoices",
+        "receipts",
+        "reçus",
+        "recus",
+        "bills",
+        "orders",
+        "payments",
+        "statement",
+        "billing",
+        "facturation",
+        "copy",
+        "copie",
+        "scan",
+        "scanned",
+        "document",
+        "download",
+        "pdf",
+        "my",
+        "your",
+        "our",
+        "mon",
+        "ma",
+        "mes",
+        "votre",
+        "vos",
+        "notre",
+        "nos",
+        "le",
+        "la",
+        "les",
+        "un",
+        "une",
+        "a",
+        "an",
+        "of",
+        "et",
+        "and",
+    }
+) | set(_MONTH_INDEX)
 
 
 def detect_vendor(name: str, text: str, known: Sequence[str]) -> str | None:
@@ -283,10 +363,15 @@ def month_folder(d: date, style: str = "numeric", lang: str = "fr") -> str:
     return f"{d.year:04d}-{d.month:02d}"
 
 
-def invoice_filename(vendor: str, d: date, ext: str) -> str:
-    """``spotify facture 2026-07-07.pdf`` from its parts."""
+def invoice_filename(vendor: str, d: date | InvoiceDate, ext: str) -> str:
+    """``spotify facture 2026-07-07.pdf`` from its parts.
+
+    A month-only date gives ``spotify facture 2026-08.pdf``; a date that was
+    not stated (the download date) is left out: ``spotify facture.pdf``.
+    """
+    stated = d if isinstance(d, InvoiceDate) else InvoiceDate(d)
     ext = ext.lstrip(".").lower()
-    base = f"{vendor} facture {d.isoformat()}"
+    base = f"{vendor} facture {stated.label()}" if stated.stated else f"{vendor} facture"
     return f"{base}.{ext}" if ext else base
 
 
@@ -318,12 +403,13 @@ def plan_placement(
     """Decide the month subfolder and (for invoices) the renamed filename.
 
     ``text`` is the extracted document text (empty when content scanning is
-    off). ``fallback_date`` is used when no date can be read (typically the
-    file's modification time). Renaming only happens when ``vendor_rename`` is
-    set *and* a vendor is confidently found.
+    off). The date is read from the text, else from the file name; else
+    ``fallback_date`` (typically the file's modification time) files it, and
+    the new name carries no date. Renaming only happens when ``vendor_rename``
+    is set *and* a vendor is confidently found.
     """
-    d = parse_invoice_date(text, fallback_date)
-    subdir = month_folder(d, month_style, month_lang)
+    d = invoice_date(name, text, fallback_date)
+    subdir = month_folder(d.when, month_style, month_lang)
     new_name: str | None = None
     if vendor_rename:
         vendor = detect_vendor(name, text, vendors)

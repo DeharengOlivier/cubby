@@ -40,6 +40,7 @@ def _explanation_json(item: Explanation) -> dict[str, Any]:
         "outside_source": item.outside,
         "duplicate_of": str(item.duplicate_of) if item.duplicate_of else None,
         "error": item.error,
+        "content_chars": item.content_chars,
     }
 
 
@@ -61,6 +62,13 @@ def _print_explanation(pal: Palette, item: Explanation, source: Path) -> None:
         kv(pal, "  would go to", pal.accent(shown), _WIDTH)
     rule = f"{item.rule}  ({item.stage.value} stage)" if item.rule else "no rule matched"
     kv(pal, "  decided by", rule, _WIDTH)
+    if item.content_chars is not None:
+        read = (
+            f"read ({item.content_chars} characters), no content pattern matched"
+            if item.content_chars
+            else "no text could be read from it"
+        )
+        kv(pal, "  content", pal.dim(read), _WIDTH)
     if item.renamed_to:
         kv(pal, "  renamed", item.renamed_to, _WIDTH)
 

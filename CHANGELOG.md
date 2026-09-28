@@ -89,6 +89,16 @@ All notable changes to this project are documented here. The format is based on
   by a file (a category or a month folder) under "Would fail", not as a move.
   In `plan --json`, `count` no longer includes downloads in progress. Found by
   an exploratory session.
+- Invoice renaming made a vendor up from generic words (`Invoices.pdf` became
+  `invoices facture ...`, `Your bill.pdf` became `your facture ...`); such
+  words are no longer a vendor, and the original name is kept. A date in the
+  file name (`Invoice-2026-08-spotify.pdf`, `Facture EDF août 2026.pdf`) is
+  now used when the document has none, instead of the download date, and the
+  download date is no longer written into the new name as if it were the
+  invoice's. The content stage recognises "facture" or "invoice" followed by
+  a date or an amount (`Facture Free Mobile du 05/08/2026 montant 19,99 EUR`),
+  and `explain` says when it read a file's content and nothing matched
+  (`content_chars` in `--json`). Found by an exploratory session.
 - A regular file named like a folder cubby sorts into (`_Unsorted`, a
   category, or a month folder inside one) made every move into that folder
   fail with `[Errno 17] File exists`. The file is still left alone, and the
