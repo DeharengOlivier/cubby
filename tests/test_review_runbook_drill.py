@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
@@ -132,3 +134,111 @@ def test_status_ignores_the_heartbeat_of_a_process_that_is_gone(monkeypatch, cap
 
     main(["status", "--json"])
     assert json.loads(capsys.readouterr().out)["agent"]["live_pid"] is None
+
+
+# --- second drill ----------------------------------------------------------------
+
+
+def test_the_log_line_of_a_move_says_where_the_file_went(tmp_path):
+    # The runbook sends the operator to `cubby log --run ID` to move files back
+    # by hand; a line naming only the old name pointed at the wrong file when
+    # the name was taken and the file landed as "name (1)".
+    downloads = tmp_path / "Downloads"
+    (downloads / "Documents").mkdir(parents=True)
+    (downloads / "Documents" / "notes.txt").write_text("older")
+    (downloads / "notes.txt").write_text("newer")
+    lines: list[str] = []
+
+    Sorter(config_for(downloads), log=lambda message, **_: lines.append(message)).sort_once(
+        apply=True
+    )
+
+    (line,) = lines
+    assert line.endswith("notes.txt -> Documents/notes (1).txt")
+
+
+def test_a_file_undo_could_not_restore_is_called_pending_not_skipped(tmp_path, monkeypatch):
+    downloads = tmp_path / "Downloads"
+    downloads.mkdir()
+    (downloads / "notes.txt").write_text("x")
+    journal = Journal(tmp_path / "journal.jsonl")
+    Sorter(config_for(downloads), journal=journal).sort_once(apply=True)
+
+    def refuse(source, destination):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr("cubby.app.undo.move_no_clobber", refuse)
+    lines: list[str] = []
+    result = undo_run(journal, log=lines.append)
+
+    (line,) = lines
+    assert line.startswith("pending (cannot restore notes.txt)")
+    assert f"cubby undo --run {result.run_id}" in line
+
+
+class _Uninstalled:
+    name = "fake"
+
+    def uninstall(self, label: str = "com.cubby.agent") -> bool:
+        return True
+
+
+def test_uninstall_fails_when_a_cubby_is_still_sorting_afterwards(monkeypatch, capsys):
+    # The service manager said the agent stopped, but a fresh heartbeat from a
+    # live process says something still sorts: the operator must hear it.
+    monkeypatch.setattr(cli_agent, "detect_service", _Uninstalled)
+    _beat(os.getpid())
+
+    assert main(["uninstall"]) == 1
+
+    err = capsys.readouterr().err
+    assert f"pid {os.getpid()}" in err
+    assert f"kill -TERM {os.getpid()}" in err
+
+
+def test_status_names_the_pid_of_a_running_agent(monkeypatch, capsys):
+    class Running:
+        name = "fake"
+
+        def is_installed(self, label: str = "com.cubby.agent") -> bool:
+            return True
+
+        def is_running(self, label: str = "com.cubby.agent") -> bool:
+            return True
+
+        def unit_path(self, label: str):
+            return "/tmp/fake.agent"
+
+    monkeypatch.setattr(cli_agent, "detect_service", Running)
+    _beat(os.getpid())
+
+    main(["status"])
+
+    assert f"running (fake, pid {os.getpid()})" in capsys.readouterr().out
+
+
+def test_uninstall_script_keeps_the_cli_when_the_agent_cannot_be_stopped(tmp_path):
+    # Removing the CLI after a failed `cubby uninstall` left a running agent and
+    # no command to stop it with.
+    home = tmp_path / "home"
+    venv = home / ".local" / "share" / "cubby" / "venv"
+    venv.mkdir(parents=True)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake = bin_dir / "cubby"
+    fake.write_text("#!/bin/sh\necho 'cubby: still running' >&2\nexit 1\n")
+    fake.chmod(0o755)
+    script = Path(__file__).resolve().parents[1] / "uninstall.sh"
+
+    completed = subprocess.run(
+        ["/bin/sh", str(script)],
+        env={"HOME": str(home), "PATH": f"{bin_dir}:/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert completed.returncode != 0
+    assert venv.exists()
+    assert "cubby removed" not in completed.stdout

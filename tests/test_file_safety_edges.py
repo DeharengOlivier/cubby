@@ -365,7 +365,7 @@ def test_a_failed_entry_does_not_stop_the_older_ones(tmp_path, monkeypatch):
     assert result.restored == 1
     assert older.source.exists()
     assert len(result.failed) == 1
-    assert any(line.startswith("skip (cannot restore b.txt)") for line in lines)
+    assert any(line.startswith("pending (cannot restore b.txt)") for line in lines)
     assert "restored a.txt" in lines
 
 

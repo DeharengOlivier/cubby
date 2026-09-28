@@ -17,7 +17,7 @@ from ..adapters.config import (
     find_user_config,
 )
 from ..adapters.extraction import PARSABLE
-from ..adapters.ledger import Ledger, RunRecord
+from ..adapters.ledger import Heartbeat, Ledger, RunRecord
 from ..adapters.logging import human_line, read_tail
 from ..adapters.notify import notifier
 from ..adapters.pause import Pause, current_pause
@@ -89,8 +89,17 @@ def cmd_uninstall(args: argparse.Namespace) -> int:
     service = detect_service()
     if service is None or not service.uninstall():
         print("No cubby agent was installed.")
-        return EXIT_OK
-    print(f"Removed the {service.name} agent.")
+    else:
+        print(f"Removed the {service.name} agent.")
+    # The manager can lose track of a process that still runs, and a foreground
+    # `cubby watch` has no unit at all: the heartbeat is the last word.
+    pid = _still_sorting()
+    if pid is not None:
+        print(
+            f"cubby: a cubby process (pid {pid}) is still sorting; stop it with: kill -TERM {pid}",
+            file=sys.stderr,
+        )
+        return EXIT_FAILED
     return EXIT_OK
 
 
@@ -113,7 +122,7 @@ def _agent_state() -> dict[str, Any]:
     stale = bool(beat and age is not None and stale_after and age > stale_after)
     # A fresh heartbeat from a live process: something is sorting, installed or
     # not (a foreground `cubby watch`, or an agent that survived its uninstall).
-    live_pid = beat.pid if beat and not stale and beat.process_alive() else None
+    live_pid = _live_pid(beat, stale)
     never_passed = bool(
         service and installed and running and beat is None and _installed_for(service) > 120.0
     )
@@ -130,6 +139,19 @@ def _agent_state() -> dict[str, Any]:
     }
 
 
+def _live_pid(beat: Heartbeat | None, stale: bool) -> int | None:
+    """The pid behind a fresh heartbeat, if that process still exists."""
+    return beat.pid if beat and not stale and beat.process_alive() else None
+
+
+def _still_sorting() -> int | None:
+    """A cubby process that beat within its last few intervals and is alive."""
+    beat = Ledger().heartbeat()
+    if beat is None:
+        return None
+    return _live_pid(beat, beat.age_seconds() > max(3 * beat.interval, 120.0))
+
+
 def _agent_text(pal: Palette, agent: dict[str, Any]) -> str:
     if not agent["installed"]:
         if agent["live_pid"]:
@@ -138,7 +160,8 @@ def _agent_text(pal: Palette, agent: dict[str, Any]) -> str:
             )
         return pal.yellow("not installed")
     if agent["running"]:
-        return pal.green(f"running ({agent['manager']})")
+        pid = f", pid {agent['live_pid']}" if agent["live_pid"] else ""
+        return pal.green(f"running ({agent['manager']}{pid})")
     return pal.yellow(f"installed but not running ({agent['manager']})")
 
 
