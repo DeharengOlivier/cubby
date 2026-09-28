@@ -195,7 +195,7 @@ def test_watch_stops_cleanly_on_an_interrupt(monkeypatch, tmp_path, config_file,
     source = tmp_path / "downloads"
     source.mkdir()
 
-    def interrupted(self):
+    def interrupted(self, **_):
         raise KeyboardInterrupt
 
     monkeypatch.setattr("cubby.app.watcher.Watcher.run", interrupted)
@@ -217,3 +217,26 @@ def test_doctor_reports_a_library_that_fails_to_import(monkeypatch, config_file,
     monkeypatch.setattr("builtins.__import__", broken)
     assert main(["doctor", "--config", str(config_file)]) == EXIT_OK
     assert "openpyxl -" in capsys.readouterr().out
+
+
+def test_watch_stops_after_the_pass_in_progress_on_sigterm(tmp_path, monkeypatch):
+    # launchd and systemd send SIGTERM; the pass in progress completes, then
+    # the loop ends, and the handler the process had before is put back.
+    import signal
+
+    source = tmp_path / "downloads"
+    source.mkdir()
+    passes = []
+
+    def one_pass(self):
+        passes.append(1)
+        signal.raise_signal(signal.SIGTERM)
+        return 0
+
+    monkeypatch.setattr("cubby.app.watcher.Watcher._cycle", one_pass)
+    before = signal.getsignal(signal.SIGTERM)
+
+    assert main(["watch", "--source", str(source), "--interval", "1h"]) == 0
+
+    assert passes == [1]
+    assert signal.getsignal(signal.SIGTERM) is before

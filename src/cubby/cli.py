@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import shutil
+import signal
 import sys
+import threading
 import time
 import tomllib
 from pathlib import Path
@@ -184,16 +187,30 @@ def cmd_watch(args: argparse.Namespace) -> int:
 
     ledger = Ledger()
     sorter = Sorter(config, log=log, warn=warn, journal=Journal(), ledger=ledger, mode="watch")
-    watcher = Watcher(sorter, config.settings.interval, log=loud, ledger=ledger)
+    # launchd and systemd stop the agent with SIGTERM. Dying on it could fall
+    # between a move and its journal line; instead the pass in progress
+    # finishes and the loop stops. The same event cuts the sleep short.
+    stopping = threading.Event()
+
+    def request_stop(signum: int, _frame: object) -> None:
+        stopping.set()
+
+    def sleep(seconds: float) -> None:
+        stopping.wait(seconds)
+
+    previous = signal.signal(signal.SIGTERM, request_stop)
+    watcher = Watcher(sorter, config.settings.interval, log=loud, ledger=ledger, sleep=sleep)
     log(
         f"cubby watching {config.settings.source} "
         f"(delay {format_duration(config.settings.delay)}, "
         f"every {format_duration(config.settings.interval)})"
     )
     try:
-        watcher.run()
-    except KeyboardInterrupt:
-        log("cubby stopped")
+        with contextlib.suppress(KeyboardInterrupt):  # Ctrl-C at a terminal
+            watcher.run(stop=stopping.is_set)
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+    log("cubby stopped")
     return EXIT_OK
 
 
