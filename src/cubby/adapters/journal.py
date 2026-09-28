@@ -246,7 +246,7 @@ def _tally(lines: list[str]) -> dict[str, tuple[int, int]]:
 def _run_of(line: str) -> str | None:
     """The run a line belongs to, keyed as the reads key it (see :func:`_fields`)."""
     try:
-        record = json.loads(line)
+        record = state.parse_json(line)
     except json.JSONDecodeError:
         return None
     if not isinstance(record, dict):
@@ -282,7 +282,7 @@ def _fields(line: str) -> Iterator[_Fields]:
     is most of the cost of reading, so it is left to :func:`_run_from`.
     """
     try:
-        record = json.loads(line)
+        record = state.parse_json(line)
     except json.JSONDecodeError:
         return
     if not isinstance(record, dict):

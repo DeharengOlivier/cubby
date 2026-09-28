@@ -15,13 +15,32 @@ owner only.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 #: Permission bits for every file cubby creates in its state folder.
 PRIVATE_FILE = 0o600
 PRIVATE_DIR = 0o700
+
+
+def parse_json(text: str) -> Any:
+    """``json.loads`` for state files: every way a line can be damaged is a decode error.
+
+    The parser recurses once per level of nesting, so a value nested a few
+    thousand levels deep raises ``RecursionError``. cubby never writes one, and
+    it must cost its line only, like any other damage, rather than stop every
+    read of the file.
+
+    Raises:
+        json.JSONDecodeError: ``text`` is not JSON, or is nested too deep to read.
+    """
+    try:
+        return json.loads(text)
+    except RecursionError:
+        raise json.JSONDecodeError("nested too deep to read", text[:100], 0) from None
 
 
 def state_dir() -> Path:

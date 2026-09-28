@@ -146,7 +146,7 @@ def _parse(line: str) -> dict[str, str]:
     level) are taken as records; any other line is kept whole, as text.
     """
     try:
-        data = json.loads(line)
+        data = state.parse_json(line)
     except json.JSONDecodeError:
         data = None
     if isinstance(data, dict) and isinstance(data.get("msg"), str) and data.get("level") in LEVELS:

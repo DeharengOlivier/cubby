@@ -32,6 +32,15 @@ All notable changes to this project are documented here. The format is based on
   the version too; older records read as `unknown`.
 
 ### Fixed
+- A regular file named like a folder cubby sorts into (`_Unsorted`, a
+  category, or a month folder inside one) made every move into that folder
+  fail with `[Errno 17] File exists`. The file is still left alone, and the
+  error now names it: `a file named _Unsorted is in the way of the folder
+  cubby sorts into; rename or move it`.
+- A line of the journal, the ledger, the heartbeat, the log or the pause file
+  nested a few thousand levels deep raised `RecursionError` and stopped every
+  read of that file, undo and compaction included. It now counts as a damaged
+  line, like any other.
 - Journal compaction dropped a run whose id was not a string (a hand-edited
   or foreign line such as `"run": 7`) while `cubby undo` could still revert
   it: the reads took such an id as `"7"`, compaction ignored it.
