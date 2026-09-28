@@ -30,7 +30,7 @@ from cubby.app.undo import undo_run
 from cubby.cli import EXIT_FAILED, EXIT_OK, main
 from cubby.cli import agent as cli_agent
 from cubby.cli import sorting as cli_sorting
-from cubby.domain.category import Category, Config, Settings
+from tests.helpers import config_for
 
 # --- 1. a downloaded .py must never run --------------------------------------
 
@@ -69,13 +69,6 @@ def test_the_child_parser_runs_isolated_from_the_working_directory(monkeypatch, 
 # --- 2. a move is journaled before anything else can fail --------------------
 
 
-def _config(source: Path, **settings) -> Config:
-    return Config(
-        settings=Settings(source=source, delay=0, content_scan=False, **settings),
-        categories=(Category(name="Documents", extensions=frozenset({"txt"})),),
-    )
-
-
 def test_a_logger_that_raises_after_a_move_cannot_unjournal_it(tmp_path):
     source = tmp_path / "Downloads"
     source.mkdir()
@@ -85,7 +78,7 @@ def test_a_logger_that_raises_after_a_move_cannot_unjournal_it(tmp_path):
     def broken_log(message: str) -> None:
         raise BrokenPipeError(32, "Broken pipe")
 
-    outcomes = Sorter(_config(source), journal=journal, log=broken_log).sort_once(apply=True)
+    outcomes = Sorter(config_for(source), journal=journal, log=broken_log).sort_once(apply=True)
 
     assert (source / "Documents" / "a.txt").exists()
     assert outcomes[0].error is None, "a moved file must not be reported as failed"

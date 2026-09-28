@@ -28,7 +28,7 @@ from cubby.adapters import journal as journal_module
 from cubby.adapters.journal import Entry, Journal
 from cubby.app.sorter import Sorter
 from cubby.app.undo import undo_last_run, undo_run
-from cubby.domain.category import Category, Config, Settings
+from tests.helpers import config_for
 
 
 def _journal(tmp_path: Path) -> Journal:
@@ -80,13 +80,6 @@ def test_lines_from_an_unknown_future_version_are_ignored(tmp_path):
 # --- 2. a journal that could not be written ---------------------------------
 
 
-def _config(source: Path) -> Config:
-    return Config(
-        settings=Settings(source=source, delay=0, content_scan=False),
-        categories=(Category(name="Documents", extensions=frozenset({"txt"})),),
-    )
-
-
 def test_a_journal_that_cannot_be_written_is_reported_and_the_sort_goes_on(tmp_path):
     source = tmp_path / "Downloads"
     source.mkdir()
@@ -99,7 +92,7 @@ def test_a_journal_that_cannot_be_written_is_reported_and_the_sort_goes_on(tmp_p
 
     try:
         outcomes = Sorter(
-            _config(source), journal=Journal(unwritable / "journal.jsonl"), warn=warnings.append
+            config_for(source), journal=Journal(unwritable / "journal.jsonl"), warn=warnings.append
         ).sort_once(apply=True)
     finally:
         unwritable.chmod(0o700)
@@ -150,7 +143,7 @@ def test_each_move_is_on_disk_before_the_next_one_starts(tmp_path, monkeypatch):
         return real_move(path, *args, **kwargs)
 
     monkeypatch.setattr(sorter_module, "move_into", spying_move)
-    Sorter(_config(source), journal=journal).sort_once(apply=True)
+    Sorter(config_for(source), journal=journal).sort_once(apply=True)
 
     assert seen_before_each_move == [0, 1, 2]
 

@@ -1,18 +1,11 @@
 from cubby.app.sorter import Sorter
 from cubby.app.watcher import Watcher
-from cubby.domain.category import Category, Config, Settings
-
-
-def _config(tmp_path):
-    return Config(
-        settings=Settings(source=tmp_path, delay=0, content_scan=False),
-        categories=(Category(name="Documents", extensions=frozenset({"txt"})),),
-    )
+from tests.helpers import config_for
 
 
 def test_watcher_sorts_each_cycle(tmp_path):
     (tmp_path / "a.txt").write_text("x")
-    sorter = Sorter(_config(tmp_path))
+    sorter = Sorter(config_for(tmp_path))
     slept: list[float] = []
     watcher = Watcher(sorter, interval=5, sleep=slept.append)
 
@@ -25,7 +18,7 @@ def test_watcher_sorts_each_cycle(tmp_path):
 
 
 def test_watcher_stop_predicate_breaks_loop(tmp_path):
-    sorter = Sorter(_config(tmp_path))
+    sorter = Sorter(config_for(tmp_path))
     cycles = {"n": 0}
 
     def stop() -> bool:
@@ -38,7 +31,7 @@ def test_watcher_stop_predicate_breaks_loop(tmp_path):
 
 
 def test_watcher_picks_up_files_appearing_between_cycles(tmp_path):
-    config = _config(tmp_path)
+    config = config_for(tmp_path)
     sorter = Sorter(config)
 
     def sleep(_: float) -> None:
