@@ -167,6 +167,9 @@ def test_compaction_keeps_pending_runs_and_version_1_lines(tmp_path, monkeypatch
 def test_run_ids_do_not_collide_within_a_second():
     ids = {journal_module.new_run_id() for _ in range(5000)}
     assert len(ids) == 5000
+    # The random part carries 64 bits: 5 000 ids in one second collide with a
+    # probability near 7e-13, where 32 bits failed CI once (0.3%).
+    assert {len(run_id.rsplit("-", 1)[1]) for run_id in ids} == {16}
 
 
 # --- 5. the agent uses the state folder the CLI uses --------------------------

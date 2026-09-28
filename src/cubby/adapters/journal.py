@@ -53,8 +53,13 @@ def default_journal_path() -> Path:
 
 
 def new_run_id() -> str:
-    """A sortable, unique identifier for one sort run."""
-    return f"{datetime.now():%Y%m%dT%H%M%S}-{secrets.token_hex(4)}"
+    """A sortable, unique identifier for one sort run.
+
+    64 random bits after the second: two runs that share an id share a journal
+    entry list, and undoing one would revert both. 32 bits collided in CI
+    (2 of 5 000 ids drawn in one second, a 0.3% chance by the birthday bound).
+    """
+    return f"{datetime.now():%Y%m%dT%H%M%S}-{secrets.token_hex(8)}"
 
 
 @dataclass(frozen=True)
