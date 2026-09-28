@@ -9,7 +9,7 @@ cubby; none needs root.
 The fastest switch, with no service manager involved:
 
 ```sh
-cubby pause              # the agent moves nothing from its next pass on
+cubby pause              # the agent moves nothing more, from the next file on
 cubby status             # "paused ... no file is moved"
 ```
 

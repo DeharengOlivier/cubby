@@ -30,6 +30,7 @@ from .adapters.ledger import Ledger
 from .adapters.lock import exclusive
 from .adapters.logging import LevelLogger, file_logger, human_line, read_tail
 from .adapters.notify import notifier
+from .adapters.pause import MAX_DURATION as MAX_PAUSE
 from .adapters.pause import clear_pause, current_pause, set_pause
 from .adapters.service import (
     DEFAULT_LABEL,
@@ -288,6 +289,10 @@ def _positive_duration(value: str) -> float:
         raise argparse.ArgumentTypeError(str(error)) from None
     if seconds <= 0:
         raise argparse.ArgumentTypeError(f"must be a positive duration such as 2h, got {value!r}")
+    if seconds > MAX_PAUSE:
+        raise argparse.ArgumentTypeError(
+            f"must be at most 366d, got {value!r}; to pause until you resume, omit --for"
+        )
     return seconds
 
 
@@ -302,7 +307,7 @@ def cmd_pause(args: argparse.Namespace) -> int:
     except OSError as error:
         print(f"cubby: could not pause: {error}", file=sys.stderr)
         return EXIT_FAILED
-    print(f"The agent is {pause.describe()}. It stops moving files at its next pass.")
+    print(f"The agent is {pause.describe()}. It stops before the next file it would move.")
     print("Resume with: cubby resume")
     return EXIT_OK
 
