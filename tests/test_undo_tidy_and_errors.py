@@ -147,3 +147,16 @@ def test_a_file_named_like_a_word_of_the_message_keeps_its_path(tmp_path):
     error = OSError(28, "No space left on device", str(tmp_path / "on"))
 
     assert ": on (the disk is full)" in describe_error(error, tmp_path)
+
+
+def test_a_blocked_move_reads_as_cubby_wrote_it(tmp_path):
+    # Re-review: nothing compared the whole message, so a doubled path passed.
+    aged_file(tmp_path, "Documents", content="a plain file")
+    aged_file(tmp_path, "notes.txt")
+
+    (outcome,) = Sorter(config_for(tmp_path)).sort_once(apply=True)
+
+    assert outcome.error == (
+        "FileExistsError: a file named Documents is in the way of the folder cubby sorts "
+        "into; rename or move it"
+    )
