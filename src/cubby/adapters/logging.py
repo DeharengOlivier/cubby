@@ -110,11 +110,26 @@ def read_tail(path: Path | None = None, limit: int = 5) -> list[dict[str, str]]:
     Raises:
         OSError: The log exists but cannot be read.
     """
-    records: list[dict[str, str]] = []
-    for line in state.read_lines(path or state.log_path())[-limit:]:
-        try:
-            data = json.loads(line)
-        except json.JSONDecodeError:
-            data = None
-        records.append(data if isinstance(data, dict) else {"msg": line})
-    return records
+    return [_parse(line) for line in state.read_lines(path or state.log_path())[-limit:]]
+
+
+def read_all(path: Path | None = None) -> list[dict[str, str]]:
+    """Every record kept, oldest first: the rotated file, then the current one.
+
+    Both are capped at :data:`MAX_BYTES`, so this reads at most twice that.
+
+    Raises:
+        OSError: A log file exists but cannot be read.
+    """
+    current = path or state.log_path()
+    rotated = current.with_name(current.name + ".1")
+    return [_parse(line) for line in state.read_lines(rotated) + state.read_lines(current)]
+
+
+def _parse(line: str) -> dict[str, str]:
+    """A log line as a record; a line that is not a JSON object is kept as text."""
+    try:
+        data = json.loads(line)
+    except json.JSONDecodeError:
+        data = None
+    return data if isinstance(data, dict) else {"msg": line}

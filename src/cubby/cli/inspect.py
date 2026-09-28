@@ -1,4 +1,4 @@
-"""Commands that explain, list and set up: explain, history, init."""
+"""Commands that explain, list and set up: explain, history, log, init."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from ..adapters.config import (
 )
 from ..adapters.journal import Journal
 from ..adapters.ledger import Ledger
+from ..adapters.logging import human_line, read_all
 from ..adapters.ui import Palette
 from ..app.explain import Explanation, explain
 from ..app.history import recent_runs
@@ -98,6 +99,20 @@ def cmd_history(args: argparse.Namespace) -> int:
         flag = "" if summary.undo == "undoable" else pal.dim(f"  {summary.undo}")
         print(f"{record.finished}  {pal.accent(record.run)}  {record.mode:<5}  {counts}{flag}")
     print(pal.dim("\nUndo one with: cubby undo --run <id>"))
+    return EXIT_OK
+
+
+def cmd_log(args: argparse.Namespace) -> int:
+    records = read_all()
+    if not records:
+        print(palette().dim("No log yet: the agent writes one once it runs."))
+        return EXIT_OK
+    if args.run:
+        records = [r for r in records if r.get("run") == args.run]
+    if args.warnings:
+        records = [r for r in records if r.get("level", "INFO") != "INFO"]
+    for record in records[-args.lines :]:
+        print(json.dumps(record) if args.json else human_line(record))
     return EXIT_OK
 
 

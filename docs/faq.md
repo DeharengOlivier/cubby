@@ -23,7 +23,8 @@ Yes. The background agent uses launchd on macOS and systemd on Linux. The sorter
 itself is pure Python and platform-independent.
 
 **How do I see what the agent has been doing?**
-`cubby status` shows the last run and the last lines of the log. The log itself
+`cubby status` shows the last run and the last lines of the log, and
+`cubby log --warnings` (or `--run <id>`) reads further back. The log itself
 is JSON lines, one per event, in `~/Library/Logs/cubby.log` on macOS and
 `~/.local/state/cubby/cubby.log` elsewhere:
 `jq -r 'select(.level != "INFO") | "\(.ts) \(.msg)"' ~/.local/state/cubby/cubby.log`
