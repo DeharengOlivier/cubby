@@ -169,12 +169,22 @@ _MAX_NAME_RACES = 100
 _NO_LINK = frozenset({errno.EXDEV, errno.EPERM, errno.EMLINK, errno.ENOTSUP, errno.EOPNOTSUPP})
 
 
-def _same_file(a: Path, b: Path) -> bool:
-    """Whether two names still lead to the same file; False if either is gone."""
+def _moved_after_all(source: Path, destination: Path) -> bool:
+    """After a failed delete of ``source``: is the file only at ``destination`` now?
+
+    True when the old name is gone (a network filesystem can report a delete
+    that happened as failed) or holds another file. False while both names
+    lead to our file.
+
+    Raises:
+        OSError: Either name cannot be examined, so nothing can be concluded.
+    """
     try:
-        return a.samefile(b)
-    except OSError:
-        return False
+        old = source.lstat()
+    except FileNotFoundError:
+        return True
+    new = destination.lstat()
+    return (old.st_dev, old.st_ino) != (new.st_dev, new.st_ino)
 
 
 def move_no_clobber(source: Path, destination: Path) -> None:
@@ -201,11 +211,14 @@ def move_no_clobber(source: Path, destination: Path) -> None:
             try:
                 source.unlink()
             except OSError as exc:
-                if not _same_file(source, destination):
-                    # The old name is gone (a network filesystem can report a
-                    # delete that happened as failed) or now holds another
-                    # file: ours is at the destination, under its only name.
-                    return
+                try:
+                    if _moved_after_all(source, destination):
+                        return  # ours is at the destination, under its only name
+                except OSError as check:
+                    # Cannot tell whether one name or two are left: fail loudly
+                    # and touch nothing, rather than guess and remove a name.
+                    exc.add_note(f"and the move could not be checked ({check})")
+                    raise exc from None
                 # Left alone, the new link would be a second name for the file:
                 # a retried undo would restore it again as "name (1)". A move
                 # that fails must change nothing.
